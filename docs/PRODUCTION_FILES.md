@@ -59,9 +59,11 @@ media, source-review, FTP or interactive mode in the production builder.
 ## Inventory and updater compatibility
 
 Production packaging uses the sorted union of `production_files`,
-`companion_files` and optional `companion_resource_files`. Companion resources
-currently admit only the reviewed DejaVu font and its license. All lists are
-disjoint; neither companion field grants CMS updater ownership. WinApp private
+`companion_files` and the optional `companion_resource_files` and
+`companion_locale_files` lists. The resource list admits the reviewed DejaVu
+font and its license. The locale list admits the exact Czech, German and Swedish
+WinApp gettext catalogs. The lists are disjoint, and CMS updater ownership comes
+from the updater list. WinApp private
 settings, logs, caches, tests, unlisted modules and build/dist outputs are
 excluded. Installers retain their independent build and version ownership.
 
@@ -72,15 +74,13 @@ additive companion field remains readable by the frozen pre-WinApp reader, which
 ignores it before installing the new reader. Malformed present fields fail
 closed; no incoming archive PHP is executed to obtain a newer validator.
 
-Keep the serialized `companion_files` vocabulary readable by installed
-companion-aware validators. Newly approved resources belong in the separate
-optional field; current readers validate its exact paths, ordering, collisions
-and non-updater scope, while older readers ignore it. Current readers also
-retain
-the previously published shape with resources in `companion_files`. A present
-invalid resource field never behaves as an absent one. The compatibility fixture
-reproduces the reported resource rejection with trusted installed-reader code;
-the fix adds no runtime version table and does not execute incoming PHP.
+Keep each serialized companion field within the allowlist of installed readers
+that recognize it. The locale list keeps the catalogs out of the font/license
+field that 1.5.7 validates. Current readers validate exact paths, ordering,
+collisions and updater scope for both resource lists. They also retain the
+previously published shape with font resources in `companion_files`. Any
+malformed present field is refused. Compatibility fixtures use trusted
+installed-reader code and the published font/license constraint.
 
 The updater supports direct upgrades using a complete newer package and all
 pending migrations, rather than requiring every intermediate release. This

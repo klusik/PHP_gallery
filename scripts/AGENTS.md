@@ -52,6 +52,10 @@ Contents API data.
 
 ## Source-contract scope
 
+The central Python import policy always rejects postponed annotations and
+function-local imports. Keep both absolute rules in the existing AST scanner
+and preserve module-level conditional dependencies.
+
 Reuse existing declaration/header/policy scanners; do not duplicate their rules.
 The named-declaration scanners and historical presence check share the anonymous
 function exemption; native typing, class documentation and parser coverage

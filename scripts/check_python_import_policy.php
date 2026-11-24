@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: scripts/check_python_import_policy.php
  * Module Type: Python Import Policy CLI
- * Purpose: Forbid postponed annotation imports throughout admitted Python sources.
+ * Purpose: Forbid postponed annotations and local imports in all Python sources.
  * Responsibilities:
  *   - Enforce the whole-tree policy independently of Git history or legacy debt.
  *   - Reuse isolated AST parsing and discovery privacy boundaries.
@@ -22,7 +22,7 @@ require_once __DIR__ . '/source_contracts/inventory.php';
 require_once __DIR__ . '/source_contracts/python.php';
 
 /**
- * Inspect every admitted Python/PYW source for forbidden annotation imports.
+ * Inspect every admitted Python/PYW source for both absolute import rules.
  * @param string $root Repository or disposable fixture root, never request input.
  * @param list<string> $paths Optional exact admitted Python paths for regression fixtures.
  * @return array{status:string,summary:array{source_files:int,finding_count:int},findings:list<array{path:string,line:int,rule:string}>,blocked:list<array{path:string,reason:string}>,coverage:array<string,string>} Whole-tree policy status with bounded source locations.
@@ -36,7 +36,7 @@ function python_import_policy_report(string $root, array $paths = []): array
         'blocked' => [],
         'coverage' => [
             'scope' => 'All admitted .py/.pyw sources including scripts and tests, irrespective of Git changes; existing private/generated/vendor exclusions apply.',
-            'policy' => 'AST ImportFrom(__future__) containing annotations is forbidden, including aliases, multiline and combined imports. Comments and strings are inert; concurrent.futures and other future features are allowed.',
+            'policy' => 'Future annotations and imports inside callables are forbidden. Module-level conditional imports are allowed. Comments and strings are inert.',
             'runtime' => 'Developer/CI audit only. Normal gallery web requests do not invoke Python. Missing Python or invalid source blocks coverage.',
         ],
     ];
@@ -79,9 +79,20 @@ function python_import_policy_report(string $root, array $paths = []): array
         $report['summary']['finding_count'] = count($report['findings']);
         $report['status'] = $report['findings'] === [] ? 'PASS' : 'FAIL';
     } catch (\Throwable $error) {
+        $path = '';
+        $reason = 'Python source/import inspection could not complete; coverage unknown.';
+        if (preg_match('/^Python AST invalid source ([a-f0-9]{64}):([0-9]+)$/D', $error->getMessage(), $site) === 1) {
+            foreach ($sources ?? [] as $candidate => $source) {
+                if (hash('sha256', $source) === $site[1]) {
+                    $path = $candidate;
+                    $reason = 'Python syntax could not be parsed at line ' . $site[2] . '.';
+                    break;
+                }
+            }
+        }
         $report['blocked'][] = [
-            'path' => '',
-            'reason' => 'Python source/import inspection could not complete; coverage unknown.',
+            'path' => $path,
+            'reason' => $reason,
         ];
     }
     return $report;

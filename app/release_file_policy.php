@@ -44,6 +44,7 @@ function release_file_policy_root(string $rootPath): string
  *     production_files:list<string>,
  *     companion_files:list<string>,
  *     companion_resource_files:list<string>,
+ *     companion_locale_files:list<string>,
  *     updater_files:list<string>,
  *     source_review_files:list<string>
  * } Validated inventory, including optional non-updater companion resources.
@@ -89,6 +90,10 @@ function release_file_policy_read(string $rootPath): array
             array_key_exists('companion_resource_files', $manifest)
             && !is_array($manifest['companion_resource_files'])
         )
+        || (
+            array_key_exists('companion_locale_files', $manifest)
+            && !is_array($manifest['companion_locale_files'])
+        )
     ) {
         throw new RuntimeException(
             'Production file inventory has an unsupported or invalid schema.',
@@ -107,6 +112,11 @@ function release_file_policy_read(string $rootPath): array
     $companionResources = release_file_policy_validate_path_list(
         $manifest['companion_resource_files'] ?? [],
     );
+    // Installed 1.5.7 readers allow only the font and license in the older
+    // resource field. A separate additive list keeps those upgrades readable.
+    $companionLocales = release_file_policy_validate_path_list(
+        $manifest['companion_locale_files'] ?? [],
+    );
     $updaterFiles = release_file_policy_validate_path_list(
         $manifest['updater_files'],
     );
@@ -117,6 +127,7 @@ function release_file_policy_read(string $rootPath): array
         $productionFiles,
         $companionFiles,
         $companionResources,
+        $companionLocales,
         $sourceReviewFiles,
     );
     sort($allPackagePaths, SORT_STRING);
@@ -124,7 +135,10 @@ function release_file_policy_read(string $rootPath): array
     $productionSet = array_fill_keys($productionFiles, true);
     $updaterSet = array_fill_keys($updaterFiles, true);
     foreach ($productionFiles as $path) {
-        if (!release_file_policy_is_production_path($path)) {
+        if (
+            !release_file_policy_is_production_path($path)
+            || release_file_policy_is_winapp_locale_path($path)
+        ) {
             throw new RuntimeException(
                 'Production inventory contains a private or unapproved path.',
             );
@@ -148,6 +162,16 @@ function release_file_policy_read(string $rootPath): array
         ) {
             throw new RuntimeException(
                 'Companion resource inventory contains an unapproved or updater-owned path.',
+            );
+        }
+    }
+    foreach ($companionLocales as $path) {
+        if (
+            !release_file_policy_is_winapp_locale_path($path)
+            || release_file_policy_is_updater_path($path)
+        ) {
+            throw new RuntimeException(
+                'Companion locale inventory contains an unapproved or updater-owned path.',
             );
         }
     }
@@ -187,6 +211,7 @@ function release_file_policy_read(string $rootPath): array
         'production_files' => $productionFiles,
         'companion_files' => $companionFiles,
         'companion_resource_files' => $companionResources,
+        'companion_locale_files' => $companionLocales,
         'updater_files' => $updaterFiles,
         'source_review_files' => $sourceReviewFiles,
     ];
@@ -261,6 +286,7 @@ function release_file_policy_is_production_path(string $relativePath): bool
             || str_starts_with($relativePath, 'docs/')
             || str_starts_with($relativePath, 'database/migrations/')
             || release_file_policy_is_winapp_source_path($relativePath)
+            || release_file_policy_is_winapp_locale_path($relativePath)
             || (
                 str_starts_with($relativePath, 'custom_css/')
                 && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION))
@@ -322,6 +348,25 @@ function release_file_policy_is_winapp_resource_path(string $relativePath): bool
         [
             'winapp/uploader/resources/DejaVuSans.ttf',
             'winapp/uploader/resources/LICENSE_DEJAVU',
+        ],
+        true,
+    );
+}
+
+/**
+ * Identify the exact WinApp gettext catalogs shipped in the production archive.
+ *
+ * @param string $relativePath Project-relative candidate using forward slashes.
+ * @return bool True for a supported non-updater WinApp catalog.
+ */
+function release_file_policy_is_winapp_locale_path(string $relativePath): bool
+{
+    return in_array(
+        $relativePath,
+        [
+            'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po',
+            'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
+            'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
         ],
         true,
     );
@@ -506,6 +551,7 @@ function release_file_policy_paths(
             $inventory['production_files'],
             $inventory['companion_files'],
             $inventory['companion_resource_files'],
+            $inventory['companion_locale_files'],
         );
         sort($paths, SORT_STRING);
     } elseif ($profile === 'updater') {

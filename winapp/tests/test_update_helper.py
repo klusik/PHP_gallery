@@ -327,7 +327,7 @@ class UpdateHelperTests(unittest.TestCase):
         registry.REG_EXPAND_SZ = 2
         registry.OpenKey = mock.MagicMock()
         registry.QueryValueEx = mock.Mock(return_value=(str(self.installed.parent), 1))
-        with mock.patch.dict(sys.modules, {"winreg": registry}), mock.patch.object(helper.sys, "platform", "win32"), \
+        with mock.patch.object(helper, "winreg", registry), mock.patch.object(helper.sys, "platform", "win32"), \
                 mock.patch.object(helper.sys, "frozen", True, create=True), \
                 mock.patch.object(helper.sys, "executable", str(self.installed)):
             self.assertTrue(self.installed.samefile(helper.installed_identity()))
@@ -482,8 +482,10 @@ class UpdateHelperTests(unittest.TestCase):
                 (self.session / "completed").unlink(missing_ok=True)
                 result_options = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
                 with (
-                    mock.patch.dict("sys.modules", {"tkinter": tkinter, "tkinter.ttk": ttk}),
-                    mock.patch('uploader.ui_theme.Button', ttk.Button),
+                    mock.patch.object(helper, "tk", tkinter),
+                    mock.patch.object(helper, "ttk", ttk),
+                    mock.patch.object(helper, "Button", ttk.Button),
+                    mock.patch.object(helper, "load_ui_language", return_value="en"),
                     mock.patch.object(helper, "load_ticket", return_value=self.ticket),
                     mock.patch.object(helper, "installed_identity"),
                     mock.patch.object(helper, "WindowsBackend"),

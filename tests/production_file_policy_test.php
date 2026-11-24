@@ -152,8 +152,15 @@ try {
         'winapp/uploader/resources/DejaVuSans.ttf',
         'winapp/uploader/resources/LICENSE_DEJAVU',
     ];
+    $locales = [
+        'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po',
+        'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
+        'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
+    ];
     $sourceReview = ['tests/policy_fixture.php'];
-    $packagePaths = array_merge($production, $companion, $resources);
+    $legacyPackagePaths = array_merge($production, $companion, $resources);
+    sort($legacyPackagePaths, SORT_STRING);
+    $packagePaths = array_merge($legacyPackagePaths, $locales);
     sort($packagePaths, SORT_STRING);
     foreach (array_merge($packagePaths, $sourceReview) as $relative) {
         production_file_policy_mkdir(dirname(
@@ -174,6 +181,7 @@ try {
         'production_files' => $production,
         'companion_files' => $companion,
         'companion_resource_files' => $resources,
+        'companion_locale_files' => $locales,
         'updater_files' => $updater,
         'source_review_files' => $sourceReview,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
@@ -193,7 +201,11 @@ try {
             === $resources,
         'The additive resource inventory lost exact font/license membership.',
     );
-    foreach ($resources as $resource) {
+    production_file_policy_assert(
+        release_file_policy_read($source)['companion_locale_files'] === $locales,
+        'The locale inventory lost exact WinApp catalog membership.',
+    );
+    foreach (array_merge($resources, $locales) as $resource) {
         production_file_policy_assert(
             !\Gallery\Core\release_file_policy_is_updater_path($resource),
             'Companion resources entered CMS replacement or deletion ownership.',
@@ -354,8 +366,9 @@ try {
     unset(
         $oldInventory['companion_files'],
         $oldInventory['companion_resource_files'],
+        $oldInventory['companion_locale_files'],
     );
-    $oldInventory['production_files'] = $packagePaths;
+    $oldInventory['production_files'] = $legacyPackagePaths;
     file_put_contents($inventoryPath, json_encode(
         $oldInventory,
         JSON_THROW_ON_ERROR,
@@ -365,7 +378,7 @@ try {
         'An already-published schema-1 inventory without companion_files was refused.',
     );
     production_file_policy_assert(
-        release_file_policy_paths($source) === $packagePaths,
+        release_file_policy_paths($source) === $legacyPackagePaths,
         'Already-published WinApp membership was lost when reading an older sidecar.',
     );
     $publishedResources = $original;
@@ -374,15 +387,60 @@ try {
         $resources,
     );
     sort($publishedResources['companion_files'], SORT_STRING);
-    unset($publishedResources['companion_resource_files']);
+    unset(
+        $publishedResources['companion_resource_files'],
+        $publishedResources['companion_locale_files'],
+    );
     file_put_contents($inventoryPath, json_encode(
         $publishedResources,
         JSON_THROW_ON_ERROR,
     ));
     production_file_policy_assert(
-        release_file_policy_paths($source) === $packagePaths,
+        release_file_policy_paths($source) === $legacyPackagePaths,
         'The published 0.136 companion-list shape became unreadable.',
     );
+    foreach ([
+        null,
+        $locales[0],
+        [$locales[1], $locales[0]],
+        [$locales[0], $locales[0]],
+        ['winapp/uploader/resources/locale/en/LC_MESSAGES/winapp.po'],
+        ['winapp/uploader/resources/locale/cs/LC_MESSAGES/other.po'],
+        [$resources[0]],
+        ['app/example.php'],
+    ] as $invalidLocaleFiles) {
+        $tampered = $original;
+        $tampered['companion_locale_files'] = $invalidLocaleFiles;
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
+            release_file_policy_read($source);
+        }, 'A malformed, unapproved or unordered locale inventory was accepted.');
+    }
+    foreach ([
+        'production_files',
+        'companion_files',
+        'companion_resource_files',
+        'updater_files',
+    ] as $oldField) {
+        $tampered = $original;
+        unset($tampered['companion_locale_files']);
+        $tampered[$oldField][] = $locales[0];
+        sort($tampered[$oldField], SORT_STRING);
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
+            release_file_policy_read($source);
+        }, 'A WinApp catalog entered an installed reader field.');
+    }
     foreach ([
         null,
         'winapp/uploader/resources/DejaVuSans.ttf',

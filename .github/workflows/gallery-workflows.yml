@@ -288,9 +288,9 @@ jobs:
         with:
           python-version: '3.14'
 
-      # Read the three owned requirement entries instead of copying version
+      # Read the four owned requirement entries instead of copying version
       # constraints into YAML. Refuse missing/ambiguous dependency selection.
-      - name: Install the declared image and PDF test dependencies
+      - name: Install declared image, PDF and localization test dependencies
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -302,12 +302,14 @@ jobs:
               for line in Path("winapp/requirements.txt")
               .read_text(encoding="utf-8")
               .splitlines()
-              if line.strip().lower().startswith(("pillow", "reportlab", "pypdf"))
+              if line.strip().lower().startswith(
+                  ("pillow", "reportlab", "pypdf", "polib")
+              )
           ]
-          # Three declared packages serve image rendering and PDF inspection.
-          if len(runtime_requirements) != 3:
+          # Four declared packages own image, PDF and gettext fixture support.
+          if len(runtime_requirements) != 4:
               raise SystemExit(
-                  "Expected Pillow, ReportLab and pypdf requirements in "
+                  "Expected Pillow, ReportLab, pypdf and polib requirements in "
                   "winapp/requirements.txt."
               )
           subprocess.run(

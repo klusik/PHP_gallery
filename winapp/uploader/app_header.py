@@ -11,6 +11,8 @@
 """Responsive native header geometry without account or transport policy."""
 
 import tkinter as tk
+
+from uploader.localization import gettext
 from tkinter import ttk
 
 
@@ -53,7 +55,7 @@ class CompactAppHeader(ttk.Frame):
         self.identity = ttk.Frame(self, style='App.TFrame')
         self.brand = ttk.Label(self.identity, text='PHP Gallery', style='Brand.TLabel')
         self.tagline = ttk.Label(
-            self.identity, text='Your gallery on autopilot', style='App.Eyebrow.TLabel',
+            self.identity, text=gettext('Your gallery on autopilot'), style='App.Eyebrow.TLabel',
         )
         self.version = ttk.Label(
             self.identity, text='· ' + version, style='App.Eyebrow.TLabel',

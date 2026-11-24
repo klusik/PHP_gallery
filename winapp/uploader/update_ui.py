@@ -21,8 +21,14 @@ import sys
 import subprocess
 import threading
 import time
-from typing import Callable, Optional, Protocol, TYPE_CHECKING, cast
+from typing import Callable, Optional, Protocol, cast
 
+import tkinter as tk
+from tkinter import ttk
+
+from uploader import self_update, update_helper
+from uploader.ui_theme import Button, place_dialog
+from uploader.localization import gettext, gettext_noop
 from uploader.state_store import atomic_write_json
 from uploader.ui_shell import EmbeddedWindow
 from uploader.self_update import (
@@ -34,10 +40,6 @@ from uploader.self_update import (
     format_update_diagnostic,
     report_update_diagnostic,
 )
-
-if TYPE_CHECKING:
-    import tkinter as tk
-
 
 class UpdateApplication(Protocol):
     """Minimal host interface, with worker fields inspected only for shutdown."""
@@ -277,8 +279,7 @@ class UpdateController:
             self.app.set_update_available(None)
             return
         try:
-            from uploader.self_update import validated_release_asset
-            asset = validated_release_asset(available, self.version)
+            asset = self_update.validated_release_asset(available, self.version)
         except (ValueError, TypeError, KeyError, RuntimeError):
             self.asset = None
             self.app.set_update_available(None)
@@ -302,12 +303,16 @@ class UpdateController:
         if self.busy:
             self.cancel.set()
             self.close_pending = True
-            self.set_status("Closing after the update operation stops...")
+            self.set_status(gettext_noop("Closing after the update operation stops..."))
             return True
         return False
 
     def blocked(self) -> bool:
-        """Called by every operation that can start work or change connection state."""
+        """Check whether update preparation has paused new work.
+
+        Returns:
+            bool: True and logs a notice during preparation, otherwise False.
+        """
         if not self.gate.active:
             return False
         self.app.write_log("Update is preparing installation; new work is paused.", "system")
@@ -320,18 +325,15 @@ class UpdateController:
             None: Raises the current notice or creates one sized to its current
                 text and controls, including later background status changes.
         """
-        import tkinter as tk
-        from tkinter import ttk
-        from uploader.ui_theme import Button, place_dialog
         if self.window is not None and self.window.winfo_exists():
             self.window.deiconify()
             self.window.lift()
             return
         self.window = EmbeddedWindow(self.root)
         self.window.withdraw()
-        self.window.title("PHP Gallery Uploader updates")
+        self.window.title(gettext("PHP Gallery Uploader updates"))
         self.window.protocol("WM_DELETE_WINDOW", self.later)
-        self.status = tk.StringVar(value="Checking for updates...")
+        self.status = tk.StringVar(value=gettext("Checking for updates..."))
         ttk.Label(
             self.window,
             textvariable=self.status,
@@ -345,15 +347,15 @@ class UpdateController:
         buttons.pack(pady=12)
         self.action = Button(
             buttons,
-            text="Update",
+            text=gettext("Update"),
             command=self.download,
             state="disabled",
             style="Primary.TButton",
         )
         self.action.pack(side="left", padx=5)
-        self.cancel_button = Button(buttons, text="Cancel download", command=self.cancel.set, state="disabled")
+        self.cancel_button = Button(buttons, text=gettext("Cancel download"), command=self.cancel.set, state="disabled")
         self.cancel_button.pack(side="left", padx=5)
-        Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
+        Button(buttons, text=gettext("Later"), command=self.later).pack(side="left", padx=5)
         self._restore_notice_state()
         place_dialog(self.window, self.root)
         # Center once, then let Tk fit the wrapped status and complete button
@@ -370,44 +372,53 @@ class UpdateController:
         if self.status is None or self.action is None:
             return
         if self.gate.active:
-            self.status.set("Preparing installation: stopping new work and waiting for active operations...")
+            self.status.set(gettext("Preparing installation: stopping new work and waiting for active operations..."))
             self.action.configure(state="disabled")
             return
         if self.busy:
-            self.status.set("An update operation is still in progress.")
+            self.status.set(gettext("An update operation is still in progress."))
             self.action.configure(state="disabled")
             return
         if self.installer is not None:
             if getattr(sys, "frozen", False):
                 self.status.set(
-                    "Installer verified.\n"
-                    "Update closes, installs and restarts the app."
+                    gettext(
+                        "Installer verified.\n"
+                        "Update closes, installs and restarts the app."
+                    )
                 )
-                self.action.configure(state="normal", text="Update", command=self.install)
+                self.action.configure(state="normal", text=gettext("Update"), command=self.install)
             else:
-                self.status.set("Installer verified. Open installer starts manual installation; this source application remains open.")
-                self.action.configure(state="normal", text="Open installer", command=self.install)
+                self.status.set(gettext("Installer verified. Open installer starts manual installation; this source application remains open."))
+                self.action.configure(state="normal", text=gettext("Open installer"), command=self.install)
             return
         if self.asset is not None:
             self.status.set(self._offer_status())
-            self.action.configure(state="normal", text="Update", command=self.download)
+            self.action.configure(state="normal", text=gettext("Update"), command=self.download)
 
-    def _offer_status(self) -> str:
+    def _offer_status(self, *, for_display: bool = True) -> str:
         """Build the mode-specific text for a validated available release.
 
+        Args:
+            for_display (bool): Apply the app locale when rendering an offer.
+
         Returns:
-            str: User-facing offer status for frozen or source-mode operation.
+            str: Localized offer caption or stable diagnostic text.
         """
         if getattr(sys, "frozen", False):
-            return (
-                f"Version {self.asset.version} is available (installed: {self.version}). "
+            message = gettext_noop(
+                "Version {version} is available (installed: {current}). "
                 "Update downloads and verifies Setup, closes this app "
                 "and restarts it after installation. Windows may request administrator approval."
             )
-        return (
-            f"Version {self.asset.version} is available (current: {self.version}). "
-            "Update downloads and verifies Setup for manual installation; this source "
-            "folder remains intact."
+        else:
+            message = gettext_noop(
+                "Version {version} is available (current: {current}). "
+                "Update downloads and verifies Setup for manual installation; this source "
+                "folder remains intact."
+            )
+        return (gettext(message) if for_display else message).format(
+            version=self.asset.version, current=self.version,
         )
 
     def open_updates(self) -> None:
@@ -427,11 +438,20 @@ class UpdateController:
         if self.window is not None:
             self.window.withdraw()
 
-    def set_status(self, message: str) -> None:
-        """Update existing notice and keep a durable diagnostic in the ordinary log."""
+    def set_status(self, message: str, **fields: str) -> None:
+        """Localize the notice while logging the corresponding stable detail.
+
+        Args:
+            message (str): Source-language status template or opaque detail.
+            **fields (str): Named values interpolated into both representations.
+
+        Returns:
+            None: Updates the notice and submits the source text to the log.
+        """
         if self.window is not None:
-            self.status.set(message)
-        self.app.write_log(message, "system")
+            caption = gettext(message)
+            self.status.set(caption.format_map(fields) if fields else caption)
+        self.app.write_log(message.format_map(fields) if fields else message, "system")
 
     def _queue_diagnostic(
         self, phase: str, stage: str, outcome: str, *,
@@ -582,8 +602,7 @@ class UpdateController:
             try:
                 payload = read_update_state(self.state_path)
                 if payload.get("version") == self.version and payload.get("available"):
-                    from uploader.self_update import validated_release_asset
-                    self.events.put(("checked", validated_release_asset(payload["available"], self.version)))
+                    self.events.put(("checked", self_update.validated_release_asset(payload["available"], self.version)))
             except (OSError, ValueError, TypeError, KeyError, RuntimeError):
                 pass
             return
@@ -591,14 +610,13 @@ class UpdateController:
         self._diagnostic_phase = 'discovery'
         if self.window is not None:
             if self.asset is None and self.installer is None:
-                self.action.configure(state="disabled", text="Update", command=self.download)
+                self.action.configure(state="disabled", text=gettext("Update"), command=self.download)
         def work() -> None:
             """Reserve the attempt and replace cache only after a successful check.
 
             Returns:
                 None: Queues a validated offer/no-offer result after successful I/O.
             """
-            from uploader.self_update import find_update, retire_download_session
             try:
                 previous_state = read_update_state(self.state_path)
             except (OSError, ValueError, TypeError):
@@ -606,11 +624,11 @@ class UpdateController:
             reserved_state = dict(previous_state)
             reserved_state["last_check"] = now
             atomic_write_json(self.state_path, reserved_state)
-            asset = find_update(self.version)
+            asset = self_update.find_update(self.version)
             atomic_write_json(self.state_path, {"last_check": now, "version": self.version, "available": asdict(asset) if asset else None})
             if previous_installer is not None:
                 try:
-                    retire_download_session(previous_installer.parent, self.state_path.parent)
+                    self_update.retire_download_session(previous_installer.parent, self.state_path.parent)
                 except (OSError, RuntimeError) as exc:
                     # Updater-owned housekeeping cannot revoke a validated check;
                     # refusing unsafe cleanup preserves unknown bytes in the session.
@@ -635,7 +653,7 @@ class UpdateController:
         self.cancel.clear()
         self.action.configure(state="disabled")
         self.cancel_button.configure(state="normal")
-        self.set_status("Downloading installer...")
+        self.set_status(gettext_noop("Downloading installer..."))
         self._diagnostic_phase = 'download'
         asset = self.asset
         def work() -> None:
@@ -645,10 +663,8 @@ class UpdateController:
                 None: Queues a verified installer or re-raises the primary
                     download failure after best-effort safe cleanup.
             """
-            from uploader.self_update import (download_update, verify_installer, create_download_session,
-                                              cleanup_old_download_sessions, retire_download_session, UpdateCancelled)
-            cleanup_old_download_sessions(self.state_path.parent, time.time())
-            directory = create_download_session(self.state_path.parent)
+            self_update.cleanup_old_download_sessions(self.state_path.parent, time.time())
+            directory = self_update.create_download_session(self.state_path.parent)
             def progress(done: int, total: int) -> None:
                 """Queue actual streamed byte progress without touching Tk.
 
@@ -661,15 +677,15 @@ class UpdateController:
                 """
                 self.events.put(("progress", (done, total)))
             try:
-                path = download_update(asset, directory, progress, self.cancel)
+                path = self_update.download_update(asset, directory, progress, self.cancel)
                 self.events.put(("verifying", None))
-                verify_installer(path, asset)
+                self_update.verify_installer(path, asset)
                 if self.cancel.is_set():
                     raise UpdateCancelled("Update download canceled before installation.")
                 self.events.put(("downloaded", path))
             except Exception:
                 try:
-                    retire_download_session(directory, self.state_path.parent)
+                    self_update.retire_download_session(directory, self.state_path.parent)
                 except (OSError, RuntimeError) as cleanup_error:
                     self._queue_diagnostic(
                         'cleanup', 'download_session_cleanup', 'failed',
@@ -688,9 +704,8 @@ class UpdateController:
         """
         if self.busy or self.installer is None or self.asset is None or self.gate.active:
             return
-        from uploader.update_helper import installed_identity
         try:
-            installed_identity()
+            update_helper.installed_identity()
         except (OSError, RuntimeError) as exc:
             self._queue_diagnostic(
                 'handoff', 'installed_identity', 'failed',
@@ -698,8 +713,10 @@ class UpdateController:
                 source='update_ui.UpdateController.install',
             )
             self.set_status(
-                "The installed application could not be verified. "
-                "Open the downloaded installer manually to install this application."
+                gettext_noop(
+                    "The installed application could not be verified. "
+                    "Open the downloaded installer manually to install this application."
+                )
             )
             self.app.open_local_path(self.installer)
             return
@@ -728,12 +745,14 @@ class UpdateController:
                     "Update continuation cancellation needs review.", "warning",
                 )
             self.set_status(
-                "Update postponed: current work could not be safely checkpointed. "
-                "The application remains open; see diagnostics.",
+                gettext_noop(
+                    "Update postponed: current work could not be safely checkpointed. "
+                    "The application remains open; see diagnostics."
+                ),
             )
             self.action.configure(state="normal")
             return
-        self.set_status("Finishing current uploads and saving Watcher state…")
+        self.set_status(gettext_noop("Finishing current uploads and saving Watcher state…"))
         self._diagnostic_phase = 'handoff'
         self.run_worker(self.handoff)
 
@@ -744,7 +763,6 @@ class UpdateController:
             None: Queues helper readiness only after a durable exact-session
                 checkpoint and its helper binding; errors retain the app.
         """
-        from uploader.update_helper import prepare_helper, launch_helper
         self._run_handoff_step(
             'checkpoint_wait', self.app.wait_for_update_checkpoint,
         )
@@ -752,7 +770,7 @@ class UpdateController:
             Path,
             self._run_handoff_step(
                 'helper_prepare',
-                lambda: prepare_helper(
+                lambda: update_helper.prepare_helper(
                     self.installer, self.asset.version, self.asset.sha256,
                     self.asset.size,
                 ),
@@ -761,11 +779,10 @@ class UpdateController:
         self._run_handoff_step(
             'helper_bind', lambda: self.app.bind_update_checkpoint(ticket),
         )
-        self._run_handoff_step('helper_launch', lambda: launch_helper(ticket))
+        self._run_handoff_step('helper_launch', lambda: update_helper.launch_helper(ticket))
         if self.installer is not None:
-            from uploader.self_update import retire_download_session
             try:
-                retire_download_session(self.installer.parent, self.state_path.parent)
+                self_update.retire_download_session(self.installer.parent, self.state_path.parent)
             except (OSError, RuntimeError) as exc:
                 # A refused cleanup never revokes an already-ready helper handoff.
                 self._queue_diagnostic(
@@ -836,22 +853,24 @@ class UpdateController:
                     self.show()
                     if not self.busy:
                         self._restore_notice_state()
-                    self.app.write_log(self._offer_status(), "system")
+                    self.app.write_log(self._offer_status(for_display=False), "system")
                 elif self.window is not None:
-                    self.set_status("No newer Windows uploader installer is available.")
-                    self.action.configure(state="disabled", text="Update", command=self.download)
+                    self.set_status(gettext_noop("No newer Windows uploader installer is available."))
+                    self.action.configure(state="disabled", text=gettext("Update"), command=self.download)
             elif kind == "progress":
                 done, total = value
                 self.progress["value"] = 100 * done / total if total else 0
-                self.status.set(f"Downloading installer: {done:,} / {total:,} bytes")
+                self.status.set(gettext("Downloading installer: {done:,} / {total:,} bytes").format(
+                    done=done,
+                    total=total,
+                ))
             elif kind == "verifying":
                 self.cancel_button.configure(state="disabled")
-                self.set_status("Verifying installer size and SHA-256...")
+                self.set_status(gettext_noop("Verifying installer size and SHA-256..."))
             elif kind == "downloaded":
                 if self.cancel.is_set() or self.close_pending:
-                    from uploader.self_update import retire_download_session
                     try:
-                        retire_download_session(value.parent, self.state_path.parent)
+                        self_update.retire_download_session(value.parent, self.state_path.parent)
                     except (OSError, RuntimeError) as exc:
                         self._queue_diagnostic(
                             'cleanup', 'download_session_cleanup', 'failed',
@@ -863,21 +882,23 @@ class UpdateController:
                             "warning",
                         )
                     self.auto_install = False
-                    self.set_status("Update canceled before installation.")
-                    self.action.configure(state="normal", text="Update", command=self.download)
+                    self.set_status(gettext_noop("Update canceled before installation."))
+                    self.action.configure(state="normal", text=gettext("Update"), command=self.download)
                     self.cancel_button.configure(state="disabled")
                     continue
                 self.installer = value
                 if getattr(sys, "frozen", False):
                     self.set_status(
-                        "Installer verified.\n"
-                        "Update closes, installs and restarts the app.\n"
-                        "Windows may request administrator approval."
+                        gettext_noop(
+                            "Installer verified.\n"
+                            "Update closes, installs and restarts the app.\n"
+                            "Windows may request administrator approval."
+                        )
                     )
                     self.auto_install = True
                 else:
-                    self.set_status("Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact.")
-                    self.action.configure(text="Open installer", command=self.install, state="normal")
+                    self.set_status(gettext_noop("Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact."))
+                    self.action.configure(text=gettext("Open installer"), command=self.install, state="normal")
                 self.cancel_button.configure(state="disabled")
             elif kind == "error":
                 self.gate.cancel()
@@ -893,7 +914,7 @@ class UpdateController:
                         "Update checkpoint cleanup needs review; see updater diagnostics.",
                         "warning",
                     )
-                self.set_status("Update stopped: " + value)
+                self.set_status(gettext_noop("Update stopped: {detail}"), detail=value)
                 if self.window is not None:
                     self.action.configure(
                         state="disabled" if self.busy else "normal" if self.asset else "disabled"
@@ -915,17 +936,17 @@ class UpdateController:
                     if self.asset is not None and not self.gate.active:
                         self._restore_notice_state()
                     elif self.window is not None:
-                        self.action.configure(state="disabled", text="Update", command=self.download)
+                        self.action.configure(state="disabled", text=gettext("Update"), command=self.download)
                 elif self.installer is not None and not self.gate.active:
                     if self.window is not None:
-                        label = "Update" if getattr(sys, "frozen", False) else "Open installer"
+                        label = gettext("Update") if getattr(sys, "frozen", False) else gettext("Open installer")
                         self.action.configure(
                             state="normal", text=label, command=self.install
                         )
                 elif self.asset is not None and self.installer is None and not self.gate.active:
                     # Keep any preceding failure status while making the retained offer usable.
                     if self.window is not None:
-                        self.action.configure(state="normal", text="Update", command=self.download)
+                        self.action.configure(state="normal", text=gettext("Update"), command=self.download)
                 if self.close_pending:
                     self.close_pending = False
                     self.app.close()

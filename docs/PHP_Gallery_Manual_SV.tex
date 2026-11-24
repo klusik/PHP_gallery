@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.5.7}
+\newcommand{\version}{1.6.0}
 \newcommand{\manualdate}{24~november~2026}
 
 \hypersetup{
@@ -406,12 +406,12 @@ medier, installerad konfiguration och körningsdata utesluts. WinApp-källor
 behåller sitt separata följeinventarium. Historiska interaktiva skript och
 FTP-driftsättning har tagits bort. Se \filepath{docs/PRODUCTION_FILES.md}.
 
-Följeappens typsnitt och~licens använder det valfria inventariefältet
-\codeword{companion_resource_files}. Installerade läsare kan~ignorera tillägget;
-den aktuella paketpolicyn verifierar exakt tillåtna sökvägar. Det ursprungliga
-följefältet förblir läsbart för~äldre uppdaterare; inget fält ger~rätt att
-ersätta
-CMS-filer. Direkta uppdateringar använder ett~fullständigt nyare paket och~alla
+WinApps typsnitt och~licens finns i~det valfria fältet
+\codeword{companion_resource_files}. Gettext-katalogerna finns i~fältet
+\codeword{companion_locale_files}. Installerade läsare hanterar de~fält de
+känner igen. Paketpolicyn verifierar de~exakta sökvägarna i~båda listorna.
+Uppdateringsinventariet avgör vilka CMS-filer som ersätts. Direkta
+uppdateringar använder ett~fullständigt nyare paket och~alla
 väntande migreringar utan varje mellanversion. Detta kvalificerar inte
 godtyckliga
 historiska webbhotells- eller~databastillstånd. Avbryt ett~misslyckat jobb före
@@ -1823,6 +1823,12 @@ obligatoriskt schema avvisar delning och ändringar. Se
 \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
 \section{Windows-uppladdaren}
+Välj engelska, tjeckiska, tyska eller svenska under \ui{Språk} i~\ui{Inställningar}.
+WinApp sparar valet och~erbjuder en~omstart. Välj \ui{Senare} för att använda
+språket nästa gång WinApp öppnas.
+\ui{Starta om WinApp} finns kvar i~\ui{Inställningar} tills valet tillämpas.
+Webbplatsens språk och~språkutgåvorna för flygrapporter i~PDF ställs in separat.
+
 \subsection{Beständig capture-kö och återställning}
 
 Anslut en gång, starta capture och välj \ui{Finish} en gång på slutet.

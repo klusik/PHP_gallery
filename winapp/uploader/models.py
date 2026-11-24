@@ -84,6 +84,8 @@ class ActivityEvent:
         filename (str): Optional file name associated with the event.
         job_id (str): Optional manual-import job identifier.
         timestamp (float): Unix timestamp captured when the event was created.
+        message_id (str): Optional source template for localizing the event.
+        message_fields (dict[str, str]): Redacted values for named fields.
     """
 
     level: str
@@ -92,14 +94,35 @@ class ActivityEvent:
     filename: str = ""
     job_id: str = ""
     timestamp: float = field(default_factory=time.time)
+    message_id: str = ""
+    message_fields: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Return a JSON-compatible event dictionary."""
-        return asdict(self)
+    def to_dict(self) -> Dict[str, JsonValue]:
+        """Encode the stable event and any optional display metadata.
+
+        Returns:
+            dict[str, JsonValue]: Source-language fields, timing and optional
+                redacted string substitutions for a marked interface message.
+        """
+        data = asdict(self)
+        if not self.message_id:
+            data.pop("message_id")
+            data.pop("message_fields")
+        return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ActivityEvent":
-        """Build one event from persisted JSON data."""
+    def from_dict(cls, data: Dict[str, JsonValue]) -> "ActivityEvent":
+        """Load old event rows and current optional presentation metadata.
+
+        Args:
+            data (dict[str, JsonValue]): Event message, classification, time,
+                optional file or job and optional localization metadata.
+
+        Returns:
+            ActivityEvent: Stable diagnostic event with valid string fields.
+        """
+        message_id = data.get("message_id")
+        fields = data.get("message_fields")
         return cls(
             level=str(data.get("level", "info") or "info"),
             message=str(data.get("message", "") or ""),
@@ -107,6 +130,10 @@ class ActivityEvent:
             filename=str(data.get("filename", "") or ""),
             job_id=str(data.get("job_id", "") or ""),
             timestamp=float(data.get("timestamp", time.time()) or time.time()),
+            message_id=message_id if isinstance(message_id, str) else "",
+            message_fields={
+                key: value for key, value in fields.items() if isinstance(value, str)
+            } if isinstance(fields, dict) else {},
         )
 
 

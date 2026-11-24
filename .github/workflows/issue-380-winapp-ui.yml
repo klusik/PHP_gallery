@@ -16,6 +16,11 @@ on:
       - feature/winapp-1-2-integrated-shell
       - feature/winapp-gallery-load-progress
   workflow_dispatch:
+    inputs:
+      source_policy:
+        description: Also run the central Python import policy and PHP regressions
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +37,9 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
+    env:
+      PHP_GALLERY_REQUIRE_LOCALIZATION_TK: '1'
+      PYTHONDONTWRITEBYTECODE: '1' # Keep the updater source-checkout fixture clean after Python.
     # Purpose: Bound provisioning and the existing complete-suite coordinator.
     # Type: int. Units: minutes. Scope: one OS verification job.
     # Consumers: Actions job timeout. Rationale: 15 minutes accommodates the
@@ -83,6 +91,18 @@ jobs:
           PHP_GALLERY_WATCH_RECOVERY_QA_DIR: cache/test-audit/watch-recovery
           PHP_GALLERY_REQUIRE_WATCH_RECOVERY_TK: '1'
         run: php scripts/audit.php --suite=winapp-partitioned
+      - name: Verify the central import gate
+        if: ${{ !cancelled() && runner.os == 'Linux' && inputs.source_policy }}
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --suite=python-import-policy
+      - name: Verify the PHP regression fixtures
+        if: ${{ !cancelled() && runner.os == 'Linux' && inputs.source_policy }}
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_BROWSER: disabled
+        run: php scripts/audit.php --suite=php-regression
       - name: Retain exact-commit test reports
         if: always()
         uses: actions/upload-artifact@v7

@@ -29,6 +29,13 @@ from typing import Optional
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from reportlab.graphics.shapes import Image as MapShape, PolyLine, String
+from reportlab.platypus import PageBreak, Paragraph
+from uploader.flight_report import _build_story, _dispatch_series, _recorded_positions
+from uploader.flight_simbrief import DispatchPlan, DispatchPoint
+from uploader.flight_report import POUNDS_PER_KG
+from uploader.flight_report import METRES_TO_FEET
+from uploader.flight_report import _dispatch_position_series
 from reportlab.pdfbase.ttfonts import TTFont
 
 from uploader.flight_data import (
@@ -858,8 +865,6 @@ class FlightReportTests(unittest.TestCase):
                 host seconds; missing takeoff suppresses alignment and pounds
                 are converted to the displayed measured-mass unit.
         """
-        from uploader.flight_report import _dispatch_series, POUNDS_PER_KG, METRES_TO_FEET
-        from uploader.flight_simbrief import DispatchPlan, DispatchPoint
 
         analysis = self._analysis("MSFS 2024")
         analysis.samples = [
@@ -893,8 +898,6 @@ class FlightReportTests(unittest.TestCase):
             None: Both map layouts disclose the omitted block, preserve raw
                 samples, keep a route break and retain unbounded relocations.
         """
-        from reportlab.graphics.shapes import String
-        from uploader.flight_report import _recorded_positions
 
         analysis = self._analysis("MSFS 2024")
         original = analysis.samples[0]
@@ -934,9 +937,6 @@ class FlightReportTests(unittest.TestCase):
             None: Overview flows directly from its phase strip to chart pages
                 without a paragraph capable of creating a note-only page.
         """
-        from reportlab.platypus import Paragraph, PageBreak
-        from uploader.flight_report import _build_story
-        from uploader.flight_report_translations import tr
 
         for language in ("en", "cs", "de", "sv"):
             story = _build_story(self._analysis("MSFS 2024"), language, "fixture")
@@ -954,7 +954,6 @@ class FlightReportTests(unittest.TestCase):
             None: Embedded raster placement meets 300 dpi in both directions
                 while the actual track remains an independent vector polyline.
         """
-        from reportlab.graphics.shapes import Image as MapShape, PolyLine
 
         chart = _route_chart(self._analysis("MSFS 2024"), "en")
         images = [item for item in chart.contents if isinstance(item, MapShape)]
@@ -973,10 +972,6 @@ class FlightReportTests(unittest.TestCase):
                 incompatible fuel units produce no misleading comparison.
                 A diversion landing never anchors the planned destination.
         """
-        from uploader.flight_report import (
-            _dispatch_position_series, METRES_TO_FEET, POUNDS_PER_KG,
-        )
-        from uploader.flight_simbrief import DispatchPlan, DispatchPoint
 
         analysis = self._analysis("MSFS 2024")
         analysis.events = []

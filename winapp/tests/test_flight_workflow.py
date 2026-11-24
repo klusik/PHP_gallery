@@ -21,9 +21,11 @@ from types import ModuleType, SimpleNamespace
 from typing import Callable
 from unittest.mock import Mock, patch
 
+import uploader.flight_delivery as delivery
 import uploader.flight_workflow as workflow
 from uploader.flight_jobs import SessionPlan, connection_binding, report_revisions
 from uploader.flight_delivery import FLIGHT_DELIVERY_CHUNK_BYTES
+from uploader.flight_render import ReportMaps, ReportRenderer
 
 
 # Type: float; Units: seconds; Scope: worker synchronization regression tests.
@@ -135,7 +137,6 @@ class FlightWorkflowTests(unittest.TestCase):
             None: New credentials upload exact retained files, persist separate
                 receipts and never render, drain, mutate the old plan or revoke.
         """
-        import uploader.flight_delivery as delivery
 
         with tempfile.TemporaryDirectory() as temporary:
             plan = self._plan(Path(temporary) / "flight", ("en", "cs"), local_only=True)
@@ -264,6 +265,7 @@ class FlightWorkflowTests(unittest.TestCase):
         analysis: SimpleNamespace,
         language: str,
         destination: Path,
+        _maps: tuple[bytes, bytes] | None = None,
     ) -> Path:
         """Write deterministic renderer-stub bytes at the requested destination.
 
@@ -272,6 +274,7 @@ class FlightWorkflowTests(unittest.TestCase):
                 completed and to_payload fields; unused by this stub.
             language (str): Report language encoded in fixture bytes.
             destination (Path): Exact report path requested by the worker.
+            _maps (tuple[bytes, bytes] | None): Optional prepared map bytes.
 
         Returns:
             Path: Created fixture report path.
@@ -296,12 +299,16 @@ class FlightWorkflowTests(unittest.TestCase):
         report = ModuleType("uploader.flight_report")
         report.REPORT_TEMPLATE_VERSION = "test"
         report.render_report = Mock(side_effect=self._render_report)
+        report.prepare_report_maps = Mock(return_value=(b"", b""))
 
         def render_batch(
             analysis: SimpleNamespace, destinations: dict[str, Path],
             cancel: threading.Event,
             started: Callable[[str], None],
             completed: Callable[[str, Path], None],
+            *,
+            prepare_maps: ReportMaps,
+            render: ReportRenderer,
         ) -> dict[str, Path]:
             """Isolate orchestration from the separately tested process pool.
 
@@ -311,15 +318,18 @@ class FlightWorkflowTests(unittest.TestCase):
                 cancel (threading.Event): Cancel queued fixture work.
                 started (Callable[[str], None]): Parent progress callback.
                 completed (Callable[[str, Path], None]): Parent journal callback.
+                prepare_maps (ReportMaps): Parent-side map preparation.
+                render (ReportRenderer): One edition renderer using the prepared maps.
             Returns:
                 dict[str, Path]: Finished stub PDFs, or raises on cancellation.
             """
             outputs = {}
+            maps = prepare_maps(analysis, next(iter(destinations.values())).parent)
             for language, destination in destinations.items():
                 if cancel.is_set():
                     raise InterruptedError("Cancelled queued fixture render")
                 started(language)
-                outputs[language] = report.render_report(analysis, language, destination)
+                outputs[language] = render(analysis, language, destination, maps)
                 completed(language, outputs[language])
             return outputs
 
@@ -345,10 +355,7 @@ class FlightWorkflowTests(unittest.TestCase):
                 gui_admission=(owner, port), require_gui_admission=True,
             )
             with patch.object(workflow, 'analyze_session', return_value=self._analysis()), \
-                    patch.dict('sys.modules', {
-                        'uploader.flight_delivery': delivery,
-                        'uploader.flight_report': report,
-                    }):
+                    patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                 worker.run()
             owner.acquire.assert_called_once_with('legacy', port)
             self.assertIs(work.checkpoint, delivery.check_report_capability.call_args.kwargs['before_request'])
@@ -376,10 +383,7 @@ class FlightWorkflowTests(unittest.TestCase):
                     gui_admission=(owner, port) if scenario == 'unavailable' else None,
                     require_gui_admission=True,
                 )
-                with patch.dict('sys.modules', {
-                    'uploader.flight_delivery': delivery,
-                    'uploader.flight_report': report,
-                }):
+                with patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                     worker.run()
                 drain.assert_not_called()
                 delivery.check_report_capability.assert_not_called()
@@ -402,10 +406,7 @@ class FlightWorkflowTests(unittest.TestCase):
             )
             with (
                 patch.object(workflow, "analyze_session", return_value=self._analysis(False)),
-                patch.dict("sys.modules", {
-                    "uploader.flight_delivery": delivery,
-                    "uploader.flight_report": report,
-                }),
+                patch.multiple(workflow, flight_delivery=delivery, flight_report=report),
             ):
                 worker.run()
             self.assertTrue(plan.completed)
@@ -435,10 +436,7 @@ class FlightWorkflowTests(unittest.TestCase):
                     workflow, "analyze_session",
                     return_value=analysis,
                 ),
-                patch.dict("sys.modules", {
-                    "uploader.flight_delivery": delivery,
-                    "uploader.flight_report": report,
-                }),
+                patch.multiple(workflow, flight_delivery=delivery, flight_report=report),
             ):
                 worker.run()
             self.assertTrue(plan.completed)
@@ -469,10 +467,7 @@ class FlightWorkflowTests(unittest.TestCase):
                     linked_target=target,
                 )
                 with patch.object(workflow, 'analyze_session', return_value=self._analysis()), \
-                        patch.dict('sys.modules', {
-                            'uploader.flight_delivery': delivery,
-                            'uploader.flight_report': report,
-                        }):
+                        patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                     worker.run()
                 delivery.check_report_capability.assert_not_called()
                 self.assertIs(delivery.deliver_report.call_args.kwargs['request'], target.report_request)
@@ -495,10 +490,7 @@ class FlightWorkflowTests(unittest.TestCase):
                 lambda cancel, deadline: None, Mock(), False,
             )
             with patch.object(workflow, "analyze_session", return_value=self._analysis()), \
-                    patch.dict("sys.modules", {
-                        "uploader.flight_delivery": delivery,
-                        "uploader.flight_report": report,
-                    }):
+                    patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                 worker.run()
             self.assertTrue(plan.completed)
             delivery.flight_report_digest.assert_not_called()
@@ -528,10 +520,7 @@ class FlightWorkflowTests(unittest.TestCase):
             )
             with (
                 patch.object(workflow, "analyze_session", return_value=self._analysis()),
-                patch.dict("sys.modules", {
-                    "uploader.flight_delivery": delivery,
-                    "uploader.flight_report": report,
-                }),
+                patch.multiple(workflow, flight_delivery=delivery, flight_report=report),
             ):
                 worker.run()
                 restored = SessionPlan.load(plan.directory)
@@ -588,10 +577,7 @@ class FlightWorkflowTests(unittest.TestCase):
                     lambda cancel, deadline: None, revoke, True,
                 )
                 with patch.object(workflow, "analyze_session", return_value=self._analysis()), \
-                        patch.dict("sys.modules", {
-                            "uploader.flight_delivery": delivery,
-                            "uploader.flight_report": report,
-                        }):
+                        patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                     worker.run()
                 saved = SessionPlan.load(plan.directory)
                 self.assertFalse(saved.completed)
@@ -618,6 +604,7 @@ class FlightWorkflowTests(unittest.TestCase):
 
                 def render(
                     data: SimpleNamespace, language: str, destination: Path,
+                    _maps: tuple[bytes, bytes],
                 ) -> Path:
                     """Fail the second edition only in the negative case.
 
@@ -625,6 +612,7 @@ class FlightWorkflowTests(unittest.TestCase):
                         data (SimpleNamespace): Controlled flight analysis.
                         language (str): Selected language.
                         destination (Path): Reserved local PDF output.
+                        _maps (tuple[bytes, bytes]): Prepared fixture map bytes.
                     Returns:
                         Path: Completed file, or raises for the Czech fault.
                     """
@@ -660,10 +648,7 @@ class FlightWorkflowTests(unittest.TestCase):
                 report.render_report.side_effect = render
                 delivery.deliver_report.side_effect = delivered
                 with patch.object(workflow, "analyze_session", return_value=analysis), \
-                        patch.dict("sys.modules", {
-                            "uploader.flight_delivery": delivery,
-                            "uploader.flight_report": report,
-                        }):
+                        patch.multiple(workflow, flight_delivery=delivery, flight_report=report):
                     worker.run()
                 if fail:
                     delivery.deliver_report.assert_not_called()
@@ -965,10 +950,7 @@ class FlightWorkflowTests(unittest.TestCase):
                 )
                 with (
                     patch.object(workflow, "analyze_session", return_value=self._analysis(True, False)),
-                    patch.dict("sys.modules", {
-                        "uploader.flight_delivery": delivery,
-                        "uploader.flight_report": report,
-                    }),
+                    patch.multiple(workflow, flight_delivery=delivery, flight_report=report),
                 ):
                     worker.run()
                 self.assertEqual("completed", worker.snapshot().phase)
@@ -1034,7 +1016,8 @@ class FlightWorkflowTests(unittest.TestCase):
             _delivery, report = self._report_modules()
 
             def render_then_cancel(
-                analysis: SimpleNamespace, language: str, destination: Path
+                analysis: SimpleNamespace, language: str, destination: Path,
+                _maps: tuple[bytes, bytes],
             ) -> Path:
                 """Write the first edition and cancel before the next starts.
 
@@ -1042,6 +1025,7 @@ class FlightWorkflowTests(unittest.TestCase):
                     analysis (SimpleNamespace): Normalized fixture analysis.
                     language (str): Current requested edition.
                     destination (Path): Unique revision PDF destination.
+                    _maps (tuple[bytes, bytes]): Prepared fixture map bytes.
 
                 Returns:
                     Path: The completed first edition, retained after cancellation.
@@ -1053,7 +1037,7 @@ class FlightWorkflowTests(unittest.TestCase):
             report.render_report.side_effect = render_then_cancel
             with (
                 patch.object(workflow, "analyze_session", return_value=self._analysis()),
-                patch.dict("sys.modules", {"uploader.flight_report": report}),
+                patch.multiple(workflow, flight_report=report),
             ):
                 worker.run()
             self.assertEqual("cancelled", worker.snapshot().phase)

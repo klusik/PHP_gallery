@@ -1249,6 +1249,7 @@
         "winapp/uploader/linked_create.py",
         "winapp/uploader/linked_upload.py",
         "winapp/uploader/linking_performance.py",
+        "winapp/uploader/localization.py",
         "winapp/uploader/macos_mode.py",
         "winapp/uploader/media.py",
         "winapp/uploader/mode_admission.py",
@@ -1294,6 +1295,11 @@
     "companion_resource_files": [
         "winapp/uploader/resources/DejaVuSans.ttf",
         "winapp/uploader/resources/LICENSE_DEJAVU"
+    ],
+    "companion_locale_files": [
+        "winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po",
+        "winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po",
+        "winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po"
     ],
     "updater_files": [
         ".agents/.htaccess",

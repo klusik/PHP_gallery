@@ -63,7 +63,7 @@ class StartupPreferenceTests(unittest.TestCase):
         with (
             mock.patch.object(startup, "startup_supported", return_value=True),
             mock.patch.object(startup.sys, "executable", str(executable)),
-            mock.patch.dict(sys.modules, {"winreg": registry}),
+            mock.patch.object(startup, "winreg", registry),
         ):
             startup.synchronize_startup(True)
             key = registry.CreateKeyEx.return_value.__enter__.return_value
@@ -91,7 +91,7 @@ class StartupPreferenceTests(unittest.TestCase):
         registry = mock.MagicMock()
         with (
             mock.patch.object(startup, "startup_supported", return_value=False),
-            mock.patch.dict(sys.modules, {"winreg": registry}),
+            mock.patch.object(startup, "winreg", registry),
         ):
             startup.synchronize_startup(True)
             startup.synchronize_startup(False)
@@ -134,7 +134,7 @@ class StartupPreferenceTests(unittest.TestCase):
         registry.KEY_WOW64_64KEY = 0x100  # Windows x64 view bit.
         with (
             mock.patch.object(startup, "startup_supported", return_value=True),
-            mock.patch.dict(sys.modules, {"winreg": registry}),
+            mock.patch.object(startup, "winreg", registry),
             self.assertRaisesRegex(PermissionError, "registry denied"),
         ):
             startup.synchronize_startup(True)
@@ -335,6 +335,44 @@ class InstanceCoordinationTests(unittest.TestCase):
                 config_store=store.return_value, start_minimized=True,
             )
             self.assertEqual(["run", "close"], order)
+
+
+    def test_selected_language_restarts_after_releasing_instance(self) -> None:
+        """Relaunch source and frozen sessions only after the owner unlocks.
+
+        Returns:
+            None: Asserts launch order, config identity and frozen isolation.
+        """
+        for frozen in (False, True):
+            with (
+                self.subTest(frozen=frozen),
+                mock.patch.object(MAIN, "WindowsInstance") as factory,
+                mock.patch.object(MAIN, "setup_logging"),
+                mock.patch.object(MAIN, "ConfigStore") as store,
+                mock.patch.object(MAIN, "WatcherApp") as app,
+                mock.patch.object(MAIN.subprocess, "Popen") as launch,
+                mock.patch.object(MAIN.sys, "frozen", frozen, create=True),
+            ):
+                order: list[str] = []
+                factory.return_value.acquire.return_value = True
+                store.return_value.load.return_value = MAIN.WatcherConfig()
+                app.return_value._restart_requested = True
+                app.return_value.run.side_effect = lambda: order.append("run")
+                factory.return_value.close.side_effect = lambda: order.append("unlock")
+                launch.side_effect = lambda *_args, **_kwargs: order.append("launch")
+                self.assertEqual(0, MAIN.main(["--config", "test-profile.json"]))
+                self.assertEqual(["run", "unlock", "launch"], order)
+                command = [sys.executable]
+                if not frozen:
+                    command.append(str(Path(MAIN.__file__).resolve()))
+                self.assertEqual(
+                    [*command, "--config", "test-profile.json"],
+                    launch.call_args.args[0],
+                )
+                if frozen:
+                    self.assertEqual(
+                        "1", launch.call_args.kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"],
+                    )
 
 
 @unittest.skipUnless(sys.platform == "win32", "Native mutex/event needs Windows")

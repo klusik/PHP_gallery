@@ -8,6 +8,9 @@
 # License: MIT License (see LICENSE file in repository)
 """Minimal independent update helper; never imports uploader configuration."""
 import ctypes
+
+from uploader.config import APP_PROFILE_NAME, load_ui_language
+from uploader.localization import configure_language, gettext, gettext_noop
 from ctypes import wintypes
 from dataclasses import asdict, dataclass
 import hashlib
@@ -24,6 +27,26 @@ import time
 import uuid
 import queue
 from typing import Callable, Protocol, TYPE_CHECKING
+
+from uploader.self_update import _version
+from uploader.windows_file_identity import (
+    FILE_ATTRIBUTE_REPARSE_POINT as UPDATE_REPARSE_POINT_ATTRIBUTE,
+    reject_reparse_path,
+)
+
+try:
+    import tkinter as tk
+    from tkinter import ttk
+except ImportError:
+    tk = None
+
+if tk is not None:
+    from uploader.ui_theme import Button
+
+try:
+    import winreg
+except ImportError:
+    winreg = None
 
 if TYPE_CHECKING:
     from uploader.self_update import ReleaseAsset
@@ -62,11 +85,6 @@ UPDATE_TICKET_MAX_BYTES = 4096
 # Type: int; Units: bytes; Scope: one legacy ready/proceed marker read.
 # Consumers: _legacy_marker_is_fresh. Rationale: old helpers write one byte.
 LEGACY_UPDATE_MARKER_MAX_BYTES = 1
-# Identify Win32 reparse points in native stat metadata on Windows.
-# Type: int; Units: file-attribute bit; Scope: update-owned files and paths.
-# Consumers: reject_reparse_path, load_ticket, _legacy_marker_is_fresh.
-# Rationale: 0x400 is FILE_ATTRIBUTE_REPARSE_POINT from the Windows ABI.
-UPDATE_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 @dataclass(frozen=True)
@@ -115,41 +133,29 @@ class Backend(Protocol):
         ...
 
 
-def reject_reparse_path(path: Path) -> None:
-    """Reject links and reparse points from one path through its ancestors.
-
-    Args:
-        path (Path): Candidate update file or directory to inspect.
-
-    Returns:
-        None: Accepts only a path whose existing components are not redirected.
-
-    Raises:
-        ValueError: A symlink or native reparse point occurs in the path chain.
-    """
-    for candidate in (path, *path.parents):
-        if candidate.is_symlink():
-            raise ValueError("Update paths must not contain reparse points")
-        if candidate.exists():
-            info = candidate.lstat()
-            if (getattr(info, "st_file_attributes", 0)
-                    & UPDATE_REPARSE_POINT_ATTRIBUTE):
-                raise ValueError("Update paths must not contain reparse points")
-
-
 def updates_root() -> Path:
     """Return the current user's fixed helper storage owner."""
     return Path(os.environ["LOCALAPPDATA"]) / "PHPGalleryUploader" / "updates"
 
 
 def installed_identity(executable_path: Path | None = None) -> Path:
-    """Require the frozen executable to match this product's HKLM installation."""
-    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+    """Require the frozen executable to match this product's HKLM installation.
+
+    Args:
+        executable_path (Path | None): Candidate executable or the current
+            process executable when omitted.
+
+    Returns:
+        Path: Confirmed installed executable path under the registered root.
+
+    Raises:
+        RuntimeError: The installed executable or registry cannot be verified.
+    """
+    if sys.platform != "win32" or winreg is None or not getattr(sys, "frozen", False):
         raise RuntimeError("Self-update requires the installed Windows application")
     executable = (executable_path or Path(sys.executable)).resolve()
     if executable.name != "PHPGalleryUploader.exe":
         raise RuntimeError("Self-update requires the registered installed executable")
-    import winreg
     key_name = (r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
                 "\\{E7CEB8DB-A422-44D2-8114-FAEFA25E62DC}_is1")
     try:
@@ -405,7 +411,6 @@ def find_legacy_update_ticket(
         UpdateTicket | None: One exact validated handoff, or None when absent,
             ambiguous, expired, unsupported or not running installed Windows.
     """
-    from uploader.self_update import _version
 
     try:
         if (_version(previous_version) >= _version(current_version)
@@ -787,7 +792,9 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
         raise
     if code == 3010:
         return UpdateOutcome(
-            "Windows restart required. Restart Windows before opening the uploader.", False,
+            gettext_noop(
+                "Windows restart required. Restart Windows before opening the uploader."
+            ), False,
         )
     if code != 0:
         raise RuntimeError(f"Setup exited with code {code}. The update was not verified.")
@@ -805,21 +812,23 @@ def main(ticket_path: str) -> int:
     Args:
         ticket_path (str): Owned session's validated local update-ticket path.
     Returns:
-        int: Zero after installation or a required reboot; one after failure.
+        int: Zero after installation or a required reboot; one after failure
+            or when the Tk runtime for the graphical helper is unavailable.
             Errors and reboot instructions remain visible until dismissed.
     """
-    import tkinter as tk
-    from tkinter import ttk
-    from uploader.ui_theme import Button
+    if tk is None:
+        return 1
+    profile = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_PROFILE_NAME
+    configure_language(load_ui_language(profile))
     path = Path(ticket_path)
     root = tk.Tk()
-    root.title("PHP Gallery Uploader update")
+    root.title(gettext("PHP Gallery Uploader update"))
     root.geometry("520x150")
-    text = tk.StringVar(value="Waiting for uploader to close…")
+    text = tk.StringVar(value=gettext("Waiting for uploader to close…"))
     ttk.Label(root, textvariable=text, wraplength=490).pack(padx=15, pady=15)
     bar = ttk.Progressbar(root, maximum=100)
     bar.pack(fill="x", padx=15)
-    button = Button(root, text="Close", command=root.destroy, state="disabled")
+    button = Button(root, text=gettext("Close"), command=root.destroy, state="disabled")
     button.pack(pady=10)
     def prevent_close() -> None:
         """Keep the helper alive while setup or verification is in progress.
@@ -893,14 +902,14 @@ def main(ticket_path: str) -> int:
                 if isinstance(value, UpdateOutcome) and value.verified:
                     root.destroy()
                     return
-                text.set(value.message if isinstance(value, UpdateOutcome) else str(value))
+                text.set(gettext(value.message if isinstance(value, UpdateOutcome) else str(value)))
                 button.configure(state="normal")
                 root.protocol("WM_DELETE_WINDOW", root.destroy)
                 return
             elif isinstance(value, tuple):
                 phase, percent = value
                 bar.configure(value=percent)
-                text.set(["Preparing setup…", "Preparing installation…", "Installing…", "Finishing setup…", "Verifying installation…"][phase])
+                text.set([gettext("Preparing setup…"), gettext("Preparing installation…"), gettext("Installing…"), gettext("Finishing setup…"), gettext("Verifying installation…")][phase])
         root.after(HELPER_POLL_MS, poll)
     threading.Thread(target=worker, daemon=True).start()
     poll()

@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.5.7}
+\newcommand{\version}{1.6.0}
 \newcommand{\manualdate}{24 November 2026}
 
 \hypersetup{
@@ -407,13 +407,11 @@ WinApp sources retain their separate companion inventory. Historical interactive
 and~FTP deployment scripts have been removed. See
 \filepath{docs/PRODUCTION_FILES.md}.
 
-Companion font/license resources use the~optional
-\codeword{companion_resource_files} inventory field. Installed readers
-can~ignore
-this addition while the~current package policy validates its~exact allowed
-paths.
-The~original companion field stays readable by~older companion-aware updaters;
-neither field grants CMS replacement ownership. Direct updates use a~complete
+The~optional \codeword{companion_resource_files} field holds the~companion font
+and~license. WinApp gettext catalogs use \codeword{companion_locale_files}.
+Installed readers process the~fields they recognize. The~current package
+policy validates exact paths for~both lists. CMS replacement ownership comes
+from the~updater inventory. Direct updates use a~complete
 newer package and~all pending migrations, without requiring each intermediate
 release. This does~not~qualify arbitrary historical hosting or~database states.
 Cancel a~failed pre-activation job before selecting a~corrected newer package;
@@ -1768,6 +1766,12 @@ and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational
 limits and~deployment qualification.
 
 \section{Windows companion uploader}
+Open \ui{Language} in~\ui{Settings} to~select English, Czech, German or~Swedish.
+WinApp saves the~choice and~offers to~restart so~it~can apply the~new language.
+Choose \ui{Later} to~use it~the~next time WinApp opens.
+\ui{Restart WinApp} remains available in~\ui{Settings} while the~choice is~pending.
+The~website language and~flight report PDF editions have separate settings.
+
 \subsection{Durable capture queue and~recovery}
 
 Connect once, start capture and~press \ui{Finish} once at~the~end.

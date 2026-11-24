@@ -12,6 +12,7 @@ from typing import Callable
 import tkinter as tk
 from tkinter import ttk
 
+from uploader.localization import gettext
 from uploader.ui_theme import Button, DialogSurface, icon_button, hide_inline_tooltip
 from uploader.flight_report_translations import tr
 
@@ -240,7 +241,7 @@ def _message(
     # for standalone message callers without that controller.
     selected_language = getattr(parent.winfo_toplevel(), '_flight_ui_language', None)
     language = selected_language.get() if isinstance(selected_language, tk.StringVar) else 'en'
-    Button(panel.footer, text=tr(language, 'yes') if question else 'OK',
+    Button(panel.footer, text=tr(language, 'yes') if question else gettext('OK'),
                command=confirm, style='Accent.Compact.TButton').pack(side='right')
     if question:
         Button(panel.footer, text=tr(language, 'cancel'),

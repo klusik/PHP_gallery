@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.5.7}
+\newcommand{\version}{1.6.0}
 \newcommand{\manualdate}{24.~listopadu~2026}
 
 \hypersetup{
@@ -400,12 +400,12 @@ WinApp mají samostatný doprovodný inventář. Historické interaktivní skrip
 a~nasazování pomocí FTP byly odstraněny. Viz
 \filepath{docs/PRODUCTION_FILES.md}.
 
-Font a~licence doprovodné aplikace patří do~volitelného pole inventáře
-\codeword{companion_resource_files}. Starší čteče toto rozšíření přeskočí,
-aktuální pravidla balíčku ověřují přesné povolené cesty. Původní doprovodné pole
-zůstává čitelné pro~starší updatery; žádné z~polí nerozšiřuje oprávnění
-k~náhradě
-souborů CMS. Přímá aktualizace používá úplný novější balíček a~všechny chybějící
+Písmo a~licence WinApp patří do~volitelného pole
+\codeword{companion_resource_files}. Katalogy gettext jsou v~poli
+\codeword{companion_locale_files}. Starší čteče zpracují pole, která znají.
+Aktuální pravidla balíčku ověřují přesné cesty v~obou seznamech. Soubory CMS
+k~nahrazení určuje inventář aktualizace. Přímá aktualizace používá úplný
+novější balíček a~všechny chybějící
 migrace bez~instalace každé meziverze. To~nepotvrzuje libovolné historické stavy
 hostingu či~databáze. Před výběrem opraveného novějšího balíčku zrušte neúspěšný
 job před aktivací; opakování stejného nekompatibilního sestavení inventář
@@ -1764,6 +1764,12 @@ i~mutace. Podrobnosti a~omezení nasazení uvádí
 \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \section{Windows uploader}
+V~\ui{Nastavení} otevřete položku \ui{Jazyk} a~vyberte angličtinu,
+češtinu, němčinu nebo švédštinu. WinApp volbu uloží a~nabídne restart.
+Zvolíte-li \ui{Později}, nový jazyk se~použije při příštím spuštění.
+Do~té doby zůstává v~\ui{Nastavení} volba \ui{Restartovat WinApp}.
+Jazyk webu a~jazykové verze letových zpráv v~PDF mají vlastní nastavení.
+
 \subsection{Trvalá fronta capture a~obnova}
 
 Galerii připojte jednou, spusťte capture a~na konci jednou zvolte

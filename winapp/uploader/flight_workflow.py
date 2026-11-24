@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from uploader import flight_delivery
 from uploader.flight_data import FlightAnalysis, analyze_session
 from uploader.flight_render import render_report_variants
 from uploader.flight_jobs import (
@@ -31,6 +32,13 @@ from uploader.models import JsonValue
 from uploader.mode_coordinator import CoordinatedWork, GuiModeOwner, ModeConfigPort
 from uploader.state_store import atomic_write_json
 from uploader.linked_upload import LinkedUploadTarget
+
+try:
+    from uploader import flight_report
+except ImportError:
+    # Source mode without optional rendering libraries can still use
+    # the app, repair dependencies and deliver already generated PDFs.
+    flight_report = None
 
 # Let graceful requests finish while retaining state on slow/disconnected hosts.
 # Type: float; Units: seconds; Scope: one finalization operation.
@@ -579,8 +587,12 @@ class FinalizationWorker(threading.Thread):
                 self.save_local_result("generating")
             self.update("generating", language.upper(), advance=True)
 
+        if flight_report is None:
+            raise RuntimeError("PDF generation requires Pillow and ReportLab.")
         return render_report_variants(
             analysis, edition.files, self.cancel, started, finished,
+            prepare_maps=flight_report.prepare_report_maps,
+            render=flight_report.render_report,
         )
 
     def generate_local_reports(self) -> None:
@@ -652,10 +664,6 @@ class FinalizationWorker(threading.Thread):
             InterruptedError: Cancellation retains acknowledged editions.
             OSError: Local receipts or the network are unavailable.
         """
-        from uploader.flight_delivery import (
-            deliver_report, flight_report_digest, saved_report_destination,
-        )
-
         plan = self.plans[0]
         if not self.saved_revisions:
             raise ValueError("Select a retained PDF revision.")
@@ -672,7 +680,7 @@ class FinalizationWorker(threading.Thread):
             ):
                 raise ValueError("Saved PDF selection changed; refresh the report list.")
         self.update("uploading", self.target_gallery)
-        saved_report_destination(
+        flight_delivery.saved_report_destination(
             self.upload_url, self.api_key, self.target_gallery,
             **self._request_options(),
         )
@@ -693,14 +701,14 @@ class FinalizationWorker(threading.Thread):
         for revision, language, pdf in editions:
             self.check_cancelled()
             self.update("uploading", pdf.name + "; report_id=" + revision.report_id)
-            checksum, size = flight_report_digest(pdf)
-            receipt = deliver_report(
+            checksum, size = flight_delivery.flight_report_digest(pdf)
+            receipt = flight_delivery.deliver_report(
                 self.upload_url, self.api_key, pdf, plan.session_id, language,
                 revision.report_id, self.transfer_progress, expected_sha256=checksum,
                 **self._request_options(),
             )
             if (receipt.get("sha256") != checksum
-                    or flight_report_digest(pdf) != (checksum, size)):
+                    or flight_delivery.flight_report_digest(pdf) != (checksum, size)):
                 raise RuntimeError("The selected report changed; delivery remains unconfirmed.")
             receipts[binding + ":" + revision.report_id + ":" + language] = {
                 "gallery_folder": self.target_gallery,
@@ -743,17 +751,10 @@ class FinalizationWorker(threading.Thread):
         # An explicitly finished airborne-start, diversion or partial recording
         # still gets a report. Its analysis keeps incomplete/unknown evidence;
         # finalization completion never fabricates takeoff or landing facts.
-        from uploader.flight_delivery import (
-            FLIGHT_DELIVERY_CHUNK_BYTES,
-            flight_report_digest,
-            check_report_capability,
-            deliver_report,
-        )
-        from uploader.flight_report import (
-            REPORT_TEMPLATE_VERSION,
-        )
+        if flight_report is None:
+            raise RuntimeError("PDF generation requires Pillow and ReportLab.")
         if (not plan.local_only and self.linked_target is None
-                and not check_report_capability(
+                and not flight_delivery.check_report_capability(
             self.upload_url, self.api_key, **self._request_options(),
         )):
             raise RuntimeError(
@@ -767,7 +768,7 @@ class FinalizationWorker(threading.Thread):
             ).encode("utf-8")
         ).hexdigest()
         revision = (
-            plan.session_id + "-" + str(REPORT_TEMPLATE_VERSION)
+            plan.session_id + "-" + str(flight_report.REPORT_TEMPLATE_VERSION)
             + "-" + analysis_digest[:16]
         )
         edition = allocate_report_revision(plan.directory, revision, plan.languages)
@@ -781,13 +782,13 @@ class FinalizationWorker(threading.Thread):
                 # Local reports retain the existing complete-read check without
                 # imposing the server's upload size or PDF-format restrictions.
                 with pdf.open("rb") as local_report:
-                    while local_report.read(FLIGHT_DELIVERY_CHUNK_BYTES):
+                    while local_report.read(flight_delivery.FLIGHT_DELIVERY_CHUNK_BYTES):
                         self.check_cancelled()
             else:
-                checksum, size = flight_report_digest(pdf)
+                checksum, size = flight_delivery.flight_report_digest(pdf)
                 self.check_cancelled()
                 if plan.receipts.get(language) != checksum:
-                    receipt = deliver_report(
+                    receipt = flight_delivery.deliver_report(
                         self.upload_url,
                         self.api_key,
                         pdf,
@@ -801,7 +802,7 @@ class FinalizationWorker(threading.Thread):
                         **self._request_options(),
                     )
                     if (receipt.get("sha256") != checksum
-                            or flight_report_digest(pdf) != (checksum, size)):
+                            or flight_delivery.flight_report_digest(pdf) != (checksum, size)):
                         raise RuntimeError("The local report changed; delivery remains unconfirmed.")
                     plan.receipts[language] = receipt["sha256"]
                     plan.save()

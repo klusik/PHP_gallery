@@ -33,6 +33,17 @@ from types import ModuleType
 from typing import TypedDict, TypeAlias, cast
 
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+if sys.platform == "win32":
+    import winreg
+else:
+    winreg = None
+
+
 class BenchmarkBlocked(RuntimeError):
     """Represent an explicit unavailable-environment benchmark outcome."""
 
@@ -1139,14 +1150,14 @@ def host_metadata() -> dict[str, str | int | float | None]:
     cpu_model = platform.processor() or "unavailable"
     if sys.platform == "win32":
         try:
-            import winreg
             registry_path = chr(92).join(("HARDWARE", "DESCRIPTION", "System", "CentralProcessor", "0"))
             cpu_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path)
             cpu_model = str(winreg.QueryValueEx(cpu_key, "ProcessorNameString")[0]).strip()
         except OSError:
             pass
     try:
-        import psutil
+        if psutil is None:
+            raise ImportError("Optional psutil is unavailable")
         logical_cores = psutil.cpu_count(logical=True)
         memory_bytes = psutil.virtual_memory().total
         psutil_version = version("psutil")

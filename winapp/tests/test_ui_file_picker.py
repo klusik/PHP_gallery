@@ -135,7 +135,6 @@ class EmbeddedFilePickerTests(unittest.TestCase):
         except tk.TclError as exc:
             self.skipTest(str(exc))
         try:
-            from uploader.ui_shell import active_panel
             root.after_idle(lambda: active_panel(root)._close())
             self.assertEqual(ui_file_picker.askopenfilenames(parent=root), ())
             self.assertFalse(any(isinstance(child, tk.Toplevel) for child in root.winfo_children()))

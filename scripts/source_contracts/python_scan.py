@@ -3,7 +3,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: scripts/source_contracts/python_scan.py
 # Module Type: Python Declaration Scanner
-# Purpose: Read Python AST declarations without importing or executing project code.
+# Purpose: Read declarations and import sites without executing Python sources.
 # Responsibilities:
 #   - Emit documentation, signature and executable fingerprint records for the audit.
 #   - Keep parser failures bounded and support native typed Google-style docstrings.
@@ -246,7 +246,7 @@ def executable_fingerprint(node: ast.AST) -> str:
 
 
 class DeclarationScanner(ast.NodeVisitor):
-    """Collect nested Python classes and callables with stable containing identities."""
+    """Collect Python declarations and import policy sites with lexical owners."""
 
     def __init__(self) -> None:
         """Initialize isolated declaration and lexical owner state.
@@ -255,6 +255,7 @@ class DeclarationScanner(ast.NodeVisitor):
             None: No project code or runtime modules are imported.
         """
         self.snapshots: list[dict[str, object]] = []
+        self.imports: list[dict[str, str | int]] = []
         self.owners: list[str] = []
         self.owner_kinds: list[str] = []
 
@@ -317,6 +318,43 @@ class DeclarationScanner(ast.NodeVisitor):
         """
         self.visit_FunctionDef(node)
 
+    def visit_Import(self, node: ast.Import | ast.ImportFrom) -> None:
+        """Record absolute future violations and function-local import sites.
+
+        Args:
+            node (ast.Import | ast.ImportFrom): Standalone or from-import
+                statement with its original source coordinates.
+
+        Returns:
+            None: Appends a disclosure-safe policy finding when applicable.
+        """
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "__future__"
+            and node.level == 0
+            and any(alias.name == "annotations" for alias in node.names)
+        ):
+            self.imports.append({
+                "line": node.lineno,
+                "rule": "python.future_annotations",
+            })
+        elif "callable" in self.owner_kinds:
+            self.imports.append({
+                "line": node.lineno,
+                "rule": "python.function_local_import",
+            })
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Apply the shared policy to imports that name a source module.
+
+        Args:
+            node (ast.ImportFrom): Absolute or relative from-import statement.
+
+        Returns:
+            None: Records a policy finding when the import is forbidden.
+        """
+        self.visit_Import(node)
+
     def collect(
         self,
         node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
@@ -365,39 +403,8 @@ class DeclarationScanner(ast.NodeVisitor):
         self.owners.pop()
 
 
-def import_findings(tree: ast.AST) -> list[dict[str, object]]:
-    """Find forbidden annotation future imports in parsed executable syntax.
-
-    Args:
-        tree (ast.AST): Parsed source tree, never evaluated or imported.
-
-    Returns:
-        list[dict[str, object]]: File-level line numbers and stable policy
-            rules.
-    """
-    findings: list[dict[str, object]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "__future__" and node.level == 0:
-            if any(alias.name == "annotations" for alias in node.names):
-                findings.append({"line": node.lineno, "rule": "python.future_annotations"})
-    return sorted(findings, key=import_finding_line)
-
-
-def import_finding_line(finding: dict[str, object]) -> int:
-    """Read the source coordinate used to order file-level import diagnostics.
-
-    Args:
-        finding (dict[str, object]): Import policy finding created by the AST
-            scanner.
-
-    Returns:
-        int: One-based line number of the forbidden import statement.
-    """
-    return int(str(finding["line"]))
-
-
 def scan_sources(sources: dict[str, str]) -> dict[str, dict[str, list[dict[str, object]]]]:
-    """Parse a batch of sources without following paths or evaluating annotations.
+    """Parse declarations and import sites without following paths or running code.
 
     Args:
         sources (dict[str, str]): Opaque source IDs mapped to already
@@ -410,11 +417,11 @@ def scan_sources(sources: dict[str, str]) -> dict[str, dict[str, list[dict[str, 
     result: dict[str, dict[str, list[dict[str, object]]]] = {}
     for identity, source in sources.items():
         scanner = DeclarationScanner()
-        tree = ast.parse(source.removeprefix("\ufeff"))
+        tree = ast.parse(source.removeprefix("\ufeff"), filename=identity)
         scanner.visit(tree)
         result[identity] = {
             "snapshots": scanner.snapshots,
-            "import_findings": import_findings(tree),
+            "import_findings": scanner.imports,
         }
     return result
 
@@ -430,7 +437,12 @@ def main() -> int:
         request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
         print(json.dumps(scan_sources(request), ensure_ascii=True))
         return 0
-    except (OSError, ValueError, SyntaxError, TypeError, IndexError, RecursionError):
+    except SyntaxError as exc:
+        # The bridge maps this opaque source digest back to an admitted path.
+        # Never emit exception text, file contents, or caret context.
+        print(json.dumps({"source": exc.filename, "line": exc.lineno}), file=sys.stderr)
+        return 2
+    except (OSError, ValueError, TypeError, IndexError, RecursionError):
         print("Python source parsing could not complete; coverage unknown.", file=sys.stderr)
         return 2
 

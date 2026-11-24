@@ -200,6 +200,12 @@ try {
         'winapp/uploader/media.py' => "# Companion bytes\n",
         'winapp/uploader/resources/DejaVuSans.ttf' => "font-fixture\x00\xFF\r\n",
         'winapp/uploader/resources/LICENSE_DEJAVU' => "Font redistribution license fixture\n",
+        'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po' =>
+            "msgid \"Settings\"\nmsgstr \"Nastavení\"\n",
+        'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po' =>
+            "msgid \"Settings\"\nmsgstr \"Einstellungen\"\r\n",
+        'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po' =>
+            "msgid \"Settings\"\nmsgstr \"Inställningar\"\n",
     ];
     $production = array_values(array_filter(
         array_keys($payloads),
@@ -219,6 +225,11 @@ try {
                 'companion_resource_files' => [
                     'winapp/uploader/resources/DejaVuSans.ttf',
                     'winapp/uploader/resources/LICENSE_DEJAVU',
+                ],
+                'companion_locale_files' => [
+                    'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po',
+                    'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
+                    'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
                 ],
                 'updater_files' => $updater,
                 'source_review_files' => [],

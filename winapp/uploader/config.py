@@ -20,7 +20,59 @@ Versioned configuration migration and normalization for the Windows uploader.
 """
 
 import os
+from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
+from .flight_jobs import read_document
+from .gallery_media_cache import GalleryMediaCache, MEDIA_CACHE_MAX_BYTES
+from .localization import DEFAULT_LANGUAGE, LANGUAGE_NAMES
+from .state_store import atomic_write_json
+
+APP_PROFILE_NAME = "PHPGalleryUploader"
+LANGUAGE_FILE = "ui-language.json"
+
+
+def load_ui_language(profile: Path) -> str:
+    """Read the app language or inherit the earlier flight interface choice.
+
+    Args:
+        profile (Path): Owned per-user WinApp profile containing preferences.
+
+    Returns:
+        str: Supported language code, or English if neither document has one.
+    """
+    # Read the old value independently of report settings. Older installations
+    # can still read their own preferences if the app is rolled back.
+    for path, key in (
+        (profile / LANGUAGE_FILE, "language"),
+        (profile / "flights" / "preferences.json", "ui_language"),
+    ):
+        try:
+            value = read_document(path).get(key)
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(value, str) and value in LANGUAGE_NAMES:
+            return value
+    return DEFAULT_LANGUAGE
+
+
+def save_ui_language(profile: Path, language: str) -> None:
+    """Atomically save the language without writing connection or report state.
+
+    Args:
+        profile (Path): Owned per-user WinApp profile receiving the selection.
+        language (str): Supported WinApp locale code from the settings control.
+
+    Returns:
+        None: The saved selection will be read when WinApp next starts.
+
+    Raises:
+        ValueError: The language code is unsupported.
+        OSError: The profile or selection cannot be written.
+    """
+    if language not in LANGUAGE_NAMES:
+        raise ValueError("Unsupported interface language")
+    atomic_write_json(profile / LANGUAGE_FILE, {"language": language})
+
 
 # Purpose: Offer a compact set of shared thumbnail quota choices.
 # Type: tuple[int, ...]. Units: GiB. Scope: per-user ordinary thumbnail storage.
@@ -40,7 +92,6 @@ def set_thumbnail_cache_limit_gib(value: int) -> bool:
     """
     if type(value) is not int or value not in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB:
         return False
-    from .gallery_media_cache import GalleryMediaCache, MEDIA_CACHE_MAX_BYTES
     return GalleryMediaCache.for_current_user(
         MEDIA_CACHE_MAX_BYTES, thumbnails=True,
     ).set_thumbnail_limit_bytes(value * 1024**3)

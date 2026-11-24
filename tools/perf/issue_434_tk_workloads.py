@@ -32,6 +32,21 @@ from typing import Callable, Iterator, ParamSpec, Protocol, TypeAlias, TypeVar, 
 
 from issue_434_tk_presentation_probe import PresentationProbe
 
+# The common workload binds the supplied production checkout at module scope.
+import issue_361_tk_workloads
+from uploader.windows_display import prepare_windows_display
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    from PIL import ImageGrab, __version__ as pillow_version
+except ImportError:
+    ImageGrab = None
+    pillow_version = None
+
 # Purpose: Allow adapter setup and teardown around the user-selected duration.
 # Type: int. Units: milliseconds. Scope: one child process watchdog.
 # Consumers: hard watchdog deadline. Rationale: 30 seconds bounds both setup
@@ -969,7 +984,8 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
         if root is None or measured_started[0] == 0:
             return
         try:
-            import psutil
+            if psutil is None:
+                raise ImportError("Optional psutil is unavailable")
             process = psutil.Process()
             pending = root.tk.call("after", "info")
             if len(resource_samples) < RAW_EVENT_LIMIT:
@@ -1034,8 +1050,8 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
         os._exit(1)
 
     try:
-        # The profile environment is isolated before any supplied production
-        # adapter is imported, so no real user profile is read or modified.
+        # Bind the isolated profile before loading the scenario adapters or
+        # launching the application. Module imports do not open profile state.
         shell_needed = args.scenario in SHELL_SCENARIOS
         media_needed = args.scenario in MEDIA_SCENARIOS
         harness_root = Path(__file__).resolve().parent
@@ -1062,7 +1078,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
             harness_root / "issue_434_tk_media.py",
             "issue_434_media_child",
         ) if media_needed else None
-        from uploader.windows_display import prepare_windows_display
         prepare_windows_display()
         root = tk.Tk()
         root.title(f"Issue 434: {args.scenario}")
@@ -1283,13 +1298,15 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
             status = "FAIL"
             failure = callback_errors[0]
         try:
-            from PIL import __version__ as pillow_version
+            if pillow_version is None:
+                raise ImportError("Optional Pillow is unavailable")
             metadata["pillow"] = pillow_version
         except ImportError:
             metadata["pillow"] = None
             missing_metrics.append("pillow_version")
         try:
-            import psutil
+            if psutil is None:
+                raise ImportError("Optional psutil is unavailable")
             memory = psutil.Process().memory_info()
             peak_rss = getattr(memory, "peak_wset", None)
             if peak_rss is None:
@@ -1350,7 +1367,8 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
             failure = f"Child raw-event capacity exceeded by {raw_dropped[0]} samples."
         if args.profile and root is not None:
             try:
-                from PIL import ImageGrab
+                if ImageGrab is None:
+                    raise RuntimeError("Optional Pillow capture is unavailable")
                 left = root.winfo_rootx()
                 top = root.winfo_rooty()
                 right = left + root.winfo_width()

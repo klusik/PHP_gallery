@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal, cast
 
+from .app_linking import LinkingMediaNotCurrent, LinkingResponseError
+
 _SECRET_RE = re.compile(r"(?i)(api[_ -]?key|authorization|token|secret|password)\s*[:=]\s*([^\s,;]+)")
 
 
@@ -46,7 +48,6 @@ def format_watch_recovery_diagnostic(
     Returns:
         str: Single credential-free line with known phases and available facts.
     """
-    from .app_linking import LinkingResponseError
 
     phase = stage if stage.isascii() and stage.isidentifier() else 'unknown'
     outcome = reason if reason.isascii() and reason.isidentifier() else 'unknown'
@@ -429,7 +430,6 @@ def format_safe_photos_failure(
         else "OtherError"
     )
     response = ""
-    from .app_linking import LinkingMediaNotCurrent, LinkingResponseError
 
     if isinstance(error, LinkingMediaNotCurrent):
         reason = getattr(error, "currentness_reason", None)

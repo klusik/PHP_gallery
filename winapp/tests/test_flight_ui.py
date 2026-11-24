@@ -27,6 +27,9 @@ from uploader.flight_jobs import (
     FlightPreferences, SavedFlight, SessionPlan, connection_binding,
     ImportBindings, ReportFileDetails,
 )
+from uploader.flight_report_translations import tr
+from uploader.flight_simbrief import DispatchPlan, load_dispatch
+from uploader.game_context import GameContext
 from uploader.models import ImportItem, ImportJob
 from uploader.state_store import JobStateStore
 
@@ -244,8 +247,6 @@ class FlightUITests(unittest.TestCase):
             None: The game/flight title and confirmation agree in every
                 language; declining them never starts abandonment.
         """
-        from uploader.game_context import GameContext
-        from uploader.flight_report_translations import tr
 
         host = self._host()
         ui = self._ui(host)
@@ -848,22 +849,24 @@ class FlightUITests(unittest.TestCase):
             host.worker.stop.assert_not_called()
             host.worker.request_drain.assert_not_called()
 
-    def test_preference_language_change_refreshes_host_actions_once(self) -> None:
-        """Refresh watcher and import actions when the UI language is saved.
+    def test_report_preferences_preserve_legacy_ui_language(self) -> None:
+        """Keep report settings independent of the active app language.
 
         Returns:
-            None: Saving an unchanged language leaves the host controls alone.
+            None: Report saves retain the prior language for older WinApp builds.
         """
         with tempfile.TemporaryDirectory() as tmp:
             host = self._host()
             ui = self._ui(host)
             ui.directory = Path(tmp)
+            ui.preferences = FlightPreferences(ui_language="de")
             ui.ui_language.get.return_value = "cs"
 
             self.assertTrue(ui.save_preferences())
             self.assertTrue(ui.save_preferences())
 
-            host.refresh_connection_controls.assert_called_once_with()
+            self.assertEqual(FlightPreferences.load(ui.directory).ui_language, "de")
+            host.refresh_connection_controls.assert_not_called()
 
     def test_invalid_preferences_restore_switches_without_touching_recorder(self) -> None:
         """Reject reports with no selected language before applying acquisition.
@@ -1817,7 +1820,6 @@ class FlightUITests(unittest.TestCase):
                 admission, all editions are enabled and credentials stay
                 configured; saved automatic preferences stay intact.
         """
-        from uploader.flight_simbrief import DispatchPlan, load_dispatch
 
         with tempfile.TemporaryDirectory() as temporary:
             ui = self._ui(self._host())
@@ -1985,7 +1987,6 @@ class FlightUITests(unittest.TestCase):
                 one retains previous evidence, and neither path confirms or
                 sends a network revoke. Each worker gets all four languages.
         """
-        from uploader.flight_simbrief import DispatchPlan, load_dispatch
 
         for loaded in (True, False):
             with self.subTest(loaded=loaded), tempfile.TemporaryDirectory() as temporary:
@@ -2059,7 +2060,6 @@ class FlightUITests(unittest.TestCase):
         Returns:
             None: The old and new session files remain unchanged.
         """
-        from uploader.flight_simbrief import DispatchPlan
 
         ui = self._ui(self._host())
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
@@ -2079,7 +2079,6 @@ class FlightUITests(unittest.TestCase):
             None: The explicit fetch saves only its captured historical target,
                 without a second route confirmation or success message window.
         """
-        from uploader.flight_simbrief import DispatchPlan
 
         ui = self._ui(self._host())
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
@@ -2102,7 +2101,6 @@ class FlightUITests(unittest.TestCase):
             None: Failed reloading preserves accepted evidence; another session
                 cannot inherit the previous session's loaded indicator.
         """
-        from uploader.flight_simbrief import DispatchPlan
 
         ui = self._ui(self._host())
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")

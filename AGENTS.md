@@ -87,7 +87,9 @@ Revalidate saved tool paths before retrying missing executables.
 
 PHP 8.1+, four-space indentation, `declare(strict_types=1);` in new PHP files;
 no Composer or Node build, framework-free public JS/CSS. Never use Python
-`from __future__ import annotations`.
+`from __future__ import annotations` or import inside functions or methods.
+Conditional imports are allowed at module scope. Both absolute rules cover the
+whole admitted Python tree independently of Git history.
 
 **Readability is advisory, never a CI gate.** Prefer <=80 columns; consider
 splitting at 81-100, actively above 100. Preserve semantics/comments and focused

@@ -50,6 +50,11 @@ Chromium
 and the aggregate. All 27 actual native owners must pass. Failed, missing,
 duplicated, cancelled or skipped mandatory owners are not successful evidence.
 
+The required shared source owner runs `python-import-policy` over the complete
+admitted Python tree of candidate A. Either absolute rule, postponed annotations
+or a function-local import, fails this owner and blocks the protected
+fast-forward. This scan does not use Git history.
+
 The WinApp partition coordinator still discovers the complete canonical
 inventory and requires the exact disjoint child-ID union. An explicitly selected
 child loads only its owned local test modules, validates every requested identity

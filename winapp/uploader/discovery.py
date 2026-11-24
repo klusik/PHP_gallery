@@ -21,6 +21,8 @@ Manual files/folder/ZIP discovery with bounded archive staging.
 
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+import ctypes
+from ctypes import wintypes
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 import os
 import re
@@ -92,8 +94,6 @@ class WatchDirectorySignal:
         self._handle: int | None = None
         self._kernel = None
         if os.name == 'nt':
-            import ctypes
-            from ctypes import wintypes
 
             kernel = ctypes.WinDLL('kernel32', use_last_error=True)
             kernel.FindFirstChangeNotificationW.argtypes = [

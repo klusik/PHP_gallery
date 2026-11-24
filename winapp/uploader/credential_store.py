@@ -22,6 +22,9 @@ import threading
 from pathlib import Path
 from types import TracebackType
 
+if os.name != 'nt':
+    import fcntl
+
 from .app_linking import _issuer_valid
 from .session_resume import (
     delete_keychain_record, read_keychain_record, write_keychain_record,
@@ -950,7 +953,6 @@ class _KeychainCredentialMutex:
         Raises:
             CredentialStoreError: The profile, lock or owner is unsafe or busy.
         """
-        import fcntl
 
         try:
             self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

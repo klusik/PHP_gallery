@@ -466,15 +466,15 @@ namespace {
             && str_contains($portableOwner, "python-version: '3.14'")
             && str_contains(
                 $portableOwner,
-                'Install the declared image and PDF test dependencies',
+                'Install declared image, PDF and localization test dependencies',
             )
             && str_contains(
                 $portableOwner,
-                'startswith(("pillow", "reportlab", "pypdf"))',
+                '("pillow", "reportlab", "pypdf", "polib")',
             )
             && str_contains(
                 $portableOwner,
-                'if len(runtime_requirements) != 3:',
+                'if len(runtime_requirements) != 4:',
             )
             && str_contains($portableOwner, 'winapp/requirements.txt')
             && str_contains(

@@ -1,0 +1,2227 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po
+# Module Type: WinApp GNU gettext Catalog
+# Purpose: Provide Swedish interface text for WinApp.
+# Responsibilities: Translate WinApp interface messages and retain their named fields.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+msgid ""
+msgstr ""
+"Project-Id-Version: PHP Gallery WinApp\n"
+"Language: sv\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "\n\nKeep the application running in the tray instead of forcing it closed?"
+msgstr "\n\nVill du låta appen fortsätta i meddelandefältet? Annars tvångsavslutas den."
+
+msgid " · progress "
+msgstr " · förlopp "
+
+msgid " at {rate}/s, ETA {seconds}s"
+msgstr " med {rate}/s, {seconds} s kvar"
+
+msgid ". The saved API key remains unchanged."
+msgstr ". Den sparade API-nyckeln förblir oförändrad."
+
+msgid "{app_display_name} {app_version}\nAuthor: Rudolf Klusal\nMIT License\nhttps://github.com/klusik/PHP_gallery"
+msgstr "{app_display_name} {app_version}\nSkapad av Rudolf Klusal\nMIT-licens\nhttps://github.com/klusik/PHP_gallery"
+
+msgid "{complete}/{total} terminal | {sent} / {size} | {rate} | {eta}"
+msgstr "{complete}/{total} klara | {sent} / {size} | {rate} | {eta}"
+
+msgid "{kind}: {source} | target {gallery} | confirmed {confirmed}, duplicates {duplicates}, failed {failed}, cancelled {cancelled}, active {active} | {progress}"
+msgstr "{kind}: {source} | målgalleri {gallery} | bekräftade {confirmed}, dubbletter {duplicates}, misslyckade {failed}, avbrutna {cancelled}, aktiva {active} | {progress}"
+
+msgid "{uncertain} upload(s) have an uncertain result. Review the gallery manually; they were not retried."
+msgstr "Uppladdningar med osäkert resultat: {uncertain}. Kontrollera galleriet manuellt. Uppladdningarna upprepades inte."
+
+msgid "▶  Start AI worker"
+msgstr "▶  Starta AI-analys"
+
+msgid "▶  Start import"
+msgstr "▶  Starta import"
+
+msgid "▶  Start Watcher"
+msgstr "▶  Starta mappbevakning"
+
+msgid "● REC"
+msgstr "● REC"
+
+msgid "✓  Save & Test"
+msgstr "✓  Spara och testa"
+
+msgid "✓  Save settings"
+msgstr "✓  Spara inställningar"
+
+msgid "A gallery request is already in progress."
+msgstr "En galleribegäran pågår redan."
+
+msgid "A key is currently stored locally."
+msgstr "En nyckel finns sparad på den här datorn."
+
+msgid "A saved connection is required."
+msgstr "En sparad anslutning krävs."
+
+msgid "About PHP Gallery"
+msgstr "Om PHP Gallery"
+
+msgid "Acknowledging the saved creation receipt…"
+msgstr "Bekräftar det sparade kvittot för det skapade galleriet…"
+
+msgid "active"
+msgstr "aktivt"
+
+msgid "Activity"
+msgstr "Aktivitet"
+
+msgid "Advanced AI settings"
+msgstr "Avancerade AI-inställningar"
+
+msgid "Advanced import and archive settings"
+msgstr "Avancerade import- och arkivinställningar"
+
+msgid "After confirmed upload. Existing and changed files are kept."
+msgstr "Efter bekräftad uppladdning. Befintliga och ändrade filer behålls."
+
+msgid "ai"
+msgstr "AI"
+
+msgid "Ai"
+msgstr "AI"
+
+msgid "AI METADATA"
+msgstr "AI-METADATA"
+
+msgid "AI metadata worker"
+msgstr "AI-analys av metadata"
+
+msgid "AI metadata worker idle"
+msgstr "AI-analysen av metadata väntar"
+
+msgid "AI metadata worker is running"
+msgstr "AI-analysen av metadata pågår"
+
+msgid "AI metadata worker running"
+msgstr "AI-analysen av metadata pågår"
+
+msgid "AI metadata worker started."
+msgstr "AI-analysen av metadata har startat."
+
+msgid "AI metadata worker stopped"
+msgstr "AI-analysen av metadata har stoppats"
+
+msgid "AI metadata worker stopping"
+msgstr "AI-analysen av metadata stoppas"
+
+msgid "all"
+msgstr "alla"
+
+msgid "All files"
+msgstr "Alla filer"
+
+msgid "Allow creating galleries"
+msgstr "Tillåt att gallerier skapas"
+
+msgid "Allow gallery uploads"
+msgstr "Tillåt uppladdning till gallerier"
+
+msgid "Allow listing galleries"
+msgstr "Tillåt listning av gallerier"
+
+msgid "An older version left unfinished Watcher work. Resume Watcher continues the original session."
+msgstr "En tidigare version lämnade ett pågående bevakningsjobb. Välj Fortsätt bevaka för att återuppta den ursprungliga sessionen."
+
+msgid "An unfinished import from {value} contains {value2} recoverable item(s). Open it for review and resume/retry?"
+msgstr "Den oavslutade importen från {value} har {value2} objekt som kan återställas. Vill du öppna den för att granska och återuppta importen?"
+
+msgid "An update operation is still in progress."
+msgstr "En uppdatering pågår redan."
+
+msgid "API key"
+msgstr "API-nyckel"
+
+msgid "API key changed. Save and test the connection before starting work."
+msgstr "API-nyckeln har ändrats. Spara och testa anslutningen innan du börjar."
+
+msgid "API key configured"
+msgstr "API-nyckeln är konfigurerad"
+
+msgid "API key entered but not saved"
+msgstr "API-nyckeln har angetts och väntar på att sparas"
+
+msgid "API key not configured"
+msgstr "API-nyckeln är inte konfigurerad"
+
+msgid "API key revoked and removed from local configuration."
+msgstr "API-nyckeln har återkallats och tagits bort från de lokala inställningarna."
+
+msgid "API-key connection…"
+msgstr "Anslutning med API-nyckel…"
+
+msgid "API-key revocation failed: {detail}"
+msgstr "API-nyckeln kunde inte återkallas: {detail}"
+
+msgid "APP & INTEGRATIONS"
+msgstr "APP OCH INTEGRATIONER"
+
+msgid "Application startup"
+msgstr "Appstart"
+
+msgid "Apply the saved per-user Windows startup preference without a UI."
+msgstr "Tillämpa användarens sparade Windows-startinställning utan att öppna något gränssnitt."
+
+msgid "Attach simulator location"
+msgstr "Bifoga simulatorposition"
+
+msgid "Authenticated endpoint available: {endpoint}"
+msgstr "Autentiserad slutpunkt tillgänglig: {endpoint}"
+
+msgid "Authentication error"
+msgstr "Autentiseringsfel"
+
+msgid "Auto"
+msgstr "Automatiskt"
+
+msgid "Backend"
+msgstr "Bearbetningsmotor"
+
+msgid "Background activity is running."
+msgstr "Arbete pågår i bakgrunden."
+
+msgid "Background work is still stopping"
+msgstr "Bakgrundsarbetet håller på att avslutas"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Cancel download"
+msgstr "Avbryt nedladdning"
+
+msgid "Cancel the active import"
+msgstr "Avbryt den pågående importen"
+
+msgid "cancelled"
+msgstr "avbruten"
+
+msgid "Cancelling after in-flight requests"
+msgstr "Avbryts när pågående begäranden är klara"
+
+msgid "Check create status"
+msgstr "Kontrollera om galleriet skapades"
+
+msgid "Check for updates"
+msgstr "Sök efter uppdateringar"
+
+msgid "Check for updates or open the available update"
+msgstr "Sök efter uppdateringar eller öppna den tillgängliga uppdateringen"
+
+msgid "Check for updates…"
+msgstr "Sök efter uppdateringar…"
+
+msgid "Check uncertain upload"
+msgstr "Kontrollera osäker uppladdning"
+
+msgid "Checking endpoint and API-key authorization without uploading media..."
+msgstr "Kontrollerar slutpunkt och API-nyckelns behörighet utan att ladda upp medier…"
+
+msgid "Checking for updates..."
+msgstr "Söker efter uppdateringar…"
+
+msgid "Checking gallery creation…"
+msgstr "Kontrollerar om galleriet har skapats…"
+
+msgid "Checking the approved identity…"
+msgstr "Kontrollerar det godkända kontot…"
+
+msgid "Checking the saved gallery connection…"
+msgstr "Kontrollerar den sparade gallerianslutningen…"
+
+msgid "Checking the securely saved connection…"
+msgstr "Kontrollerar den säkert sparade anslutningen…"
+
+msgid "Checking the uncertain upload once…"
+msgstr "Gör en engångskontroll av den osäkra uppladdningen…"
+
+msgid "Choose"
+msgstr "Välj"
+
+msgid "Choose a different visibility."
+msgstr "Välj en annan synlighet."
+
+msgid "Choose a folder"
+msgstr "Välj en mapp"
+
+msgid "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled."
+msgstr "Välj en mapp och anslut ett galleri. När bevakningen startar hoppas befintliga filer över. Nya bilder som stöds laddas upp när de har kopierats klart. Filerna ligger kvar på datorn om du inte uttryckligen aktiverar radering efter bekräftad uppladdning."
+
+msgid "Choose a folder in Watcher or add files in Import."
+msgstr "Välj en mapp i Mappbevakning eller lägg till filer i Import."
+
+msgid "Choose a folder to watch before starting."
+msgstr "Välj en mapp att bevaka innan du startar."
+
+msgid "Choose a source and complete preflight first."
+msgstr "Välj en källa och slutför förkontrollen först."
+
+msgid "Choose a ZIP archive"
+msgstr "Välj ett ZIP-arkiv"
+
+msgid "Choose an existing folder first."
+msgstr "Välj en befintlig mapp först."
+
+msgid "Choose files to import"
+msgstr "Välj filer att importera"
+
+msgid "Choose files, a folder, or a ZIP archive"
+msgstr "Välj filer, en mapp eller ett ZIP-arkiv"
+
+msgid "Choose folder to import"
+msgstr "Välj en mapp att importera"
+
+msgid "Choose folder…"
+msgstr "Välj mapp…"
+
+msgid "Choose gallery…"
+msgstr "Välj galleri…"
+
+msgid "Choose image files"
+msgstr "Välj bildfiler"
+
+msgid "Choose Interrupt in the progress panel to pause uploads."
+msgstr "Välj Avbryt i förloppspanelen för att pausa uppladdningarna."
+
+msgid "Choose permissions for this connection. Optional secure storage requires separate browser consent and permits renewal for up to 30 days, with a seven-day inactivity limit. The saved API key remains available; server grants may remain until revoked."
+msgstr "Välj behörigheter för anslutningen. Valfri säker lagring kräver ett separat godkännande i webbläsaren och tillåter förnyelse i upp till 30 dagar, med en inaktivitetsgräns på sju dagar. Den sparade API-nyckeln finns kvar. Serverbehörigheterna kan gälla tills de återkallas."
+
+msgid "CHOOSE SOURCE"
+msgstr "VÄLJ KÄLLA"
+
+msgid "Choose watched folder"
+msgstr "Välj mapp att bevaka"
+
+msgid "Choose ZIP archive to import"
+msgstr "Välj ett ZIP-arkiv att importera"
+
+msgid "Clear the selected source"
+msgstr "Rensa den valda källan"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Close unresolved creation"
+msgstr "Stäng det olösta galleriskapandet"
+
+msgid "Closing after the update operation stops..."
+msgstr "Appen stängs när uppdateringen har stoppats…"
+
+msgid "Closing previous Watcher access. Try again after it finishes."
+msgstr "Stänger den föregående bevakningsåtkomsten. Försök igen när det är klart."
+
+msgid "Closing previous Watcher access. Try again when it finishes."
+msgstr "Stänger den föregående bevakningsåtkomsten. Försök igen när det är klart."
+
+msgid "Complete the app update before resetting Watcher."
+msgstr "Slutför appuppdateringen innan du återställer mappbevakningen."
+
+msgid "Configuration"
+msgstr "Konfiguration"
+
+msgid "Configuration changed; run preflight again. Sources were retained."
+msgstr "Inställningarna har ändrats. Kör förkontrollen igen. Källorna har behållits."
+
+msgid "Configuration error"
+msgstr "Konfigurationsfel"
+
+msgid "confirmed"
+msgstr "bekräftad"
+
+msgid "Connect a gallery, choose a Watcher folder, then explicitly start capture. Finish drains accepted photographs before completing.\n\nUse File to choose an import source. Review preflight before starting an import. View switches between Photos, Watcher, Import, Activity, AI and Settings.\n\nHelp → Support diagnostics builds a local report you can review, copy or save for support. Review it before sharing; nothing is sent automatically."
+msgstr "Anslut ett galleri, välj en mapp att bevaka och starta insamlingen. Slutför laddar upp godkända foton innan sessionen avslutas.\n\nVälj en importkälla under Arkiv. Granska förkontrollen innan du startar importen. Under Visa kan du växla mellan Foton, Mappbevakning, Import, Aktivitet, AI och Inställningar.\n\nUnder Hjälp → Supportdiagnostik skapar du en lokal rapport som du kan granska, kopiera eller spara. Granska den innan du delar den. Appen skickar den inte automatiskt."
+
+msgid "Connect Watcher"
+msgstr "Anslut mappbevakningen"
+
+msgid "Connected"
+msgstr "Ansluten"
+
+msgid "Connection"
+msgstr "Anslutning"
+
+msgid "Connection / API key..."
+msgstr "Anslutning / API-nyckel…"
+
+msgid "Connection failed"
+msgstr "Anslutningen misslyckades"
+
+msgid "Connection saved. Test authentication before starting work."
+msgstr "Anslutningen har sparats. Testa autentiseringen innan du börjar."
+
+msgid "Connection saved. Testing authentication..."
+msgstr "Anslutningen har sparats. Testar autentiseringen…"
+
+msgid "Connection test failed: {detail}"
+msgstr "Anslutningstestet misslyckades: {detail}"
+
+msgid "connection test is running"
+msgstr "anslutningstestet pågår"
+
+msgid "Connection test succeeded for gallery {gallery}."
+msgstr "Anslutningstestet för galleriet {gallery} lyckades."
+
+msgid "Connection warning"
+msgstr "Anslutningsvarning"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Copy report"
+msgstr "Kopiera rapport"
+
+msgid "Could not acknowledge the creation receipt."
+msgstr "Det gick inte att bekräfta mottagandet av skapandebeskedet."
+
+msgid "Could not connect to the gallery service."
+msgstr "Det gick inte att ansluta till galleritjänsten."
+
+msgid "Could not create the gallery. Check the connection or try another name. Using the same name resumes its saved request."
+msgstr "Det gick inte att skapa galleriet. Kontrollera anslutningen eller prova ett annat namn. Samma namn återupptar den sparade begäran."
+
+msgid "Could not establish secure HTTPS to the gallery."
+msgstr "Det gick inte att upprätta en säker HTTPS-anslutning till galleriet."
+
+msgid "Could not load galleries."
+msgstr "Det gick inte att läsa in gallerierna."
+
+msgid "Could not load the current gallery list. Access may have expired or been revoked; refresh after reconnecting."
+msgstr "Det gick inte att läsa in den aktuella gallerilistan. Åtkomsten kan ha löpt ut eller återkallats. Anslut på nytt och uppdatera listan."
+
+msgid "Could not open the browser. Try connecting again."
+msgstr "Det gick inte att öppna webbläsaren. Försök ansluta igen."
+
+msgid "Could not open the gallery in your browser."
+msgstr "Det gick inte att öppna galleriet i webbläsaren."
+
+msgid "Could not prepare the Watcher connection. Try again."
+msgstr "Det gick inte att förbereda mappbevakningens anslutning. Försök igen."
+
+msgid "Could not reach the saved gallery renewal service. Try again when it is available."
+msgstr "Förnyelsetjänsten för den sparade gallerianslutningen gick inte att nå. Försök igen när tjänsten är tillgänglig."
+
+msgid "Could not read the original creation request."
+msgstr "Det gick inte att läsa den ursprungliga begäran om att skapa galleriet."
+
+msgid "Could not resolve the gallery address (DNS)."
+msgstr "Galleriets adress kunde inte slås upp via DNS."
+
+msgid "Could not save report: "
+msgstr "Det gick inte att spara rapporten: "
+
+msgid "Could not save the interface language."
+msgstr "Det gick inte att spara gränssnittsspråket."
+
+msgid "Could not start a secure linking attempt."
+msgstr "Det gick inte att starta säker länkning."
+
+msgid "Could not start gallery creation."
+msgstr "Det gick inte att börja skapa galleriet."
+
+msgid "Could not start gallery verification."
+msgstr "Det gick inte att påbörja kontrollen av galleriet."
+
+msgid "Could not start local removal."
+msgstr "Det gick inte att påbörja den lokala borttagningen."
+
+msgid "Could not start secure unlink cleanup."
+msgstr "Det gick inte att påbörja säker rensning efter frånkopplingen."
+
+msgid "Could not start the gallery detail request."
+msgstr "Det gick inte att begära galleriuppgifterna."
+
+msgid "Could not start the gallery request."
+msgstr "Det gick inte att starta galleribegäran."
+
+msgid "Could not start the linked Watcher. Check the Watcher settings and try again."
+msgstr "Det gick inte att starta den länkade mappbevakningen. Kontrollera bevakningsinställningarna och försök igen."
+
+msgid "Could not start the secure reconnect."
+msgstr "Det gick inte att påbörja en säker återanslutning."
+
+msgid "Could not start the upload observation."
+msgstr "Det gick inte att påbörja kontrollen av uppladdningen."
+
+msgid "Could not start the visibility request; read details again."
+msgstr "Det gick inte att begära ändrad synlighet. Läs in uppgifterna igen."
+
+msgid "Could not verify the created gallery."
+msgstr "Det gick inte att verifiera det skapade galleriet."
+
+msgid "Could not verify the gallery or prepare Watcher access. Check the connection and try again."
+msgstr "Det gick inte att verifiera galleriet eller förbereda åtkomst för mappbevakningen. Kontrollera anslutningen och försök igen."
+
+msgid "Could not verify the saved link. Try again."
+msgstr "Det gick inte att verifiera den sparade länken. Försök igen."
+
+msgid "Could not verify the uncertain upload. It remains unresolved."
+msgstr "Det gick inte att verifiera den osäkra uppladdningen. Den är fortfarande olöst."
+
+msgid "Create gallery"
+msgstr "Skapa galleri"
+
+msgid "Create inside {gallery}? Choose No to create at the root."
+msgstr "Skapa i {gallery}? Välj Nej för att skapa galleriet på översta nivån."
+
+msgid "Created"
+msgstr "Skapad"
+
+msgid "Created "
+msgstr "Skapat: "
+
+msgid "Creation acknowledged. You may create another gallery."
+msgstr "Skapandet har bekräftats. Du kan skapa ett till galleri."
+
+msgid "Creation is unconfirmed. Do not create it again. Reconnect to the same account and check status. Explicitly Resume original creation, or review the gallery and storage and use Close unresolved creation."
+msgstr "Skapandet har inte bekräftats. Skapa inte galleriet igen. Anslut med samma konto och kontrollera status. Återuppta det ursprungliga skapandet, eller granska galleriet och lagringen och stäng det olösta galleriskapandet."
+
+msgid "Current import"
+msgstr "Aktuell import"
+
+msgid "Cut"
+msgstr "Klipp ut"
+
+msgid "Default 0.18. Lower sees more objects but may add noise."
+msgstr "Standardvärdet är 0,18. Ett lägre värde hittar fler objekt men kan ge fler felträffar."
+
+msgid "Default 60. Larger values keep the server quieter."
+msgstr "Standardvärdet är 60. Högre värden minskar belastningen på servern."
+
+msgid "Default 600. Heartbeats extend the lease while analysis runs."
+msgstr "Standardvärdet är 600. Regelbundna livstecken förlänger jobbets reservation under analysen."
+
+msgid "Delete uploaded photos from this PC"
+msgstr "Radera uppladdade foton från den här datorn"
+
+msgid "Dependency repair"
+msgstr "Reparation av beroenden"
+
+msgid "Dependency repair failed"
+msgstr "Det gick inte att reparera beroendena"
+
+msgid "Detail"
+msgstr "Detaljer"
+
+msgid "Detector threshold"
+msgstr "Detekteringströskel"
+
+msgid "discovered"
+msgstr "upptäckt"
+
+msgid "Dismiss"
+msgstr "Dölj"
+
+msgid "Dismiss result"
+msgstr "Dölj resultatet"
+
+msgid "Displayed report copied to clipboard."
+msgstr "Den visade rapporten kopierades till urklipp."
+
+msgid "Displayed report saved locally. Nothing was sent."
+msgstr "Den visade rapporten sparades lokalt. Inget har skickats."
+
+msgid "DLL files"
+msgstr "DLL-filer"
+
+msgid "Downloading installer: {done:,} / {total:,} bytes"
+msgstr "Laddar ned installationsprogrammet: {done:,} / {total:,} byte"
+
+msgid "Downloading installer..."
+msgstr "Laddar ned installationsprogrammet…"
+
+msgid "Earlier duplicate results need a new preflight. Original sources were retained."
+msgstr "Tidigare dubblettresultat kräver en ny förkontroll. Originalkällorna har behållits."
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "Enable AI metadata worker on this PC"
+msgstr "Aktivera AI-analys av metadata på den här datorn"
+
+msgid "Enable the AI metadata worker before starting it."
+msgstr "Aktivera AI-analysen av metadata innan du startar den."
+
+msgid "Enter a valid gallery address first."
+msgstr "Ange först en giltig galleriadress."
+
+msgid "Enter a valid HTTP or HTTPS Gallery URL/endpoint."
+msgstr "Ange en giltig HTTP- eller HTTPS-adress till galleriet eller dess API-slutpunkt."
+
+msgid "Enter a valid HTTP(S) Gallery URL or upload endpoint."
+msgstr "Ange en giltig HTTP(S)-adress till galleriet eller uppladdningsslutpunkten."
+
+msgid "Enter a valid number within the allowed range."
+msgstr "Ange ett giltigt tal inom det tillåtna intervallet."
+
+msgid "Enter an API key before testing the connection."
+msgstr "Ange en API-nyckel innan du testar anslutningen."
+
+msgid "Enter the address of your gallery."
+msgstr "Ange adressen till ditt galleri."
+
+msgid "Enter the original file size in bytes. No local file is opened. A match only reports observed bytes and does not confirm an upload."
+msgstr "Ange filens ursprungliga storlek i byte. Ingen lokal fil öppnas. En träff innebär bara samma antal byte och bekräftar ingen uppladdning."
+
+msgid "error"
+msgstr "fel"
+
+msgid "Estimated accepted bytes: {size}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {rejected}"
+msgstr "Uppskattad storlek för godkända filer: {size}  |  Filer utan stöd överhoppade: {unsupported}  |  Osäkra ZIP-poster avvisade: {rejected}"
+
+msgid "ETA {seconds}s"
+msgstr "{seconds} s kvar"
+
+msgid "ETA pending"
+msgstr "Beräknar återstående tid"
+
+msgid "Event"
+msgstr "Händelse"
+
+msgid "Examples: llava:latest or llama3.2-vision:latest."
+msgstr "Använd exempelvis llava:latest eller llama3.2-vision:latest."
+
+msgid "Exit"
+msgstr "Avsluta"
+
+msgid "Experimental Canvas gallery renderer"
+msgstr "Experimentell Canvas-visning av galleriet"
+
+msgid "External analyzer command"
+msgstr "Kommando för externt analysprogram"
+
+msgid "External command"
+msgstr "Externt kommando"
+
+msgid "failed"
+msgstr "misslyckade"
+
+msgid "failed_permanent"
+msgstr "permanent fel"
+
+msgid "failed_retryable"
+msgstr "misslyckat, kan försökas igen"
+
+msgid "File"
+msgstr "Fil"
+
+msgid "File stable for"
+msgstr "Filen ska vara oförändrad i"
+
+msgid "Files"
+msgstr "Filer"
+
+msgid "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings."
+msgstr "Filer som redan finns när bevakningen startar hoppas över. Nya filer behandlas först när storlek och ändringstid är oförändrade. Undermappar bevakas bara om det aktiveras i inställningarna för mappbevakning."
+
+msgid "Files: {manual_path_count} selected"
+msgstr "Valda filer: {manual_path_count}"
+
+msgid "Finish or explicitly resolve current work before replacing its gallery connection."
+msgstr "Slutför eller hantera pågående arbete innan du ersätter dess gallerianslutning."
+
+msgid "Finish or resolve existing upload work and verify the original creation receipt before changing target."
+msgstr "Slutför eller hantera återstående uppladdningar och verifiera det ursprungliga skapandekvittot innan du byter mål."
+
+msgid "Finish the active update before changing this setting."
+msgstr "Slutför den pågående uppdateringen innan du ändrar inställningen."
+
+msgid "Finish the current Watcher session before starting an import."
+msgstr "Slutför den aktuella bevakningssessionen innan du startar en import."
+
+msgid "Finish was not started because queue recovery failed. Review the retained session and retry explicitly."
+msgstr "Slutförandet startade inte eftersom kön inte kunde återställas. Granska den bevarade sessionen och starta slutförandet igen."
+
+msgid "Finishing current uploads and saving Watcher state…"
+msgstr "Slutför uppladdningar och sparar mappbevakningens tillstånd…"
+
+msgid "Finishing current work"
+msgstr "Det pågående arbetet slutförs"
+
+msgid "Finishing setup…"
+msgstr "Slutför installationen…"
+
+msgid "Finishing the current upload before updating…"
+msgstr "Slutför den pågående uppladdningen före uppdateringen…"
+
+msgid "First use may download model files locally."
+msgstr "Modellfiler kan laddas ned till datorn första gången funktionen används."
+
+msgid "Flight workspace unavailable."
+msgstr "Arbetsytan för flygningar är inte tillgänglig."
+
+msgid "Folder"
+msgstr "Mapp"
+
+msgid "Folder does not exist or cannot be accessed."
+msgstr "Mappen finns inte eller går inte att komma åt."
+
+msgid "Folder: "
+msgstr "Mapp: "
+
+msgid "Forget saved link"
+msgstr "Glöm sparad länk"
+
+msgid "Gallery #{number}: {title} · Revision {revision}. Saved visibility: {visibility}; access: {access}; listing: {listing}. Inherited access is not shown."
+msgstr "Galleri nr {number}: {title} · Revision {revision}. Sparad synlighet: {visibility}. Åtkomst: {access}. Listning: {listing}. Ärvd åtkomst visas inte."
+
+msgid "Gallery access is unavailable or another connection operation is running. Try again."
+msgstr "Galleriåtkomsten är inte tillgänglig eller så pågår ett annat anslutningsarbete. Försök igen."
+
+msgid "Gallery API key revoked."
+msgstr "Galleriets API-nyckel har återkallats."
+
+msgid "GALLERY CONNECTION"
+msgstr "GALLERIANSLUTNING"
+
+msgid "Gallery connection and API key"
+msgstr "Gallerianslutning och API-nyckel"
+
+msgid "Gallery connection changed. Run import preflight again."
+msgstr "Gallerianslutningen har ändrats. Kör importens förkontroll igen."
+
+msgid "Gallery connections…"
+msgstr "Gallerianslutningar…"
+
+msgid "Gallery detail is unsupported or unavailable. Existing connections and saved API-key upload remain unchanged."
+msgstr "Galleriuppgifterna stöds inte eller är otillgängliga. Befintliga anslutningar och uppladdning med sparad API-nyckel påverkas inte."
+
+msgid "Gallery link expired."
+msgstr "Gallerilänken har löpt ut."
+
+msgid "Gallery linking cancelled."
+msgstr "Gallerilänkningen avbröts."
+
+msgid "Gallery title:"
+msgstr "Galleriets titel:"
+
+msgid "Gallery unlinked."
+msgstr "Galleriet har kopplats från."
+
+msgid "Gallery URL"
+msgstr "Galleriets URL"
+
+msgid "Gallery URL and API key are required before retrying."
+msgstr "Ange galleriets URL och API-nyckel innan du försöker igen."
+
+msgid "Gallery URL and API key are required before starting an import."
+msgstr "Ange galleriets URL och API-nyckel innan du startar importen."
+
+msgid "Gallery URL and API key are required before starting the AI worker."
+msgstr "Ange galleriets URL och API-nyckel innan du startar AI-analysen."
+
+msgid "Gallery URL and API key are required before starting the watcher."
+msgstr "Ange galleriets URL och API-nyckel innan du startar mappbevakningen."
+
+msgid "GiB"
+msgstr "GiB"
+
+msgid "Go"
+msgstr "Gå"
+
+msgid "hashing"
+msgstr "beräknar hashvärde"
+
+msgid "Help"
+msgstr "Hjälp"
+
+msgid "Help: {title}"
+msgstr "Hjälp: {title}"
+
+msgid "Home"
+msgstr "Hem"
+
+msgid "Ignored at startup: -"
+msgstr "Överhoppade vid start: –"
+
+msgid "Ignored at startup: {value}"
+msgstr "Överhoppade vid start: {value}"
+
+msgid "Ignored at startup: checking existing files…"
+msgstr "Överhoppade vid start: kontrollerar befintliga filer…"
+
+msgid "Ignored at startup: not scanned yet"
+msgstr "Överhoppade vid start: ännu inte kontrollerade"
+
+msgid "Image files"
+msgstr "Bildfiler"
+
+msgid "import"
+msgstr "import"
+
+msgid "Import"
+msgstr "Import"
+
+msgid "Import cancelled"
+msgstr "Importen avbröts"
+
+msgid "Import files…"
+msgstr "Importera filer…"
+
+msgid "Import finished"
+msgstr "Importen är klar"
+
+msgid "Import folder…"
+msgstr "Importera mapp…"
+
+msgid "Import idle"
+msgstr "Importen väntar"
+
+msgid "Import needs review"
+msgstr "Importen behöver granskas"
+
+msgid "Import options and item details"
+msgstr "Importalternativ och filuppgifter"
+
+msgid "Import paused"
+msgstr "Importen är pausad"
+
+msgid "Import preflight completed and is awaiting explicit Start import."
+msgstr "Förkontrollen är klar. Importen väntar på att du startar den."
+
+msgid "Import preflight failed: {detail}"
+msgstr "Förkontrollen för importen misslyckades: {detail}"
+
+msgid "import preflight is running"
+msgstr "förkontrollen för importen pågår"
+
+msgid "Import recovery"
+msgstr "Återställ import"
+
+msgid "Import review"
+msgstr "Granskning av importen"
+
+msgid "Import running"
+msgstr "Importen pågår"
+
+msgid "Import ZIP archive…"
+msgstr "Importera ZIP-arkiv…"
+
+msgid "Include subfolders"
+msgstr "Inkludera undermappar"
+
+msgid "info"
+msgstr "information"
+
+msgid "Inspecting {current}/{total}: {filename}"
+msgstr "Kontrollerar {current}/{total}: {filename}"
+
+msgid "Inspecting source, hashing files, checking media capabilities, and comparing remote inventory..."
+msgstr "Granskar källan, beräknar filernas hashvärden, kontrollerar formatstöd och jämför med galleriets innehåll…"
+
+msgid "Install local AI module"
+msgstr "Installera lokal AI-modul"
+
+msgid "Installed Windows app only. This switch saves immediately."
+msgstr "Bara för den installerade Windows-appen. Inställningen sparas direkt."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app."
+msgstr "Installationsprogrammet har verifierats.\nUppdateringen stänger appen, installerar den nya versionen och startar om den."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app.\nWindows may request administrator approval."
+msgstr "Installationsprogrammet har verifierats.\nUppdateringen stänger appen, installerar den nya versionen och startar om den.\nWindows kan begära administratörsgodkännande."
+
+msgid "Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact."
+msgstr "Installationsprogrammet har verifierats. Välj Öppna installationsprogrammet för manuell installation. Appen som körs från källkoden och dess mapp förblir öppna och oförändrade."
+
+msgid "Installer verified. Open installer starts manual installation; this source application remains open."
+msgstr "Installationsprogrammet har verifierats. Välj Öppna installationsprogrammet för manuell installation. Appen som körs från källkoden förblir öppen."
+
+msgid "Installing…"
+msgstr "Installerar…"
+
+msgid "Invalid settings"
+msgstr "Ogiltiga inställningar"
+
+msgid "Job history"
+msgstr "Jobbhistorik"
+
+msgid "Keep working in the system tray when the window closes"
+msgstr "Fortsätt arbeta i meddelandefältet när fönstret stängs"
+
+msgid "Keeps Flight Simulator in sync with real-world UTC while the watcher runs. Off by default. Your choice is remembered."
+msgstr "Synkroniserar tiden i Flight Simulator med verklig UTC medan mappbevakningen pågår. Av som standard. Ditt val sparas."
+
+msgid "Language"
+msgstr "Språk"
+
+msgid "Last scan: "
+msgstr "Senaste kontroll: "
+
+msgid "Last scan: -"
+msgstr "Senaste kontroll: –"
+
+msgid "Last scan: preparing"
+msgstr "Senaste kontroll: förbereder"
+
+msgid "Last successful scan: "
+msgstr "Senaste lyckade kontroll: "
+
+msgid "Later"
+msgstr "Senare"
+
+msgid "LATEST"
+msgstr "SENASTE"
+
+msgid "Lease seconds per job"
+msgstr "Jobbreservation i sekunder"
+
+msgid "Link the gallery to load its gallery list."
+msgstr "Länka galleriet för att läsa in dess gallerilista."
+
+msgid "Linked gallery upload does not grant AI access. Switch explicitly to the saved API-key connection to use this worker."
+msgstr "Länkad uppladdning till galleriet ger ingen åtkomst till AI. Byt till den sparade anslutningen med API-nyckel om du vill använda AI-analysen."
+
+msgid "Linked upload mode cannot be verified."
+msgstr "Det gick inte att verifiera läget för länkad uppladdning."
+
+msgid "Linked upload mode is unconfirmed. Reconnect and verify the saved mode before attempting any upload."
+msgstr "Läget för länkad uppladdning är obekräftat. Anslut igen och verifiera det sparade läget innan du laddar upp."
+
+msgid "Linked upload permission changed; reconnect and verify the saved mode before uploading."
+msgstr "Behörigheten för länkad uppladdning har ändrats. Anslut igen och verifiera det sparade läget innan du laddar upp."
+
+msgid "Linked upload selection is temporarily unavailable. The current connection remains selected."
+msgstr "Valet av länkat uppladdningsgalleri är tillfälligt otillgängligt. Den aktuella anslutningen förblir vald."
+
+msgid "Linked upload target: "
+msgstr "Länkat uppladdningsgalleri: "
+
+msgid "Linked: "
+msgstr "Länkat: "
+
+msgid "linking"
+msgstr "länkning"
+
+msgid "Linking"
+msgstr "Länkning"
+
+msgid "Linking could not be verified; an older server may not support it. Saved API-key upload remains available. A server grant may exist; review gallery links."
+msgstr "Länken kunde inte verifieras. En äldre server kanske saknar stöd för länkning. Uppladdning med sparad API-nyckel är fortfarande tillgänglig. Serverbehörigheten kan redan finnas. Granska gallerilänkarna."
+
+msgid "Listing truncated; enter a full path to select other items."
+msgstr "Listan är förkortad. Ange en fullständig sökväg för att välja andra objekt."
+
+msgid "Live diagnostics log"
+msgstr "Diagnostiklogg i realtid"
+
+msgid "Loading galleries…"
+msgstr "Laddar gallerier…"
+
+msgid "Loading the current gallery page…"
+msgstr "Läser in den aktuella sidan i gallerilistan…"
+
+msgid "Loading…"
+msgstr "Läser in…"
+
+msgid "local"
+msgstr "lokalt"
+
+msgid "Local AI module"
+msgstr "Lokal AI-modul"
+
+msgid "local decoder available"
+msgstr "lokal avkodare finns"
+
+msgid "Local HEIC/DNG capability: "
+msgstr "Lokalt stöd för HEIC/DNG: "
+
+msgid "Local Ollama URL"
+msgstr "URL till lokal Ollama"
+
+msgid "Local thumbnail processes"
+msgstr "Lokala processer för miniatyrer"
+
+msgid "Manage gallery links"
+msgstr "Hantera gallerilänkar"
+
+msgid "Manage link…"
+msgstr "Hantera länk…"
+
+msgid "Manual import cancellation requested."
+msgstr "Avbrott av den manuella importen begärdes."
+
+msgid "manual import is running"
+msgstr "manuell import pågår"
+
+msgid "Manual import started with {count} file(s)."
+msgstr "Den manuella importen har startat. Antal filer: {count}."
+
+msgid "Media"
+msgstr "Medier"
+
+msgid "Model or analyzer name"
+msgstr "Namn på modell eller analysprogram"
+
+msgid "Model version"
+msgstr "Modellversion"
+
+msgid "No"
+msgstr "Nej"
+
+msgid "No active import"
+msgstr "Ingen pågående import"
+
+msgid "No API key is configured."
+msgstr "Ingen API-nyckel är konfigurerad."
+
+msgid "No API key is currently stored."
+msgstr "Ingen API-nyckel är sparad."
+
+msgid "No background worker is active."
+msgstr "Inget arbete pågår i bakgrunden."
+
+msgid "No failed or recoverable local files are available for retry."
+msgstr "Det finns inga misslyckade eller återställbara lokala filer att försöka med igen."
+
+msgid "No folder selected"
+msgstr "Ingen mapp vald"
+
+msgid "No import job selected"
+msgstr "Inget importjobb valt"
+
+msgid "No newer Windows uploader installer is available."
+msgstr "Det finns inget nyare installationsprogram för Windows."
+
+msgid "No unresolved creation is available for this account. Check the creation status before continuing."
+msgstr "Det finns inget olöst galleriskapande för det här kontot. Kontrollera status innan du fortsätter."
+
+msgid "Not configured"
+msgstr "Inte konfigurerad"
+
+msgid "Not tested"
+msgstr "Inte testad"
+
+msgid "Object labels"
+msgstr "Objektetiketter"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Ollama vision model"
+msgstr "Bildmodell för Ollama"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Open activity"
+msgstr "Öppna Aktivitet"
+
+msgid "Open app folder"
+msgstr "Öppna appmappen"
+
+msgid "Open full activity history"
+msgstr "Öppna hela aktivitetshistoriken"
+
+msgid "Open Import"
+msgstr "Öppna Import"
+
+msgid "Open installer"
+msgstr "Öppna installationsprogrammet"
+
+msgid "Open log file"
+msgstr "Öppna loggfilen"
+
+msgid "Open log folder"
+msgstr "Öppna loggmappen"
+
+msgid "Open Manage link to change the approved access."
+msgstr "Öppna Hantera länk för att ändra den godkända åtkomsten."
+
+msgid "Open protected credential editor"
+msgstr "Öppna den skyddade redigeraren för autentiseringsuppgifter"
+
+msgid "Open update"
+msgstr "Öppna uppdateringen"
+
+msgid "Open watched folder"
+msgstr "Öppna den bevakade mappen"
+
+msgid "Optional fallback when you intentionally run Ollama."
+msgstr "Valfritt reservalternativ om du kör Ollama avsiktligt."
+
+msgid "Optional, server-assigned image analysis."
+msgstr "Valfri bildanalys för jobb från servern."
+
+msgid "Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer."
+msgstr "Valfritt. Använd {image_path}, {filename} och {job_id}. Det externa analysprogrammets JSON-utdata valideras före användning. Lämna tomt om du inte använder ett eget lokalt analysprogram."
+
+msgid "Original ZIP is kept for manual verification."
+msgstr "Det ursprungliga ZIP-arkivet behålls för manuell kontroll."
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Paste API key"
+msgstr "Klistra in API-nyckel"
+
+msgid "Paste the gallery-scoped API key before saving."
+msgstr "Klistra in API-nyckeln för det här galleriet innan du sparar."
+
+msgid "Path to a config JSON file."
+msgstr "Sökväg till en JSON-konfigurationsfil."
+
+msgid "Pause import after active requests finish"
+msgstr "Pausa importen när pågående begäranden är klara"
+
+msgid "Pause/resume current import"
+msgstr "Pausa eller återuppta aktuell import"
+
+msgid "PDF unavailable; refresh the list."
+msgstr "PDF-filen är inte tillgänglig. Uppdatera listan."
+
+msgid "Photos"
+msgstr "Foton"
+
+msgid "PHP Gallery connection"
+msgstr "Anslutning till PHP Gallery"
+
+msgid "PHP Gallery Uploader update"
+msgstr "Uppdatering av PHP Gallery Uploader"
+
+msgid "PHP Gallery Uploader updates"
+msgstr "Uppdateringar för PHP Gallery Uploader"
+
+msgid "pip failed without output"
+msgstr "pip misslyckades utan utdata"
+
+msgid "Poll seconds when idle"
+msgstr "Kontrollintervall vid inaktivitet (s)"
+
+msgid "Preflight cancelled"
+msgstr "Förkontrollen avbröts"
+
+msgid "Preflight failed"
+msgstr "Förkontrollen misslyckades"
+
+msgid "Preflight failed: "
+msgstr "Förkontrollen misslyckades: "
+
+msgid "Preflight is still running. Review the result before starting the import."
+msgstr "Förkontrollen pågår fortfarande. Granska resultatet innan du startar importen."
+
+msgid "Preflight needs to be run again"
+msgstr "Förkontrollen behöver köras igen"
+
+msgid "Preflight running"
+msgstr "Förkontrollen pågår"
+
+msgid "Preparing installation: stopping new work and waiting for active operations..."
+msgstr "Förbereder installationen. Stoppar nya jobb och väntar på pågående arbete…"
+
+msgid "Preparing installation…"
+msgstr "Förbereder installationen…"
+
+msgid "Preparing setup…"
+msgstr "Förbereder installationsprogrammet…"
+
+msgid "Preparing the Watcher connection…"
+msgstr "Förbereder mappbevakningens anslutning…"
+
+msgid "Previous Watcher access is still being closed. Wait for confirmation, then resume Watcher."
+msgstr "Den tidigare bevakningsåtkomsten stängs fortfarande. Vänta på bekräftelsen och återuppta sedan bevakningen."
+
+msgid "private"
+msgstr "privat"
+
+msgid "public"
+msgstr "offentlig"
+
+msgid "queued"
+msgstr "i kö"
+
+msgid "rate pending"
+msgstr "beräknar hastighet"
+
+msgid "Read gallery details"
+msgstr "Läs galleriuppgifter"
+
+msgid "Read selected details"
+msgstr "Läs valda uppgifter"
+
+msgid "Reading the original creation request…"
+msgstr "Läser den ursprungliga begäran om att skapa galleriet…"
+
+msgid "Reading the selected gallery details…"
+msgstr "Läser uppgifter om det valda galleriet…"
+
+msgid "Ready for review"
+msgstr "Klar för granskning"
+
+msgid "Ready for uploads"
+msgstr "Klar för uppladdning"
+
+msgid "Ready when you are"
+msgstr "Redo"
+
+msgid "Recent events"
+msgstr "Senaste händelser"
+
+msgid "Reconnect and verify the created gallery first."
+msgstr "Anslut igen och verifiera först det skapade galleriet."
+
+msgid "Reconnect saved link"
+msgstr "Återanslut sparad länk"
+
+msgid "Reconnect the selected linked gallery."
+msgstr "Återanslut till det valda länkade galleriet."
+
+msgid "Reconnect to upload"
+msgstr "Återanslut för uppladdning"
+
+msgid "Recover unfinished import"
+msgstr "Återställ oavslutad import"
+
+msgid "Recoverable import remains saved for later review."
+msgstr "Importen som kan återställas finns kvar för senare granskning."
+
+msgid "Recovered import: "
+msgstr "Återställd import: "
+
+msgid "Refresh report"
+msgstr "Uppdatera rapport"
+
+msgid "Refresh upload queue"
+msgstr "Uppdatera uppladdningskön"
+
+msgid "Rejected archive entries: "
+msgstr "Avvisade arkivposter: "
+
+msgid "Remember securely"
+msgstr "Spara säkert"
+
+msgid "Remote inventory reconnect seconds"
+msgstr "Väntetid före återanslutning för serverns fillista (s)"
+
+msgid "Remote preflight unavailable"
+msgstr "Serverns förkontroll är inte tillgänglig"
+
+msgid "Remove the saved local credential? The current session remains active. This does not revoke the server grant. Manage gallery links to review or revoke it."
+msgstr "Vill du ta bort de sparade lokala autentiseringsuppgifterna? Den aktuella sessionen förblir aktiv. Serverbehörigheten återkallas inte. Du kan granska eller återkalla den under Hantera gallerilänkar."
+
+msgid "Removing the saved connection…"
+msgstr "Tar bort den sparade anslutningen…"
+
+msgid "Removing the saved local link…"
+msgstr "Tar bort den lokalt sparade länken…"
+
+msgid "Repair dependencies"
+msgstr "Reparera beroenden"
+
+msgid "Replace file"
+msgstr "Ersätt fil"
+
+msgid "Replace the existing file?"
+msgstr "Vill du ersätta den befintliga filen?"
+
+msgid "Report collection failed: "
+msgstr "Det gick inte att sammanställa rapporten: "
+
+msgid "Report ready · {report_count:,} characters · collected locally"
+msgstr "Rapporten är klar · {report_count:,} tecken · skapad lokalt"
+
+msgid "Required dependencies are available for this Python runtime."
+msgstr "De nödvändiga beroendena finns i den här Python-miljön."
+
+msgid "Reset pending. Waiting for Watcher work to stop. You can exit and reopen WinApp to retry an interrupted reset."
+msgstr "Återställningen väntar på att mappbevakningen ska stanna. Du kan stänga och öppna WinApp igen för att återuppta en avbruten återställning."
+
+msgid "Resetting Watcher…"
+msgstr "Återställer mappbevakningen…"
+
+msgid "Restart now"
+msgstr "Starta om nu"
+
+msgid "Restart required"
+msgstr "Omstart krävs"
+
+msgid "Restart to apply the selected language."
+msgstr "Starta om WinApp för att använda det valda språket."
+
+msgid "Restart WinApp"
+msgstr "Starta om WinApp"
+
+msgid "Restoring the approved Watcher connection…"
+msgstr "Mappbevakningens godkända anslutning återställs…"
+
+msgid "Restoring Watcher defaults…"
+msgstr "Mappbevakningens standardinställningar återställs…"
+
+msgid "Result"
+msgstr "Resultat"
+
+msgid "Result / error"
+msgstr "Resultat / fel"
+
+msgid "Resume original creation"
+msgstr "Fortsätt det ursprungliga skapandet"
+
+msgid "Resume the paused import"
+msgstr "Fortsätt den pausade importen"
+
+msgid "Retry failed"
+msgstr "Försök igen med misslyckade objekt"
+
+msgid "Retry import"
+msgstr "Försök importera igen"
+
+msgid "Reveal"
+msgstr "Visa"
+
+msgid "Reveal or mask API key"
+msgstr "Visa eller dölj API-nyckeln"
+
+msgid "Review"
+msgstr "Granskning"
+
+msgid "REVIEW"
+msgstr "GRANSKA"
+
+msgid "Review this report before sharing. Credentials, local paths and URL query values are filtered. Files and photographs are not attached. Nothing is sent automatically."
+msgstr "Granska rapporten innan du delar den. Inloggningsuppgifter, lokala sökvägar och värden i URL-parametrar filtreras bort. Filer och foton bifogas inte. Inget skickas automatiskt."
+
+msgid "Revocation failed"
+msgstr "Återkallelsen misslyckades"
+
+msgid "Revoke API key"
+msgstr "Återkalla API-nyckeln"
+
+msgid "Revoke API key failed"
+msgstr "Det gick inte att återkalla API-nyckeln"
+
+msgid "Revoke API key..."
+msgstr "Återkalla API-nyckeln…"
+
+msgid "Revoke key…"
+msgstr "Återkalla nyckeln…"
+
+msgid "Revoke saved API key..."
+msgstr "Återkalla den sparade API-nyckeln…"
+
+msgid "Root"
+msgstr "Rot"
+
+msgid "Run one scan using saved configuration and exit."
+msgstr "Sök igenom mappen en gång med sparade inställningar och avsluta."
+
+msgid "Running"
+msgstr "Körs"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Save or restore connection fields before revoking the saved key."
+msgstr "Spara eller återställ anslutningsfälten innan du återkallar den sparade nyckeln."
+
+msgid "Save or test the gallery connection in Settings."
+msgstr "Spara eller testa anslutningen till galleriet i Inställningar."
+
+msgid "Save report…"
+msgstr "Spara rapport…"
+
+msgid "Save support report"
+msgstr "Spara supportrapporten"
+
+msgid "Save watcher settings"
+msgstr "Spara inställningarna för mappbevakning"
+
+msgid "Saved API-key connection selected."
+msgstr "Den sparade anslutningen med API-nyckel har valts."
+
+msgid "saved flight PDF upload is running"
+msgstr "en sparad flyg-PDF laddas upp"
+
+msgid "Saved gallery access expired. Approve the link again."
+msgstr "Den sparade åtkomsten till galleriet har upphört. Godkänn länkningen igen."
+
+msgid "Saved local credential removed; the current session and server grant may still exist."
+msgstr "Den sparade inloggningsuppgiften har tagits bort från datorn. Den aktuella sessionen och serverbehörigheten kan fortfarande gälla."
+
+msgid "Saving the Watcher session before closing…"
+msgstr "Mappbevakningens session sparas innan appen stängs…"
+
+msgid "Scan folder every"
+msgstr "Sök igenom mappen var"
+
+msgid "seconds"
+msgstr "sekund"
+
+msgid "Select"
+msgstr "Välj"
+
+msgid "Select a job in Activity first."
+msgstr "Välj först ett jobb i Aktivitet."
+
+msgid "Select a source to build an import summary. Nothing uploads until you press Start import."
+msgstr "Välj en källa för att visa en importöversikt. Uppladdningen börjar när du trycker på Starta import."
+
+msgid "Select all"
+msgstr "Välj alla"
+
+msgid "Select an existing folder."
+msgstr "Välj en befintlig mapp."
+
+msgid "Select an item or enter a path."
+msgstr "Välj ett objekt eller ange en sökväg."
+
+msgid "Select existing files."
+msgstr "Välj befintliga filer."
+
+msgid "Select file"
+msgstr "Välj fil"
+
+msgid "Select folder"
+msgstr "Välj mapp"
+
+msgid "Select SimConnect.dll"
+msgstr "Välj SimConnect.dll"
+
+msgid "Semantic prompt"
+msgstr "Prompt för innehållsanalys"
+
+msgid "Server creates thumbnails"
+msgstr "Servern skapar miniatyrbilder"
+
+msgid "Server creates thumbnails."
+msgstr "Servern skapar miniatyrbilderna."
+
+msgid "Server revocation confirmed; local key cleanup needs review."
+msgstr "Servern bekräftade återkallelsen. Kontrollera att den lokala nyckeln har tagits bort."
+
+msgid "server upload only on this PC"
+msgstr "ladda bara upp till servern på den här datorn"
+
+msgid "server_only"
+msgstr "endast server"
+
+msgid "Settings"
+msgstr "Inställningar"
+
+msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
+msgstr "Inställningarna sparades, men autostarten i Windows kunde inte uppdateras. Spara inställningarna igen för att göra ett nytt försök.\n\n"
+
+msgid "Settings…"
+msgstr "Inställningar…"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "simconnect"
+msgstr "SimConnect"
+
+msgid "Simconnect"
+msgstr "SimConnect"
+
+msgid "SimConnect DLL"
+msgstr "SimConnect DLL"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "skipped"
+msgstr "hoppades över"
+
+msgid "skipped_duplicate"
+msgstr "hoppades över som dubblett"
+
+msgid "skipped_unsupported"
+msgstr "fil som inte stöds hoppades över"
+
+msgid "Source"
+msgstr "Källa"
+
+msgid "Source deletion: Original files and ZIP archives are kept for manual verification."
+msgstr "Borttagning av källa: Originalfiler och ZIP-arkiv behålls för manuell granskning."
+
+msgid "staged"
+msgstr "förberedd för uppladdning"
+
+msgid "Staging cleanup age hours"
+msgstr "Rensa arbetskopior efter (tim)"
+
+msgid "Start AI metadata worker"
+msgstr "Starta AI-bearbetning av metadata"
+
+msgid "Start the installed app in the tray after Windows logon."
+msgstr "Starta den installerade appen i meddelandefältet när du loggar in i Windows."
+
+msgid "Start watching"
+msgstr "Starta bevakning"
+
+msgid "Start with Windows (minimized to tray)"
+msgstr "Starta med Windows (minimerad i meddelandefältet)"
+
+msgid "Starting Watcher…"
+msgstr "Mappbevakningen startar…"
+
+msgid "State"
+msgstr "Status"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Stop AI metadata worker"
+msgstr "Stoppa AI-bearbetning av metadata"
+
+msgid "Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts."
+msgstr "Stoppa mappbevakningen innan du byter mapp eller uppladdningsregler. Ändringarna gäller nästa gång bevakningen startar."
+
+msgid "Stop Watcher and permanently forget its upload gallery, watched folder, queued work, and restart history? Watcher preferences will return to their defaults.\n\nYou will keep your screenshots, local reports, logs, and other tabs' settings. An upload already sent may still reach the gallery."
+msgstr "Vill du stoppa mappbevakningen och permanent glömma uppladdningsgalleriet, den bevakade mappen, kön och omstarthistoriken? Inställningarna för mappbevakningen återställs till standardvärdena.\n\nDina skärmbilder, lokala rapporter, loggar och inställningar på andra flikar finns kvar. En uppladdning som redan har skickats kan ändå nå galleriet."
+
+msgid "Stop Watcher before changing its folder."
+msgstr "Stoppa mappbevakningen innan du byter mapp."
+
+msgid "Stop watching"
+msgstr "Stoppa bevakning"
+
+msgid "Stopped"
+msgstr "Stoppad"
+
+msgid "Stopping Watcher for factory reset…"
+msgstr "Mappbevakningen stoppas så att inställningarna kan återställas…"
+
+msgid "succeeded"
+msgstr "slutfört"
+
+msgid "success"
+msgstr "lyckades"
+
+msgid "Support diagnostics"
+msgstr "Supportdiagnostik"
+
+msgid "Support diagnostics…"
+msgstr "Supportdiagnostik…"
+
+msgid "Supported files found: {found}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}"
+msgstr "Filer som stöds: {found}  |  Klara för uppladdning: {ready}  |  Möjliga dubbletter: {duplicates}"
+
+msgid "Sync UTC time"
+msgstr "Synkronisera UTC-tid"
+
+msgid "system"
+msgstr "system"
+
+msgid "System"
+msgstr "System"
+
+msgid "Target"
+msgstr "Mål"
+
+msgid "Target gallery: "
+msgstr "Målgalleri: "
+
+msgid "Target gallery: unknown"
+msgstr "Målgalleri: okänt"
+
+msgid "Target: {gallery}"
+msgstr "Mål: {gallery}"
+
+msgid "Testing"
+msgstr "Testar"
+
+msgid "Text files"
+msgstr "Textfiler"
+
+msgid "The active Watcher could not be safely checkpointed. Its queue is retained; wait for recovery, then stop or retry."
+msgstr "Det gick inte att spara den aktiva mappbevakningens tillstånd på ett säkert sätt. Kön finns kvar. Vänta tills återställningen är klar och stoppa bevakningen eller försök igen."
+
+msgid "The active Watcher could not be safely prepared for restart. Keep the app open and finish or stop Watcher first."
+msgstr "Det gick inte att förbereda den aktiva mappbevakningen för omstart på ett säkert sätt. Låt appen vara öppen och slutför eller stoppa bevakningen först."
+
+msgid "The application cannot safely commit a linked upload mode."
+msgstr "Appen kan inte spara uppladdningsläget för det länkade galleriet på ett säkert sätt."
+
+msgid "The approved Photos connection could not be saved safely."
+msgstr "Det gick inte att spara den godkända anslutningen för Foton på ett säkert sätt."
+
+msgid "The clipboard does not contain an API key."
+msgstr "Urklippet innehåller ingen API-nyckel."
+
+msgid "The clipboard does not contain text."
+msgstr "Urklippet innehåller ingen text."
+
+msgid "The created gallery is unavailable or its access could not be verified."
+msgstr "Det skapade galleriet är otillgängligt eller så gick det inte att verifiera åtkomsten."
+
+msgid "The created gallery verification is no longer current."
+msgstr "Verifieringen av det skapade galleriet är inte längre aktuell."
+
+msgid "The creation receipt could not be acknowledged safely."
+msgstr "Det gick inte att bekräfta skapandekvittot till servern på ett säkert sätt."
+
+msgid "The creation receipt was saved; reconnect and check its status."
+msgstr "Kvittot för skapandet sparades. Anslut igen och kontrollera statusen."
+
+msgid "The destination folder does not exist."
+msgstr "Målmappen finns inte."
+
+msgid "The gallery assigns one job at a time; this PC returns internal search metadata."
+msgstr "Galleriet tilldelar ett jobb i taget. Den här datorn skickar tillbaka metadata för intern sökning."
+
+msgid "The gallery did not approve this link."
+msgstr "Galleriet godkände inte länkningen."
+
+msgid "The gallery request timed out."
+msgstr "Tidsgränsen för galleriförfrågan överskreds."
+
+msgid "The gallery selection changed during verification. The previous upload target remains unchanged."
+msgstr "Gallerivalet ändrades under verifieringen. Det tidigare uppladdningsmålet finns kvar."
+
+msgid "The installed application could not be verified. Open the downloaded installer manually to install this application."
+msgstr "Det gick inte att verifiera den installerade appen. Öppna det hämtade installationsprogrammet manuellt för att installera appen."
+
+msgid "The language was saved. Restart WinApp now to apply it?"
+msgstr "Språket sparades. Vill du starta om WinApp nu för att använda det?"
+
+msgid "The linking response could not be accepted."
+msgstr "Svaret på länkningen kunde inte tas emot."
+
+msgid "The original creation remains unresolved."
+msgstr "Det ursprungliga skapandet är fortfarande inte avgjort."
+
+msgid "The original gallery is temporarily unavailable. Retrying safely…"
+msgstr "Det ursprungliga galleriet är tillfälligt otillgängligt. Ett nytt säkert försök pågår…"
+
+msgid "The original key is closed. A gallery or files may already exist or old work may still be finishing. Verify it has stopped and inspect the gallery and storage before creating another."
+msgstr "Den ursprungliga nyckeln för åtgärden är stängd. Ett galleri eller filer kan redan finnas och tidigare arbete kan fortfarande pågå. Kontrollera att det har avslutats och granska galleriet och lagringen innan du skapar ett nytt."
+
+msgid "The previous preflight is stopping. Clear the selection again after it finishes."
+msgstr "Den tidigare förkontrollen håller på att stoppas. Rensa valet igen när den är klar."
+
+msgid "The previous preflight is stopping. Start preflight again when it has finished."
+msgstr "Den tidigare förkontrollen håller på att stoppas. Starta förkontrollen igen när den är klar."
+
+msgid "The saved secure reconnect could not be removed. The gallery remains connected."
+msgstr "Det gick inte att ta bort de sparade uppgifterna för säker återanslutning. Galleriet är fortfarande anslutet."
+
+msgid "The securely saved gallery connection is unavailable."
+msgstr "Den säkert sparade gallerianslutningen är inte tillgänglig."
+
+msgid "The selected gallery changed during approval."
+msgstr "Det valda galleriet ändrades under godkännandet."
+
+msgid "The selected gallery connection changed."
+msgstr "Den valda gallerianslutningen har ändrats."
+
+msgid "The selected gallery could not be verified. The previous upload target is unchanged."
+msgstr "Det gick inte att verifiera det valda galleriet. Det tidigare uppladdningsmålet finns kvar."
+
+msgid "The selected upload gallery needs a new link."
+msgstr "Det valda uppladdningsgalleriet behöver länkas på nytt."
+
+msgid "The setting was saved. Restart the application for the experimental Canvas gallery renderer to take effect."
+msgstr "Inställningen sparades. Starta om appen för att använda den experimentella Canvas-visningen av galleriet."
+
+msgid "The upload observation is no longer current."
+msgstr "Den avlästa uppladdningsstatusen är inte längre aktuell."
+
+msgid "The Watcher connection could not be saved. Try again."
+msgstr "Det gick inte att spara mappbevakningens anslutning. Försök igen."
+
+msgid "These permissions include private and unpublished galleries."
+msgstr "De här behörigheterna omfattar privata och opublicerade gallerier."
+
+msgid "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. Using those backends can later download large model files. Continue?"
+msgstr "Det här installerar stora valfria Python-paket som PyTorch och Transformers i den aktuella Python-miljön. När de används kan stora modellfiler senare hämtas. Vill du fortsätta?"
+
+msgid "This job has no queued or recoverable files to upload."
+msgstr "Det här jobbet har inga filer i kö eller filer vars uppladdning kan återupptas."
+
+msgid "This link does not include the gallery list."
+msgstr "Den här länkningen ger ingen åtkomst till gallerilistan."
+
+msgid "This PC creates derivatives with server fallback."
+msgstr "Den här datorn skapar bildvarianter. Servern tar över vid behov."
+
+msgid "This PC creates thumbnails when supported"
+msgstr "Den här datorn skapar miniatyrbilder när det går"
+
+msgid "This tests the saved API key. Select the API-key connection explicitly before running this test."
+msgstr "Det här testar den sparade API-nyckeln. Välj uttryckligen anslutningen med API-nyckel innan du kör testet."
+
+msgid "Thumbnail mode: {mode}"
+msgstr "Läge för miniatyrbilder: {mode}"
+
+msgid "Time"
+msgstr "Tid"
+
+msgid "Tkinter is not available in this Python installation."
+msgstr "Tkinter är inte tillgängligt i den här Python-installationen."
+
+msgid "Tools"
+msgstr "Verktyg"
+
+msgid "Transformers caption model"
+msgstr "Modell för bildbeskrivning med Transformers"
+
+msgid "Transformers object detector"
+msgstr "Objektidentifiering med Transformers"
+
+msgid "Tries"
+msgstr "Försök"
+
+msgid "Type"
+msgstr "Typ"
+
+msgid "unknown"
+msgstr "okänd"
+
+msgid "Unlinked locally. Check Manage link to confirm server revocation."
+msgstr "Länkningen togs bort lokalt. Bekräfta återkallelsen på servern under Hantera länkning."
+
+msgid "Unlinked locally. Check Manage link to revoke access."
+msgstr "Länkningen togs bort lokalt. Återkalla åtkomsten under Hantera länkning."
+
+msgid "Unlinking gallery…"
+msgstr "Länkningen till galleriet tas bort…"
+
+msgid "unpublished"
+msgstr "opublicerad"
+
+msgid "Unsafe report directory."
+msgstr "Rapportmappen är inte säker."
+
+msgid "Unsupported: {types}"
+msgstr "Stöds inte: {types}"
+
+msgid "Up"
+msgstr "Upp"
+
+msgid "Update"
+msgstr "Uppdatera"
+
+msgid "Update {update_available_version} available"
+msgstr "Uppdatering {update_available_version} är tillgänglig"
+
+msgid "Update {version}"
+msgstr "Uppdatering {version}"
+
+msgid "Update canceled before installation."
+msgstr "Uppdateringen avbröts före installationen."
+
+msgid "Update postponed: current work could not be safely checkpointed. The application remains open; see diagnostics."
+msgstr "Uppdateringen sköts upp eftersom det pågående arbetet inte kunde sparas på ett säkert sätt. Appen är fortfarande öppen. Se diagnostiken."
+
+msgid "Update stopped: {detail}"
+msgstr "Uppdateringen stoppades: {detail}"
+
+msgid "Upload gallery: "
+msgstr "Uppladdningsgalleri: "
+
+msgid "Upload gallery: not set"
+msgstr "Uppladdningsgalleri: inte valt"
+
+msgid "Upload mode was activated, but the display did not refresh. Reopen the connection view to verify the target."
+msgstr "Uppladdningsläget aktiverades, men vyn uppdaterades inte. Öppna anslutningsvyn igen för att kontrollera målet."
+
+msgid "Upload threads"
+msgstr "Uppladdningstrådar"
+
+msgid "Upload via API key"
+msgstr "Ladda upp med API-nyckel"
+
+msgid "uploaded {uploaded}, duplicate {duplicates}, failed {failed}, cancelled {cancelled}, active {active}"
+msgstr "uppladdade {uploaded}, dubbletter {duplicates}, misslyckade {failed}, avbrutna {cancelled}, aktiva {active}"
+
+msgid "Uploaded photos will be deleted from this PC."
+msgstr "Uppladdade foton tas bort från den här datorn."
+
+msgid "uploading"
+msgstr "laddar upp"
+
+msgid "Use a gallery-scoped API key from Admin. Your password is not entered into this app."
+msgstr "Använd en API-nyckel från administrationen som är begränsad till ett galleri. Du anger inte ditt lösenord i den här appen."
+
+msgid "Use experimental virtualized Canvas rendering for photo galleries. Requires application restart."
+msgstr "Använd experimentell virtualiserad Canvas-visning för fotogallerier. Appen måste startas om."
+
+msgid "Use saved API key"
+msgstr "Använd sparad API-nyckel"
+
+msgid "Using PHP Gallery"
+msgstr "Använda PHP Gallery"
+
+msgid "UTC sync"
+msgstr "UTC-synkronisering"
+
+msgid "UTC sync stopped"
+msgstr "UTC-synkronisering stoppad"
+
+msgid "UTC synchronization"
+msgstr "UTC-synkronisering"
+
+msgid "validating"
+msgstr "validerar"
+
+msgid "Verifying installation…"
+msgstr "Installationen verifieras…"
+
+msgid "Verifying installer size and SHA-256..."
+msgstr "Installationsprogrammets storlek och SHA-256 verifieras…"
+
+msgid "Verifying the administrator and selected gallery…"
+msgstr "Administratören och det valda galleriet verifieras…"
+
+msgid "Verifying the created gallery before selection…"
+msgstr "Det skapade galleriet verifieras innan det väljs…"
+
+msgid "Version {version} is available (current: {current}). Update downloads and verifies Setup for manual installation; this source folder remains intact."
+msgstr "Version {version} är tillgänglig (nuvarande: {current}). Uppdateringen hämtar och verifierar installationsprogrammet för manuell installation. Den här källmappen lämnas intakt."
+
+msgid "Version {version} is available (installed: {current}). Update downloads and verifies Setup, closes this app and restarts it after installation. Windows may request administrator approval."
+msgstr "Version {version} är tillgänglig (installerad: {current}). Uppdateringen hämtar och verifierar installationsprogrammet, stänger appen och startar den igen efter installationen. Windows kan begära ett administratörsgodkännande."
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Wait for API-key revocation to finish before changing connection credentials."
+msgstr "Vänta tills API-nyckeln har återkallats innan du ändrar anslutningens inloggningsuppgifter."
+
+msgid "Wait for API-key revocation to finish before changing credentials."
+msgstr "Vänta tills API-nyckeln har återkallats innan du ändrar inloggningsuppgifterna."
+
+msgid "Wait for API-key revocation to finish before changing this setting."
+msgstr "Vänta tills API-nyckeln har återkallats innan du ändrar den här inställningen."
+
+msgid "Wait for API-key revocation to finish before replacing the key."
+msgstr "Vänta tills API-nyckeln har återkallats innan du ersätter nyckeln."
+
+msgid "Wait for API-key revocation to finish before retrying an import."
+msgstr "Vänta tills API-nyckeln har återkallats innan du försöker importera igen."
+
+msgid "Wait for API-key revocation to finish before starting import preflight."
+msgstr "Vänta tills API-nyckeln har återkallats innan du startar importens förkontroll."
+
+msgid "Wait for API-key revocation to finish before starting manual import."
+msgstr "Vänta tills API-nyckeln har återkallats innan du startar manuell import."
+
+msgid "Wait for API-key revocation to finish before starting the AI metadata worker."
+msgstr "Vänta tills API-nyckeln har återkallats innan du startar AI-bearbetning av metadata."
+
+msgid "Wait for API-key revocation to finish before testing the connection."
+msgstr "Vänta tills API-nyckeln har återkallats innan du testar anslutningen."
+
+msgid "Wait for the current gallery request to finish."
+msgstr "Vänta tills den pågående galleriförfrågan är klar."
+
+msgid "Wait for the current import to stop before retrying failed items."
+msgstr "Vänta tills den pågående importen har stoppats innan du försöker igen med misslyckade objekt."
+
+msgid "Wait for the current operation to finish."
+msgstr "Vänta tills den pågående åtgärden är klar."
+
+msgid "Wait for the previous gallery verification to finish."
+msgstr "Vänta tills den föregående galleriverifieringen är klar."
+
+msgid "Wait for the remaining work to finish before restarting."
+msgstr "Vänta tills det återstående arbetet är klart innan du startar om."
+
+msgid "Wait for the update operation to finish before restarting."
+msgstr "Vänta tills uppdateringen är klar innan du startar om."
+
+msgid "Waiting for uploader to close…"
+msgstr "Väntar på att uppladdaren ska avslutas…"
+
+msgid "warning"
+msgstr "varning"
+
+msgid "warnings"
+msgstr "varningar"
+
+msgid "Warnings: {details}"
+msgstr "Varningar: {details}"
+
+msgid "Watch folder"
+msgstr "Bevaka mapp"
+
+msgid "WATCH FOLDER"
+msgstr "BEVAKAD MAPP"
+
+msgid "watch-folder uploader is running"
+msgstr "uppladdning från den bevakade mappen pågår"
+
+msgid "watcher"
+msgstr "mappbevakning"
+
+msgid "Watcher"
+msgstr "Mappbevakning"
+
+msgid "Watcher access could not be closed. Retry."
+msgstr "Det gick inte att avsluta mappbevakningens åtkomst. Försök igen."
+
+msgid "Watcher access could not be closed. Review the saved session."
+msgstr "Det gick inte att avsluta mappbevakningens åtkomst. Granska den sparade sessionen."
+
+msgid "Watcher behavior"
+msgstr "Mappbevakningens beteende"
+
+msgid "Watcher factory reset"
+msgstr "Återställ mappbevakningen"
+
+msgid "Watcher factory reset…"
+msgstr "Återställ mappbevakningen…"
+
+msgid "Watcher gallery selected."
+msgstr "Ett galleri för mappbevakningen har valts."
+
+msgid "Watcher help"
+msgstr "Hjälp med mappbevakning"
+
+msgid "Watcher is still running"
+msgstr "Mappbevakningen pågår fortfarande"
+
+msgid "WATCHER PREFERENCES"
+msgstr "INSTÄLLNINGAR FÖR MAPPBEVAKNING"
+
+msgid "Watcher remains open"
+msgstr "Mappbevakningen är fortfarande öppen"
+
+msgid "Watcher reset complete. Choose a connection and folder to start."
+msgstr "Mappbevakningen återställdes. Välj en anslutning och en mapp för att börja."
+
+msgid "Watcher reset could not be saved. Retry factory reset."
+msgstr "Det gick inte att spara återställningen av mappbevakningen. Försök igen."
+
+msgid "Watcher reset could not finish. Retry factory reset or see Support diagnostics."
+msgstr "Det gick inte att slutföra återställningen av mappbevakningen. Försök igen eller öppna Supportdiagnostik."
+
+msgid "Watcher reset required"
+msgstr "Mappbevakningen behöver återställas"
+
+msgid "Watcher settings"
+msgstr "Inställningar för mappbevakning"
+
+msgid "Watcher settings…"
+msgstr "Inställningar för mappbevakning…"
+
+msgid "Watcher state"
+msgstr "Mappbevakningens status"
+
+msgid "Watcher stopped"
+msgstr "Mappbevakningen har stoppats"
+
+msgid "Windows restart required. Restart Windows before opening the uploader."
+msgstr "Windows måste startas om. Starta om Windows innan du öppnar uppladdaren."
+
+msgid "Windows startup"
+msgstr "Autostart i Windows"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "Your gallery on autopilot"
+msgstr "Ditt galleri på autopilot"
+
+msgid "Zero-shot object labels such as person, bridge, guitar, house."
+msgstr "Objektidentifiering utan träningsexempel, till exempel person, bro, gitarr eller hus."
+
+msgid "ZIP"
+msgstr "ZIP"
+
+msgid "ZIP archives"
+msgstr "ZIP-arkiv"
+
+msgid "ZIP max compression ratio"
+msgstr "Högsta kompressionsgrad för ZIP"
+
+msgid "ZIP max entries"
+msgstr "Högsta antal poster i ZIP"
+
+msgid "ZIP max single file GiB"
+msgstr "Högsta storlek på en fil i ZIP (GiB)"
+
+msgid "ZIP max total uncompressed GiB"
+msgstr "Högsta sammanlagda storlek efter uppackning av ZIP (GiB)"
+
+msgid "ZIP: "
+msgstr "ZIP: "
+
+msgid "Custom SimConnect.dll"
+msgstr "Egen SimConnect.dll"
+
+msgid "API key configured and saved"
+msgstr "API-nyckeln är konfigurerad och sparad"
+
+msgid "API key or gallery URL changed, not saved"
+msgstr "API-nyckeln eller galleriets URL har ändrats och har ännu inte sparats"
+
+msgid "Finishing accepted work. Open Flight progress for the current stage; the key is retained until required work is confirmed."
+msgstr "Godkända jobb slutförs. Öppna Flygförlopp för att se aktuellt steg. Nyckeln sparas tills alla obligatoriska jobb har bekräftats."
+
+msgid "Revoke will stop and finish: {operations}."
+msgstr "Återkallelsen stoppar och slutför följande åtgärder: {operations}."
+
+msgid "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
+msgstr "Nyckeln kan inte återkallas eftersom anslutningsfälten har osparade ändringar. Spara ändringarna eller återställ den sparade anslutningen först."
+
+msgid "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
+msgstr "API-nyckeln kan nu återkallas permanent. När servern har bekräftat det tas nyckeln bort från de lokala inställningarna."
+
+msgid "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
+msgstr "Klistra in en API-nyckel från administrationen i PHP Gallery som är begränsad till ett galleri innan du testar eller laddar upp."
+
+msgid "PHP Gallery uploader{update} | watch {watch} | import {importing} | AI {ai} | failures {failures}"
+msgstr "PHP Gallery{update} | bevakning {watch} | import {importing} | AI {ai} | fel {failures}"
+
+msgid "UTC sync connected: {simulator}"
+msgstr "UTC-synkronisering ansluten: {simulator}"
+
+msgid "Waiting for the simulator for UTC sync"
+msgstr "UTC-synkroniseringen väntar på simulatorn"
+
+msgid "UTC sync is unavailable for this simulator"
+msgstr "UTC-synkronisering är inte tillgänglig för den här simulatorn"
+
+msgid "UTC sync paused by the simulator state"
+msgstr "UTC-synkroniseringen pausades på grund av simulatorns läge"
+
+msgid "UTC time synchronized"
+msgstr "UTC-tiden synkroniserades"
+
+msgid "UTC correction could not be verified. Retrying…"
+msgstr "Det gick inte att verifiera UTC-korrigeringen. Försöker igen…"
+
+msgid "Waiting for the simulator UTC time"
+msgstr "Väntar på simulatorns UTC-tid"
+
+msgid "UTC time aligned"
+msgstr "UTC-tiden stämmer"
+
+msgid "Could not close the UTC connection"
+msgstr "Det gick inte att stänga anslutningen för UTC-synkronisering"
+
+msgid "AI metadata worker is processing a job"
+msgstr "AI bearbetar metadata"
+
+msgid "Manage link"
+msgstr "Hantera länkning"
+
+msgid "Choose gallery"
+msgstr "Välj galleri"
+
+msgid "Standard access"
+msgstr "Standardåtkomst"
+
+msgid "Password protected"
+msgstr "Lösenordsskyddat"
+
+msgid "Listed"
+msgstr "Listat"
+
+msgid "Unlisted"
+msgstr "Olistat"
+
+msgid "The gallery returned HTTP {status} with an HTML response."
+msgstr "Galleriet returnerade HTTP {status} med ett HTML-svar."
+
+msgid "The gallery returned HTTP {status}."
+msgstr "Galleriet returnerade HTTP {status}."
+
+msgid "PHP Gallery uploader"
+msgstr "Uppladdning till PHP Gallery"
+
+msgid "Linked upload recovery requires manual review; database absence does not prove failure."
+msgstr "Återställningen av uppladdningen till det länkade galleriet behöver granskas manuellt. En saknad databaspost visar inte att uppladdningen misslyckades."
+
+msgid "Gallery authorization could not be verified; AI heartbeat stopped."
+msgstr "Det gick inte att verifiera galleribehörigheten. De regelbundna livstecknen för AI-jobbet har stoppats."
+
+msgid "Gallery authorization could not be verified; AI worker stopped."
+msgstr "Det gick inte att verifiera galleribehörigheten. AI-bearbetningen av metadata har stoppats."
+
+msgid "AI metadata worker is disabled in configuration."
+msgstr "AI-bearbetning av metadata är avstängd i inställningarna."
+
+msgid "AI metadata worker needs Gallery URL and API key."
+msgstr "AI-bearbetning av metadata kräver galleriets URL och en API-nyckel."
+
+msgid "AI metadata worker stopped."
+msgstr "AI-bearbetningen av metadata har stoppats."
+
+msgid "AI metadata worker received an invalid job payload."
+msgstr "Det mottagna AI-jobbet innehåller ogiltiga data."
+
+msgid "Force-finished queue is retained and cannot be refreshed."
+msgstr "Den tvångsavslutade kön finns kvar och kan inte uppdateras."
+
+msgid "Queue refresh merged with the pending request."
+msgstr "Begäran om att uppdatera kön slogs ihop med den väntande begäran."
+
+msgid "Queue refresh requested; FIFO and retry deadlines retained."
+msgstr "Köuppdatering begärdes. FIFO-ordningen och tiderna för nya försök finns kvar."
+
+msgid "Watcher session was explicitly force-finished; pending sources remain retained."
+msgstr "Mappbevakningens session tvångsavslutades. Väntande källfiler finns kvar."
+
+msgid "Queue persistence needs recovery; sources retained."
+msgstr "Den sparade kön behöver återställas. Källfilerna finns kvar."
+
+msgid "Watcher stopped; pending photographs are retained."
+msgstr "Mappbevakningen har stoppats. Väntande foton finns kvar."
+
+msgid "Confirmed upload retained; optional cleanup failed."
+msgstr "Den bekräftade uppladdningen finns kvar. Den valfria rensningen misslyckades."
+
+msgid "Manual import paused. In-flight requests may still finish."
+msgstr "Den manuella importen har pausats. Pågående förfrågningar kan fortfarande slutföras."
+
+msgid "Manual import resumed."
+msgstr "Den manuella importen har återupptagits."
+
+msgid "Import staging sources retained; safe automatic deletion requires server-bound operation receipts."
+msgstr "Importens källfiler finns kvar. Säker automatisk borttagning kräver åtgärdskvitton som är knutna till servern."
+
+msgid "Legacy upload cannot verify the destination for ZIP cleanup; the source ZIP is retained."
+msgstr "Det äldre uppladdningsläget kan inte verifiera målet för ZIP-rensningen. ZIP-källfilen finns kvar."
+
+msgid "Linked import requires a durable item recovery record."
+msgstr "Import till ett länkat galleri kräver en beständig återställningspost för objektet."
+
+msgid "No manual upload files were selected."
+msgstr "Inga filer valdes för manuell uppladdning."
+
+msgid "Linked inventory preload incomplete; individual files will be rechecked."
+msgstr "Filförteckningen för det länkade galleriet lästes inte in helt. Enskilda filer kontrolleras igen."
+
+msgid "Local thumbnails are unavailable; falling back to server-side thumbnail generation."
+msgstr "Det går inte att skapa miniatyrbilder lokalt. Servern skapar dem."
+
+msgid "Linked recovery marker could not be refreshed."
+msgstr "Det gick inte att uppdatera återställningsmarkören för det länkade galleriet."
+
+msgid "Linked gallery recovery state is unavailable."
+msgstr "Återställningsstatusen för det länkade galleriet är inte tillgänglig."
+
+msgid "Idle"
+msgstr "Vilande"
+
+msgid "Detected"
+msgstr "Upptäckt"
+
+msgid "Waiting for the file to settle"
+msgstr "Väntar på att filen ska sluta ändras"
+
+msgid "Preparing"
+msgstr "Förbereder"
+
+msgid "Checking the gallery inventory"
+msgstr "Kontrollerar filförteckningen i galleriet"
+
+msgid "Waiting to retry"
+msgstr "Väntar på ett nytt försök"
+
+msgid "Gallery access required"
+msgstr "Galleriåtkomst krävs"
+
+msgid "Upload outcome uncertain"
+msgstr "Uppladdningens resultat är osäkert"
+
+msgid "Blocked"
+msgstr "Blockerad"
+
+msgid "Confirmed"
+msgstr "Bekräftad"
+
+msgid "Unknown state"
+msgstr "Okänd status"
+
+msgid "Watching {folder}"
+msgstr "Bevakar mappen: {folder}"
+
+msgid "Already in the gallery: {filename}"
+msgstr "Finns redan i galleriet: {filename}"
+
+msgid "Manual import started. Files: {count}"
+msgstr "Manuell import startad. Filer: {count}"
+
+msgid "Manual import finished."
+msgstr "Den manuella importen har slutförts."
+
+msgid "Manual import stopped."
+msgstr "Den manuella importen har stoppats."
+
+msgid "Uploaded file: {filename}"
+msgstr "Uppladdad fil: {filename}"
+
+msgid "Upload in progress"
+msgstr "Uppladdning pågår"
+
+msgid "Enter a valid scan interval and file stability time."
+msgstr "Ange ett giltigt sökintervall och hur länge filen måste vara oförändrad."
+
+msgid "Timing, worker, archive-safety, and AI numeric settings must contain valid numbers."
+msgstr "Tidsvärden, antal arbetare, arkivgränser och numeriska AI-inställningar måste innehålla giltiga tal."
+
+msgid "Gallery URL must use HTTP or HTTPS and contain a valid host."
+msgstr "Galleriets URL måste använda HTTP eller HTTPS och innehålla ett giltigt värdnamn."
+
+msgid "Wait for the Watcher restart checkpoint to finish."
+msgstr "Vänta tills mappbevakningen har sparat sitt tillstånd inför omstarten."
+
+msgid "Finish the current Watcher capture before changing its gallery."
+msgstr "Slutför mappbevakningens pågående session innan du byter galleri."
+
+msgid "Wait for the current Watcher, import or flight work to stop."
+msgstr "Vänta tills pågående mappbevakning, import eller flygarbete har stoppats."
+
+msgid "Upload settings could not be verified. Restart WinApp and try again."
+msgstr "Det gick inte att verifiera uppladdningsinställningarna. Starta om WinApp och försök igen."
+
+msgid "Continue the current uploads in Watcher before changing the upload gallery."
+msgstr "Återuppta pågående uppladdningar i Mappbevakning innan du byter uppladdningsgalleri."
+
+msgid "Review unfinished imports in Activity before changing the upload target."
+msgstr "Granska oavslutade importer under Aktivitet innan du ändrar uppladdningsmålet."
+
+msgid "Local upload history exceeds the safe size limit. Review Activity."
+msgstr "Den lokala uppladdningshistoriken överskrider den säkra storleksgränsen. Granska Aktivitet."
+
+msgid "Local upload history could not be verified. Review Activity."
+msgstr "Det gick inte att verifiera den lokala uppladdningshistoriken. Granska Aktivitet."
+
+msgid "{confirmed} confirmed / {skipped} skipped"
+msgstr "{confirmed} bekräftade / {skipped} överhoppade"
+
+msgid "See Support diagnostics for details."
+msgstr "Mer information finns i Supportdiagnostik."
+
+msgid "Select a report language or disable reports."
+msgstr "Välj ett rapportspråk eller stäng av rapporterna."
+
+msgid "unknown Python executable"
+msgstr "okänd körbar Python-fil"
+
+msgid "tray available"
+msgstr "meddelandefältet är tillgängligt"
+
+msgid "tray unavailable"
+msgstr "meddelandefältet är inte tillgängligt"
+
+msgid "Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
+msgstr "Miniatyrbilder kan skapas lokalt. Python {version}: {executable}. Pillow: {pillow_version}, {tray_status}."
+
+msgid "Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
+msgstr "Den här Python-miljön kan inte skapa miniatyrbilder lokalt: {executable}. Python {version}, {tray_status}."
+
+msgid "Required dependencies are bundled with this application."
+msgstr "De paket som behövs ingår i appen."
+
+msgid "Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader."
+msgstr "Paketen som ingår i appen är inte tillgängliga. Installera om WinApp."
+
+msgid "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, or run the Python source version to use Transformers."
+msgstr "Den fristående installationen kan inte installera Python-paket. Använd Ollama eller ett externt analysprogram. Kör appen från Python-källkoden om du vill använda Transformers."
+
+msgid "Bundled dependencies"
+msgstr "Paket som ingår i appen"

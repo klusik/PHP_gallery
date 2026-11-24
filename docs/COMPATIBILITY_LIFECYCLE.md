@@ -1456,6 +1456,15 @@ visibility-marker recovery.
 
 ## WinApp native text and display scaling
 
+WinApp's interface language is stored in the per-user `ui-language.json`.
+If the file has no valid selection, WinApp reads the previous flight-interface
+choice from `flights/preferences.json` before using English. The locale owner
+retains this reader to honor existing profiles, including upgrades after a
+rollback. There is no migration census proving when it would be safe to remove.
+A missing or damaged catalog opens the English interface so Settings remains
+reachable and retains the selection for the next launch. Website language and
+flight PDF edition choices have independent owners.
+
 Desktop view preferences are independent of upload state. Geometry saves retain
 the last trusted Photos tree width while the pane is unmapped or restoring;
 the temporary widget default is not a user preference. The pane keeps its own
@@ -4305,6 +4314,24 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   field with its historical allowlist. Direct-upgrade mechanics do not establish
   arbitrary historical database/hosting acceptance. Published 0.136 assets stay
   immutable; the corrected inventory needs a newly authorized release.
+
+### UPD-7 — WinApp catalogs in the production inventory
+
+- **Reason / protected scenario:** The translated WinApp source in production
+  packages needs its three gettext catalogs. The published 1.5.7 updater reads
+  `companion_resource_files` with an exact font/license allowlist.
+- **Owner:** `app/release_file_policy.php` and
+  `scripts/generate_production_files.php` put the exact catalog paths in
+  optional `companion_locale_files`. Older readers consume the fields they
+  recognize. The catalogs are distribution assets outside CMS activation.
+- **Evidence / tests:** The real folder and ZIP builder checks catalog bytes.
+  Updater compatibility fixtures exercise a new package against the retained
+  reader and the published resource constraint, including refusal if a catalog
+  is written into the old resource field.
+- **Usage / retirement:** Installed reader adoption is unknown. Retain the
+  additive list while upgrades from readers with the font/license allowlist
+  are supported. Retirement requires a documented newer updater floor and a
+  verified upgrade path for installations on that floor.
 
 ### UPD-3 — Windows checkout line endings in production inventory verification
 

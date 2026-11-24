@@ -9,10 +9,30 @@
 """Embedded window and prompt adapters for the uploader's Tk root."""
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 from typing import Callable
 
-from uploader.ui_theme import Button, DialogSurface
+from uploader.localization import gettext
+from uploader.ui_theme import Button, DialogSurface, _PALETTE, icon_button
+
+# Purpose: Keep help instructions comfortably readable in a compact overlay.
+# Type: int; Units: pixels; Scope: help window minimum content width.
+# Consumers: help overlay geometry.
+# Rationale: 380 px supports concise instructions on standard displays.
+_HELP_MIN_WIDTH = 380
+
+# Purpose: Bound help text and window geometry to comfortable dimensions.
+# Type: int; Units: pixels; Scope: help overlay sizing.
+# Consumers: help overlay minimum and initial geometry.
+# Rationale: 180 px minimum and 200 px initial height keep the overlay compact.
+_HELP_MIN_HEIGHT = 180
+_HELP_INITIAL_HEIGHT = 200
+
+# Purpose: Define the initial text area before content-driven resizing.
+# Type: tuple[int, int]; Units: text rows and columns; Scope: help overlay.
+# Consumers: help Text widget requested geometry.
+# Rationale: 7 by 46 characters fits concise guidance without excess space.
+_HELP_TEXT_SIZE = (7, 46)
 
 # Purpose: Bound notice text while retaining long diagnostic explanations.
 # Type: int. Units: text rows. Scope: one embedded notice or question.
@@ -179,7 +199,7 @@ def _render_notice(root: tk.Tk) -> None:
     if root._embedded_notices_omitted:
         label += f" · {root._embedded_notices_omitted} earlier notice(s) omitted"
     ttk.Label(strip, text=label, style="Section.TLabel").grid(row=0, column=0, sticky="w")
-    Button(strip, text="Dismiss", command=lambda: _dismiss_notice(root)).grid(row=0, column=1, sticky="e")
+    Button(strip, text=gettext("Dismiss"), command=lambda: _dismiss_notice(root)).grid(row=0, column=1, sticky="e")
     text = tk.Text(
         strip, height=NOTICE_TEXT_ROWS, wrap="word", relief="flat",
         font="TkDefaultFont", background=root.cget("background"),
@@ -498,6 +518,146 @@ class EmbeddedWindow(DialogSurface):
         self._surface.destroy()
 
 
+def help_button(parent: tk.Misc, title: str, body: str) -> ttk.Button:
+    """Create a help button that opens a focused, selectable help overlay.
+
+    Args:
+        parent (tk.Misc): Tk widget that owns the new button.
+        title (str): Short heading displayed in the help window.
+        body (str): Plain text instructions that users can select and copy.
+
+    Returns:
+        ttk.Button: A themed question-mark button that opens the overlay.
+    """
+    button: ttk.Button
+
+    def open_help() -> None:
+        """Open the help window and move keyboard focus into its text.
+
+        Returns:
+            None: A transient help window is shown when its owner exists.
+        """
+        if not button.winfo_exists():
+            return
+        _show_help(button, title, body)
+
+    button = icon_button(parent, "help", open_help,
+                         tooltip=gettext("Help: {title}").format(title=title))
+    return button
+
+
+def _show_help(owner: tk.Misc, title: str, body: str) -> None:
+    """Display a modal-style help panel with selectable content.
+
+    Args:
+        owner (tk.Misc): Invoking widget owning the embedded help panel.
+        title (str): Concise title shown in the dialog heading and chrome.
+        body (str): Plain text content users may select or copy.
+
+    Returns:
+        None: The help overlay is focused and dismissed by Escape or close.
+    """
+    # The shell owns focus and dismissal; construction stays in the theme.
+    try:
+        parent = owner.winfo_toplevel()
+        previous_grab = parent.grab_current()
+        previous_focus = parent.focus_get()
+        dialog = EmbeddedWindow(owner)
+    except tk.TclError:
+        return
+
+    def close_help() -> None:
+        """Close help and return grab and focus to their previous owners.
+
+        Returns:
+            None: The dialog is dismissed and prior live owners are restored.
+        """
+        try:
+            if dialog.winfo_exists():
+                dialog.destroy()
+        except tk.TclError:
+            return
+        try:
+            if previous_grab is not None and previous_grab.winfo_exists():
+                previous_grab.grab_set()
+            if previous_focus is not None and previous_focus.winfo_exists():
+                previous_focus.focus_set()
+        except tk.TclError:
+            pass
+
+    dialog.title(title or gettext("Help"))
+    dialog.transient(parent)
+    dialog.resizable(True, True)
+    dialog.minsize(_HELP_MIN_WIDTH, _HELP_MIN_HEIGHT)
+    shell = ttk.Frame(dialog, style="Glass.TFrame", padding=22)
+    shell.pack(fill="both", expand=True)
+    ttk.Label(shell, text=title, style="Glass.Title.TLabel").pack(
+        anchor="w", pady=(0, 10))
+    text_rows, text_columns = _HELP_TEXT_SIZE
+    text_box = tk.Text(
+        shell,
+        wrap="word",
+        height=text_rows,
+        width=text_columns,
+        relief="flat",
+        borderwidth=0,
+        padx=2,
+        pady=2,
+        background=_PALETTE["surface"],
+        foreground=_PALETTE["ink"],
+        font=(tkfont.nametofont("TkDefaultFont", root=parent).actual("family"), 10),
+        takefocus=True,
+    )
+    text_box.insert("1.0", body)
+    text_box.pack(fill="both", expand=True, anchor="w")
+    text_box.bind("<Control-a>", lambda _event: _select_help_text(text_box))
+    text_box.bind("<Key>", lambda event: _guard_help_text(event))
+    text_box.bind("<<Paste>>", lambda _event: "break")
+    text_box.bind("<<Cut>>", lambda _event: "break")
+    text_box.bind("<Button-2>", lambda _event: "break")
+    footer = ttk.Frame(shell, style="Card.TFrame")
+    footer.pack(fill="x", pady=(14, 0))
+    close_button = Button(footer, text=gettext("Close"), command=close_help)
+    close_button.pack(side="right")
+    dialog.bind("<Escape>", lambda _event: close_help())
+    dialog.protocol("WM_DELETE_WINDOW", close_help)
+    dialog.update_idletasks()
+    width = max(_HELP_MIN_WIDTH, dialog.winfo_reqwidth())
+    height = max(_HELP_INITIAL_HEIGHT, dialog.winfo_reqheight())
+    x = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
+    y = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 3)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    dialog.grab_set()
+    text_box.focus_set()
+
+
+def _select_help_text(text_box: tk.Text) -> str:
+    """Select all help text and allow the normal copy shortcut to continue.
+
+    Args:
+        text_box (tk.Text): Read-only text widget containing help content.
+
+    Returns:
+        str: ``break`` to stop the default Control+A binding after selection.
+    """
+    text_box.tag_add("sel", "1.0", "end-1c")
+    return "break"
+
+
+def _guard_help_text(event: tk.Event) -> str | None:
+    """Keep help content read-only while preserving select and copy keys.
+
+    Args:
+        event (tk.Event): Key event sent to the selectable help text widget.
+
+    Returns:
+        str | None: ``break`` prevents edits; ``None`` permits copy and select.
+    """
+    if event.state & 0x4 and event.keysym.lower() in ("a", "c"):
+        return None
+    return "break"
+
+
 def _prompt(
     title: str, message: str, parent: tk.Misc | None,
     buttons: tuple[tuple[str, str], ...], initial: str | None = None,
@@ -574,7 +734,7 @@ def _prompt(
                 if (minimum is not None and number < minimum) or (maximum is not None and number > maximum):
                     raise ValueError
             except ValueError:
-                error.configure(text="Enter a valid number within the allowed range.")
+                error.configure(text=gettext("Enter a valid number within the allowed range."))
                 return
         result.append(
             value.get() if token == "value"
@@ -650,12 +810,15 @@ class _MessageBox:
             title (str): Question heading.
             message (str): Question text.
             parent (tk.Misc | None): Invoking widget, or the existing default root.
-            **_options (str): Compatibility options supplied by Tk callers.
+            **_options (str): Default focus token and optional yes/no captions.
         Returns:
             bool: True only when the user chooses Yes.
         """
         return _prompt(
-            title, message, parent, (("Yes", "yes"), ("No", "no")),
+            title, message, parent, (
+                (_options.get("yes_label") or gettext("Yes"), "yes"),
+                (_options.get("no_label") or gettext("No"), "no"),
+            ),
             default=_options.get("default", "no"),
         ) == "yes"
 
@@ -670,7 +833,11 @@ class _MessageBox:
         Returns:
             bool | None: True for Yes, False for No, or None for cancellation.
         """
-        result = _prompt(title, message, parent or tk._default_root, (("Yes", "yes"), ("No", "no"), ("Cancel", "__cancel__")))
+        result = _prompt(title, message, parent or tk._default_root, (
+            (gettext("Yes"), "yes"),
+            (gettext("No"), "no"),
+            (gettext("Cancel"), "__cancel__"),
+        ))
         return None if result is None else result == "yes"
 
 
@@ -688,7 +855,9 @@ class _SimpleDialog:
         Returns:
             str | None: Entered text or None when cancelled.
         """
-        return _prompt(title, prompt, parent, (("OK", "value"), ("Cancel", "__cancel__")), initialvalue)
+        return _prompt(title, prompt, parent, (
+            (gettext("OK"), "value"), (gettext("Cancel"), "__cancel__"),
+        ), initialvalue)
 
     def askinteger(self, title: str, prompt: str, parent: tk.Misc, minvalue: int | None = None, maxvalue: int | None = None) -> int | None:
         """Request an integer within optional bounds.
@@ -702,7 +871,9 @@ class _SimpleDialog:
         Returns:
             int | None: Entered integer or None when cancelled.
         """
-        result = _prompt(title, prompt, parent, (("OK", "value"), ("Cancel", "__cancel__")), "", minvalue, maxvalue, True)
+        result = _prompt(title, prompt, parent, (
+            (gettext("OK"), "value"), (gettext("Cancel"), "__cancel__"),
+        ), "", minvalue, maxvalue, True)
         return None if result is None else int(result)
 
 

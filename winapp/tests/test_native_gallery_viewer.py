@@ -69,7 +69,7 @@ except ModuleNotFoundError as exc:
     tk = None
 
 try:
-    from PIL import Image, ImageDraw, ImageTk
+    from PIL import Image, ImageDraw, ImageGrab, ImageTk
 except ModuleNotFoundError as exc:
     if exc.name != 'PIL':
         raise
@@ -77,12 +77,24 @@ except ModuleNotFoundError as exc:
     ImageTk = None
 
 if tk is not None:
+    from uploader.diagnostics import format_safe_photos_shortcut
+    from uploader.ui_theme import configure_theme
     from uploader import native_gallery_viewer
 else:
     native_gallery_viewer = None
 
 if sys.platform == 'win32' and tk is not None and Image is not None:
     from uploader import gallery_lightbox, photos_workspace, ui_theme
+    from test_redesign import MAIN
+    from uploader import app_linking as linking
+    from uploader.app_header import HEADER_WORKSPACE_GAP
+    from uploader.gallery_folders import GalleryFolderShelf
+    from uploader.gallery_view_preferences import (
+            load_gallery_card_format, save_gallery_card_format,
+        load_gallery_photo_order, save_gallery_photo_order,
+        load_gallery_folder_split, save_gallery_folder_split,
+        GALLERY_FOLDER_SHARE_SCALE,
+    )
     from uploader.gallery_preload import GalleryPreloadWorker
     from uploader.windows_display import prepare_windows_display
 else:
@@ -1317,7 +1329,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 pass, preserve expansion and selection, and save changed names.
                 Desktop and narrow screenshots retain the actual toolbar layout.
         """
-        from PIL import ImageGrab
 
         original = (
             LinkedGallery(1, None, 'Original parent'),
@@ -1830,7 +1841,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Current traces are copyable, stale generations and arbitrary
                 text are rejected, and Latest failure remains unchanged.
         """
-        from uploader.diagnostics import format_safe_photos_shortcut
 
         workspace = photos_workspace.PhotosWorkspace.__new__(
             photos_workspace.PhotosWorkspace,
@@ -1867,7 +1877,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
         Returns:
             None: Play-to-pause updates the image and directional artwork differs.
         """
-        from uploader import ui_theme
 
         ui_theme.configure_theme(self.root)
         with mock.patch.object(self.root, "winfo_fpixels", return_value=144.0):
@@ -3849,8 +3858,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Hosted Windows captures desktop/narrow controls and proves that
                 edits use fresh server values, preserve drafts and do not replay.
         """
-        from PIL import ImageGrab
-        from uploader.ui_theme import configure_theme
 
         configure_theme(self.root)
 
@@ -4653,7 +4660,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 global storage host and real Watcher metric card. Live services
                 are replaced at their external boundaries, not by fake widgets.
         """
-        from test_redesign import MAIN
 
         outer = ttk.Frame(self.root, style='App.TFrame', padding=(16, 12, 16, 10))
         outer.pack(fill='both', expand=True)
@@ -4694,7 +4700,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Each corner exposes the actual parent without a dark matte;
                 native clipping is active and the detail capture is retained.
         """
-        from PIL import ImageGrab
 
         self._wait_until(
             lambda: card._rounded_region_size == (card.winfo_width(), card.winfo_height()),
@@ -4727,13 +4732,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 folders, hidden absent controls, separate crops, local order,
                 mouse resizing, per-gallery disk restoration and header corners.
         """
-        from PIL import ImageGrab
-        from uploader.gallery_view_preferences import (
-            load_gallery_card_format, save_gallery_card_format,
-            load_gallery_photo_order, save_gallery_photo_order,
-            load_gallery_folder_split, save_gallery_folder_split,
-            GALLERY_FOLDER_SHARE_SCALE,
-        )
 
         # Tk's update-based fixture has no continuously entered mainloop.
         # Collect discarded viewer/widget cycles on its Tk owner, rather than
@@ -5107,7 +5105,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: The cover pixels retain the chosen ratio while the outer
                 folder adds its tab and border beyond the photograph.
         """
-        from uploader.gallery_folders import GalleryFolderShelf
 
         ui_theme.configure_theme(self.root)
         shelf = GalleryFolderShelf(self.root, mock.Mock())
@@ -5146,8 +5143,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 a new shelf/session uses its verified bytes after fresh metadata
                 without a second binary read or a mocked cache lookup.
         """
-        from uploader import app_linking as linking
-        from uploader.gallery_folders import GalleryFolderShelf
 
         issuer = 'https://gallery.example.test'
         body = self._png((90, 130, 170))
@@ -5226,8 +5221,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 without binary HTTP; remapping restarts cover work and an empty
                 refreshed inventory removes obsolete pixels.
         """
-        from uploader import app_linking as linking
-        from uploader.gallery_folders import GalleryFolderShelf
 
         issuer = 'https://gallery.example.test'
         session = LinkingSession(
@@ -5330,9 +5323,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Native screenshots prove one wide row, bounded narrow actions,
                 retained version/link status and more height for gallery content.
         """
-        from PIL import ImageGrab
-        from test_redesign import MAIN
-        from uploader.app_header import HEADER_WORKSPACE_GAP
 
         ui_theme.configure_theme(self.root)
         outer = ttk.Frame(self.root, style='App.TFrame', padding=(16, 12, 16, 10))
@@ -5472,7 +5462,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Late metadata cannot reopen the pane, the gallery/selection
                 survive and cached reopening reuses details without another read.
         """
-        from PIL import ImageGrab
 
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -5760,7 +5749,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 dialogs and ranges inherit the library, unknown skins refuse,
                 and original catalog/detail captures retain native rendering.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         app = ttk.Frame(self.root, style='App.TFrame', padding=12)
@@ -6265,7 +6253,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: No rejected click reaches the host; its contextual explanation
                 remains within the desktop and narrow Photos surfaces.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         gallery = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Watcher album')
@@ -6432,7 +6419,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Desktop and narrow error cards fit; the draft survives and
                 its next Create succeeds without Check again or Manage link.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
@@ -6846,7 +6832,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Every terminal phase stays closed while cache reconciliation
                 continues; an explicit new preload restores visible progress.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         page, presentation, image_bytes = self._gallery_data()
@@ -7040,7 +7025,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: The complete bar fits its heading and uses the real 118/265
                 fraction while waiting remains cancellable and animated.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         page, presentation, image_bytes = self._gallery_data()
@@ -7233,7 +7217,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 Desktop, narrow and resized header layouts retain the card,
                 all mapped descendants and final values within the client.
         """
-        from PIL import ImageGrab
 
         ui_theme.configure_theme(self.root)
         page, presentation, image_bytes = self._gallery_data()
@@ -10482,7 +10465,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Every rendered aspect, including natural Default, has only
                 the shared rim outside its image at two viewport widths.
         """
-        from uploader.ui_theme import configure_theme
 
         configure_theme(self.root)
         page, presentation, image_bytes = self._gallery_data()

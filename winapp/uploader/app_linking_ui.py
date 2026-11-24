@@ -24,6 +24,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import ttk
+from uploader.localization import gettext
 from uploader.ui_shell import EmbeddedWindow, messagebox, simpledialog
 from typing import Callable, NamedTuple
 from .app_linking import (
@@ -72,6 +73,20 @@ from .state_store import (
     load_recent_gallery_addresses, save_recent_gallery_addresses,
 )
 from .ui_theme import Button, GlassCard, icon_button, place_dialog
+
+
+def _visibility_labels() -> dict[str, str]:
+    """Map editable gallery visibility codes to translated choices.
+
+    Returns:
+        dict[str, str]: Server visibility codes and their visible captions.
+    """
+    return {
+        "public": gettext("public"),
+        "private": gettext("private"),
+        "unpublished": gettext("unpublished"),
+    }
+
 
 # Purpose: Refresh the linking dialog without touching Tk from worker threads.
 # Type: int. Units: milliseconds. Scope: one pending identity operation.
@@ -835,12 +850,12 @@ class LinkingManager:
         try:
             binding = self._saved_offline_binding(canonical)
         except RuntimeError:
-            self._status.set('The securely saved gallery connection is unavailable.')
+            self._status.set(gettext('The securely saved gallery connection is unavailable.'))
             return True
         if binding is not None:
             store = self._native_offline_store()
             if store is None:
-                self._status.set('The securely saved gallery connection is unavailable.')
+                self._status.set(gettext('The securely saved gallery connection is unavailable.'))
                 return True
             if self._session is None:
                 self._current_issuer = canonical
@@ -857,7 +872,7 @@ class LinkingManager:
         self._owner = self._direct_owner = owner
         self._website_request_owner = owner
         self._cancel = cancel
-        self._status.set('Checking the saved gallery connection…')
+        self._status.set(gettext('Checking the saved gallery connection…'))
 
         def worker() -> None:
             """Verify the original unexpired grant before exposing it to Photos.
@@ -983,12 +998,12 @@ class LinkingManager:
         if (self._worker is not None and self._worker.is_alive()
                 and (manage or not self._owns_website_request())):
             if self._handoff is None:
-                self._status.set('A gallery request is already in progress.')
+                self._status.set(gettext('A gallery request is already in progress.'))
             return
 
         owner = self._window if self._window is not None and self._window.winfo_exists() else self._root
         dialog = EmbeddedWindow(owner)
-        title = 'Manage link' if manage else self._text('linking_connect_website')
+        title = gettext('Manage link') if manage else self._text('linking_connect_website')
         dialog.title(title)
         dialog.resizable(True, False)
         card = GlassCard(dialog, padding=(16, 12))
@@ -1078,7 +1093,7 @@ class LinkingManager:
             """
             if submitted and self._owns_website_request():
                 self._abandon_link_attempt()
-                self._status.set('Gallery linking cancelled.')
+                self._status.set(gettext('Gallery linking cancelled.'))
             self._dismiss_address_prompt()
 
         def unlink_choice() -> None:
@@ -1164,7 +1179,7 @@ class LinkingManager:
             actions, text=title, command=submit, style='Accent.Compact.TButton',
         )
         confirm.pack(side='right')
-        Button(actions, text='Cancel', command=cancel, style='Compact.TButton').pack(
+        Button(actions, text=gettext('Cancel'), command=cancel, style='Compact.TButton').pack(
             side='right', padx=(0, 8),
         )
         dialog.bind('<Return>', lambda _event: submit())
@@ -1216,7 +1231,7 @@ class LinkingManager:
         running = self._worker is not None and self._worker.is_alive()
         may_replace = restart and self._owns_website_request()
         if not may_replace and (running or (restart and not self._events.empty())):
-            self._status.set('A gallery request is already in progress.')
+            self._status.set(gettext('A gallery request is already in progress.'))
             return
         issuer = linking_issuer(address)
         if not issuer:
@@ -1229,7 +1244,7 @@ class LinkingManager:
         site = self._live_link(issuer)
         if site is not None:
             if running:
-                self._status.set('A gallery request is already in progress.')
+                self._status.set(gettext('A gallery request is already in progress.'))
                 return
             if self._session is not site.session:
                 self._show_link(site)
@@ -1241,7 +1256,7 @@ class LinkingManager:
                 if self._gallery_page is None:
                     self._load_galleries(None)
             else:
-                self._status.set('Open Manage link to change the approved access.')
+                self._status.set(gettext('Open Manage link to change the approved access.'))
             return
         if restart:
             # Fence old events before replacing the listener. The worker may
@@ -1295,7 +1310,7 @@ class LinkingManager:
         if (session is not self.photos_session() or not session.can_upload()
                 or self._commit_linked_target is None
                 or self._worker is not None and self._worker.is_alive()):
-            message = 'Gallery access is unavailable or another connection operation is running. Try again.'
+            message = gettext('Gallery access is unavailable or another connection operation is running. Try again.')
             self._status.set(message)
             failure(message)
             return
@@ -1310,7 +1325,7 @@ class LinkingManager:
         owner, cancel = object(), threading.Event()
         self._owner = self._direct_owner = owner
         self._cancel = cancel
-        self._status.set('Preparing the Watcher connection…')
+        self._status.set(gettext('Preparing the Watcher connection…'))
 
         def worker() -> None:
             """Keep gallery verification and key issuance off the Tk thread.
@@ -1348,7 +1363,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            message = 'Could not prepare the Watcher connection. Try again.'
+            message = gettext('Could not prepare the Watcher connection. Try again.')
             self._status.set(message)
             failure(message)
             return
@@ -1818,10 +1833,10 @@ class LinkingManager:
         site = self._live_link(issuer)
         if (self._worker is not None and self._worker.is_alive()
                 and (manage or site is None or self._session is not site.session)):
-            self._status.set('Wait for the current gallery request to finish.')
+            self._status.set(gettext('Wait for the current gallery request to finish.'))
             return
         if not manage and site is None:
-            self._status.set('Link the gallery to load its gallery list.')
+            self._status.set(gettext('Link the gallery to load its gallery list.'))
             return
         if site is not None and self._session is not site.session:
             self._show_link(site)
@@ -1841,7 +1856,7 @@ class LinkingManager:
                 self._offline_store = None
         window = EmbeddedWindow(parent)
         self._window = window
-        title = 'Manage link' if manage else 'Choose gallery'
+        title = gettext('Manage link') if manage else gettext('Choose gallery')
         window.title(title)
         window.transient(parent)
         window.resizable(True, True)
@@ -1861,16 +1876,18 @@ class LinkingManager:
             row=0, column=0, sticky='w', pady=(0, 6),
         )
         issuer_label = ttk.Label(
-            card, text=issuer or 'Enter the address of your gallery.',
+            card, text=issuer or gettext('Enter the address of your gallery.'),
             style='Muted.TLabel',
         )
         issuer_label.grid(row=1, column=0, sticky='ew', pady=(0, 6))
         explanation = ttk.Label(
             card,
-            text=('Choose permissions for this connection. Optional secure storage '
-                  'requires separate browser consent and permits renewal for up to '
-                  '30 days, with a seven-day inactivity limit. The saved API key '
-                  'remains available; server grants may remain until revoked.'),
+            text=(gettext(
+                "Choose permissions for this connection. Optional secure storage "
+                "requires separate browser consent and permits renewal for up to "
+                "30 days, with a seven-day inactivity limit. The saved API key "
+                "remains available; server grants may remain until revoked."
+            )),
             style='Muted.TLabel',
         )
         self._scope_actions = ttk.Frame(card, style='Card.TFrame')
@@ -1883,19 +1900,19 @@ class LinkingManager:
         )
         self._browse_check = ttk.Checkbutton(
             self._scope_actions, variable=self._browse_var, command=self._scope_changed,
-            text='Allow listing galleries',
+            text=gettext('Allow listing galleries'),
         )
         self._upload_check = ttk.Checkbutton(
             self._scope_actions, variable=self._upload_var, command=self._scope_changed,
-            text='Allow gallery uploads',
+            text=gettext('Allow gallery uploads'),
         )
         self._read_check = ttk.Checkbutton(
             self._scope_actions, variable=self._read_var, command=self._scope_changed,
-            text='Read gallery details',
+            text=gettext('Read gallery details'),
         )
         self._create_check = ttk.Checkbutton(
             self._scope_actions, variable=self._create_var,
-            command=self._scope_changed, text='Allow creating galleries',
+            command=self._scope_changed, text=gettext('Allow creating galleries'),
         )
         self._visibility_var = tk.BooleanVar(
             value=(LINKING_VISIBILITY_READY and self._session is not None
@@ -1915,10 +1932,10 @@ class LinkingManager:
         self._offline_var = tk.BooleanVar(value=False)
         self._offline_check = ttk.Checkbutton(
             self._scope_actions, variable=self._offline_var,
-            text='Remember securely',
+            text=gettext('Remember securely'),
         )
         browse_explanation = ttk.Label(
-            card, text='These permissions include private and unpublished galleries.',
+            card, text=gettext('These permissions include private and unpublished galleries.'),
             style='Muted.TLabel',
         )
         status_label = ttk.Label(card, textvariable=self._status)
@@ -1965,7 +1982,7 @@ class LinkingManager:
             command=self._select_gallery, style='Accent.Compact.TButton',
         )
         self._recovery_button = Button(
-            self._gallery_actions, text='Check uncertain upload',
+            self._gallery_actions, text=gettext('Check uncertain upload'),
             command=self._check_uncertain_upload, style='Compact.TButton',
         )
         self._review_button = Button(
@@ -1973,31 +1990,31 @@ class LinkingManager:
             command=self._review_uncertain_upload, style='Compact.TButton',
         )
         self._detail_button = Button(
-            self._gallery_actions, text='Read selected details',
+            self._gallery_actions, text=gettext('Read selected details'),
             command=self._read_detail, style='Compact.TButton',
         )
         self._visibility_choice = ttk.Combobox(
             self._gallery_actions, state='readonly', width=15,
-            values=('public', 'private', 'unpublished'),
+            values=tuple(_visibility_labels().values()),
         )
         self._visibility_button = Button(
             self._gallery_actions, text=self._text('linking_visibility_action'),
             command=self._change_visibility, style='Compact.TButton',
         )
         self._create_button = Button(
-            self._gallery_actions, text='Create gallery', command=self._create_gallery,
+            self._gallery_actions, text=gettext('Create gallery'), command=self._create_gallery,
             style='Compact.TButton',
         )
         self._create_status_button = Button(
-            self._gallery_actions, text='Check create status',
+            self._gallery_actions, text=gettext('Check create status'),
             command=self._reconcile_gallery_create, style='Compact.TButton',
         )
         self._create_resume_button = Button(
-            self._gallery_actions, text='Resume original creation',
+            self._gallery_actions, text=gettext('Resume original creation'),
             command=self._resume_gallery_create, style='Compact.TButton',
         )
         self._create_abandon_button = Button(
-            self._gallery_actions, text='Close unresolved creation',
+            self._gallery_actions, text=gettext('Close unresolved creation'),
             command=self._abandon_gallery_create, style='Compact.TButton',
         )
         self._use_created_button = Button(
@@ -2005,7 +2022,7 @@ class LinkingManager:
             command=self._use_created_gallery, style='Compact.TButton',
         )
         self._ack_created_button = Button(
-            self._gallery_actions, text='Dismiss result',
+            self._gallery_actions, text=gettext('Dismiss result'),
             command=self._acknowledge_created_gallery, style='Compact.TButton',
         )
         gallery_status_label = ttk.Label(
@@ -2042,19 +2059,19 @@ class LinkingManager:
         if manage:
             self._footer_actions.grid(row=12, column=0, sticky='ew', pady=(10, 0))
         self._manage_button = Button(
-            self._footer_actions, text='Manage gallery links',
+            self._footer_actions, text=gettext('Manage gallery links'),
             command=self._open_devices, style='Compact.TButton',
         )
         self._restore_button = Button(
-            self._footer_actions, text='Reconnect saved link',
+            self._footer_actions, text=gettext('Reconnect saved link'),
             command=self._restore_offline, style='Compact.TButton',
         )
         self._discard_button = Button(
-            self._footer_actions, text='Forget saved link',
+            self._footer_actions, text=gettext('Forget saved link'),
             command=self._discard_offline, style='Compact.TButton',
         )
         self._close_button = Button(
-            self._footer_actions, text='Close', command=self._close_window,
+            self._footer_actions, text=gettext('Close'), command=self._close_window,
             style='Compact.TButton',
         )
         self._wrapping_labels = (
@@ -2239,8 +2256,8 @@ class LinkingManager:
         self._session_user_id = site.user_id
         self._reset_gallery_choices()
         self._gallery_status.set(
-            'Loading galleries…' if site.session.can_list_galleries()
-            else 'This link does not include the gallery list.',
+            gettext('Loading galleries…') if site.session.can_list_galleries()
+            else gettext('This link does not include the gallery list.'),
         )
         self._status.set('')
         self._remember_link(site.issuer)
@@ -2481,8 +2498,8 @@ class LinkingManager:
             session = self._session
             session.close()
             self._clear_session_display()
-            self._gallery_status.set('Gallery link expired.')
-            self._status.set('Gallery link expired.')
+            self._gallery_status.set(gettext('Gallery link expired.'))
+            self._status.set(gettext('Gallery link expired.'))
             if (self._active_upload_target is not None
                     and self._active_upload_target.session is session):
                 self._notify_target_changed()
@@ -2667,7 +2684,7 @@ class LinkingManager:
         if upload_target is not None:
             refusal = self._target_refusal(upload_target.binding())
             if refusal is not None or self._commit_linked_target is None:
-                self._status.set(refusal or 'Linked upload mode cannot be verified.')
+                self._status.set(refusal or gettext('Linked upload mode cannot be verified.'))
                 return
         try:
             scope = GALLERIES_SCOPE if direct else self._requested_scope()
@@ -2690,7 +2707,7 @@ class LinkingManager:
             )
             attempt = LinkingAttempt(issuer, scope=scope)
         except Exception:  # noqa: BLE001
-            self._status.set('Could not start a secure linking attempt.')
+            self._status.set(gettext('Could not start a secure linking attempt.'))
             return
         owner = object()
         cancel = threading.Event()
@@ -2876,7 +2893,7 @@ class LinkingManager:
         except RuntimeError:
             attempt.close()
             self._worker = None
-            self._status.set('Could not start a secure linking attempt.')
+            self._status.set(gettext('Could not start a secure linking attempt.'))
             return
         self._refresh(self._session_issuer if self._session is not None else issuer)
         self._schedule_poll()
@@ -2986,7 +3003,7 @@ class LinkingManager:
                 or self._session_user_id != identity.user_id
                 or self._cancel.is_set() or commit is None):
             target.session.close()
-            self._status.set('The selected gallery changed during approval.')
+            self._status.set(gettext('The selected gallery changed during approval.'))
             return
         refusal = self._target_refusal(target.binding())
         if refusal is not None:
@@ -2997,7 +3014,7 @@ class LinkingManager:
             activate(lambda: commit(target))
         except Exception:  # noqa: BLE001
             target.session.close()
-            self._status.set('The approved Photos connection could not be saved safely.')
+            self._status.set(gettext('The approved Photos connection could not be saved safely.'))
             return
         self._active_upload_target = target
         self._show_link(_LinkedSite(target.issuer, target.session, identity.user_id))
@@ -3314,7 +3331,7 @@ class LinkingManager:
                     if site.issuer == payload.issuer and site.user_id == payload.account_id:
                         site.session.disable_renewal()
                 self._offline_binding = None
-                self._status.set('Saved local credential removed; the current session and server grant may still exist.')
+                self._status.set(gettext('Saved local credential removed; the current session and server grant may still exist.'))
             elif kind == 'photos_upload_upgrade' and isinstance(payload, _PhotosUploadUpgrade):
                 self._activate_photos_upload_upgrade(payload)
                 self._clear_handoff()
@@ -3329,11 +3346,11 @@ class LinkingManager:
                     self._discard_photos_watch_key(payload.target)
                     message = self._status.get()
                     if not message or message == 'Preparing the Watcher connection…':
-                        message = 'Could not start the linked Watcher. Check the Watcher settings and try again.'
+                        message = gettext('Could not start the linked Watcher. Check the Watcher settings and try again.')
                     self._status.set(message)
                     payload.failure(message)
             elif kind == 'photos_watch_failed' and callable(payload):
-                message = 'Could not verify the gallery or prepare Watcher access. Check the connection and try again.'
+                message = gettext('Could not verify the gallery or prepare Watcher access. Check the connection and try again.')
                 self._status.set(message)
                 payload(message)
             elif kind == 'connected' and isinstance(payload, tuple):
@@ -3361,7 +3378,7 @@ class LinkingManager:
                 self._website_request_owner = None
                 self._clear_handoff()
             elif kind == 'resume_error':
-                self._status.set('Could not verify the saved link. Try again.')
+                self._status.set(gettext('Could not verify the saved link. Try again.'))
             elif (kind in ('resume_absent', 'resume_expired', 'offline_expired')
                     and isinstance(payload, tuple)):
                 issuer, approve = payload
@@ -3373,7 +3390,7 @@ class LinkingManager:
                         break
                     self._start(issuer, direct=True)
                 elif kind != 'resume_absent':
-                    self._status.set('Saved gallery access expired. Approve the link again.')
+                    self._status.set(gettext('Saved gallery access expired. Approve the link again.'))
                 else:
                     self._status.set('')
             elif kind == 'galleries' and isinstance(payload, LinkedGalleryPage):
@@ -3398,7 +3415,7 @@ class LinkingManager:
                         or self._session_issuer != target.issuer
                         or self._session_user_id != target.user_id
                         or self._recovery_publish is None):
-                    self._gallery_status.set('The upload observation is no longer current.')
+                    self._gallery_status.set(gettext('The upload observation is no longer current.'))
                 else:
                     message = (
                         'Matching bytes were observed. This does not confirm the '
@@ -3411,10 +3428,10 @@ class LinkingManager:
                     if not self._recovery_publish(
                         target, file_hash, lambda: self._gallery_status.set(message),
                     ):
-                        self._gallery_status.set('The upload observation is no longer current.')
+                        self._gallery_status.set(gettext('The upload observation is no longer current.'))
             elif kind == 'recovery_error':
                 self._gallery_status.set(
-                    'Could not verify the uncertain upload. It remains unresolved.',
+                    gettext('Could not verify the uncertain upload. It remains unresolved.'),
                 )
             elif kind == 'upload_target_verified' and isinstance(payload, tuple):
                 if (len(payload) == 7 and isinstance(payload[0], LinkedUploadTarget)
@@ -3425,8 +3442,10 @@ class LinkingManager:
                     self._close_window()
             elif kind == 'upload_target_error':
                 self._gallery_status.set(
-                    'The selected gallery could not be verified. '
-                    'The previous upload target is unchanged.',
+                    gettext(
+                        "The selected gallery could not be verified. "
+                        "The previous upload target is unchanged."
+                    ),
                 )
             elif kind == 'create_completed' and isinstance(payload, tuple):
                 bound, session, issuer, account = payload
@@ -3445,17 +3464,17 @@ class LinkingManager:
                     else:
                         next_action = 'You can create another gallery.'
                     self._gallery_status.set(
-                        'Created ' + _gallery_label(bound.gallery) + '. ' + next_action,
+                        gettext('Created ') + _gallery_label(bound.gallery) + '. ' + next_action,
                     )
                 else:
                     self._gallery_status.set(
-                        'The creation receipt was saved; reconnect and check its status.',
+                        gettext('The creation receipt was saved; reconnect and check its status.'),
                     )
             elif kind == 'create_acknowledged':
                 self._created_gallery = None
-                self._gallery_status.set('Creation acknowledged. You may create another gallery.')
+                self._gallery_status.set(gettext('Creation acknowledged. You may create another gallery.'))
             elif kind == 'create_ack_error':
-                self._gallery_status.set('The creation receipt could not be acknowledged safely.')
+                self._gallery_status.set(gettext('The creation receipt could not be acknowledged safely.'))
             elif kind == 'create_selection_verified' and isinstance(payload, tuple):
                 if (len(payload) == 7 and isinstance(payload[0], BoundCreateReceipt)
                         and isinstance(payload[1], LinkedUploadTarget)
@@ -3463,19 +3482,23 @@ class LinkingManager:
                     self._apply_created_gallery(*payload)
             elif kind == 'create_selection_error':
                 self._gallery_status.set(
-                    'The created gallery is unavailable or its access could not be verified.',
+                    gettext('The created gallery is unavailable or its access could not be verified.'),
                 )
             elif kind == 'create_unknown':
                 self._gallery_status.set(
-                    'Creation is unconfirmed. Do not create it again. Reconnect '
-                    'to the same account and check status. Explicitly Resume '
-                    'original creation, or review the gallery and storage and '
-                    'use Close unresolved creation.',
+                    gettext(
+                        "Creation is unconfirmed. Do not create it again. Reconnect "
+                        "to the same account and check status. Explicitly Resume "
+                        "original creation, or review the gallery and storage and "
+                        "use Close unresolved creation."
+                    ),
                 )
             elif kind == 'create_failed':
                 self._gallery_status.set(
-                    'Could not create the gallery. Check the connection or try '
-                    'another name. Using the same name resumes its saved request.',
+                    gettext(
+                        "Could not create the gallery. Check the connection or try "
+                        "another name. Using the same name resumes its saved request."
+                    ),
                 )
             elif kind in ('create_resume_preview', 'create_abandon_preview') and isinstance(payload, CreateIntent):
                 session = self._session
@@ -3503,8 +3526,8 @@ class LinkingManager:
                             'request did not reach the server.'
                         )
                     confirmed = messagebox.askyesno(
-                        'Close unresolved creation' if abandoning
-                        else 'Resume original creation', prompt, parent=self._window,
+                        gettext('Close unresolved creation') if abandoning
+                        else gettext('Resume original creation'), prompt, parent=self._window,
                     )
                     if (confirmed and self._window is not None
                             and self._owner is owner and self._session is session
@@ -3519,18 +3542,22 @@ class LinkingManager:
                             self._start_gallery_create(session, None, None, payload)
                     elif self._window is not None and self._owner is owner:
                         self._gallery_status.set(
-                            'The original creation remains unresolved.',
+                            gettext('The original creation remains unresolved.'),
                         )
             elif kind == 'create_resume_unavailable':
                 self._gallery_status.set(
-                    'No unresolved creation is available for this account. '
-                    'Check the creation status before continuing.',
+                    gettext(
+                        "No unresolved creation is available for this account. "
+                        "Check the creation status before continuing."
+                    ),
                 )
             elif kind == 'create_abandoned':
                 self._gallery_status.set(
-                    'The original key is closed. A gallery or files may already '
-                    'exist or old work may still be finishing. Verify it has '
-                    'stopped and inspect the gallery and storage before creating another.',
+                    gettext(
+                        "The original key is closed. A gallery or files may already "
+                        "exist or old work may still be finishing. Verify it has "
+                        "stopped and inspect the gallery and storage before creating another."
+                    ),
                 )
             elif (kind in ('detail', 'visibility_done', 'visibility_conflict')
                   and isinstance(payload, LinkedGalleryDetail)):
@@ -3551,15 +3578,33 @@ class LinkingManager:
                         if kind == 'visibility_conflict' else ''
                     )
                     self._gallery_status.set(
-                        f'{prefix}Gallery #{payload.gallery_id}: {title} · Revision {payload.revision}. '
-                        f'Saved visibility: {payload.visibility}; access: {payload.access_mode}; '
-                        f'listing: {payload.access_listing}. Inherited access is not shown.',
+                        prefix + gettext(
+                            "Gallery #{number}: {title} · Revision {revision}. "
+                            "Saved visibility: {visibility}; access: {access}; "
+                            "listing: {listing}. Inherited access is not shown."
+                        ).format(
+                            number=payload.gallery_id, title=title,
+                            revision=payload.revision,
+                            visibility=_visibility_labels().get(
+                                payload.visibility, gettext(payload.visibility),
+                            ),
+                            access={
+                                "normal": gettext("Standard access"),
+                                "password": gettext("Password protected"),
+                            }.get(payload.access_mode, payload.access_mode),
+                            listing={
+                                "listed": gettext("Listed"),
+                                "unlisted": gettext("Unlisted"),
+                            }.get(payload.access_listing, payload.access_listing),
+                        ),
                     )
             elif kind == 'detail_error':
                 self._detail_snapshot = None
                 self._gallery_status.set(
-                    'Gallery detail is unsupported or unavailable. Existing '
-                    'connections and saved API-key upload remain unchanged.',
+                    gettext(
+                        "Gallery detail is unsupported or unavailable. Existing "
+                        "connections and saved API-key upload remain unchanged."
+                    ),
                 )
             elif kind == 'visibility_unknown':
                 self._gallery_status.set(self._text('linking_visibility_unknown'))
@@ -3569,7 +3614,7 @@ class LinkingManager:
                 self._gallery_status.set(self._text('linking_visibility_conflict_read'))
             elif kind == 'offline_unavailable':
                 self._status.set(
-                    'Could not reach the saved gallery renewal service. Try again when it is available.',
+                    gettext('Could not reach the saved gallery renewal service. Try again when it is available.'),
                 )
             elif kind == 'offline_error':
                 issuer, approve = (payload if isinstance(payload, tuple)
@@ -3596,8 +3641,10 @@ class LinkingManager:
                 self._status.set(self._text('linking_local_remove_failed'))
             elif kind == 'unlink_cleanup_error':
                 self._status.set(
-                    'The saved secure reconnect could not be removed. '
-                    'The gallery remains connected.',
+                    gettext(
+                        "The saved secure reconnect could not be removed. "
+                        "The gallery remains connected."
+                    ),
                 )
             elif kind == 'unlink_vault_cleared' and isinstance(payload, tuple):
                 site, revoked = payload
@@ -3605,10 +3652,12 @@ class LinkingManager:
             elif kind == 'galleries_error':
                 self._gallery_page = None
                 self._display_gallery_page()
-                self._status.set('Could not load galleries.')
+                self._status.set(gettext('Could not load galleries.'))
                 self._gallery_status.set(
-                    'Could not load the current gallery list. Access may have '
-                    'expired or been revoked; refresh after reconnecting.',
+                    gettext(
+                        "Could not load the current gallery list. Access may have "
+                        "expired or been revoked; refresh after reconnecting."
+                    ),
                 )
             elif kind == 'response_error' and isinstance(
                 payload, LinkingResponseError,
@@ -3617,35 +3666,36 @@ class LinkingManager:
                 summary = payload.safe_summary
                 self._record_diagnostic(summary, failure=True)
                 if payload.reason == 'dns_failure':
-                    message = 'Could not resolve the gallery address (DNS).'
+                    message = gettext('Could not resolve the gallery address (DNS).')
                 elif payload.reason == 'connect_failure':
-                    message = 'Could not connect to the gallery service.'
+                    message = gettext('Could not connect to the gallery service.')
                 elif payload.reason == 'tls_failure':
-                    message = 'Could not establish secure HTTPS to the gallery.'
+                    message = gettext('Could not establish secure HTTPS to the gallery.')
                 elif payload.reason == 'timeout':
-                    message = 'The gallery request timed out.'
+                    message = gettext('The gallery request timed out.')
                 elif (payload.status is not None
                       and payload.content_kind == 'html'):
-                    message = (
-                        f'The gallery returned HTTP {payload.status} '
-                        'with an HTML response.'
-                    )
+                    message = gettext(
+                        'The gallery returned HTTP {status} with an HTML response.',
+                    ).format(status=payload.status)
                 elif payload.status is not None:
-                    message = f'The gallery returned HTTP {payload.status}.'
+                    message = gettext('The gallery returned HTTP {status}.').format(
+                        status=payload.status,
+                    )
                 else:
-                    message = 'The linking response could not be accepted.'
+                    message = gettext('The linking response could not be accepted.')
                 self._status.set(message)
             elif kind == 'denied':
                 self._clear_handoff()
-                self._status.set('The gallery did not approve this link.')
+                self._status.set(gettext('The gallery did not approve this link.'))
             elif kind == 'exchanging':
                 self._clear_handoff()
-                self._status.set('Checking the approved identity…')
+                self._status.set(gettext('Checking the approved identity…'))
             elif kind == 'revoked':
-                self._status.set('Gallery unlinked.')
+                self._status.set(gettext('Gallery unlinked.'))
             elif kind == 'revoke_error':
                 self._status.set(
-                    'Unlinked locally. Check Manage link to confirm server revocation.',
+                    gettext('Unlinked locally. Check Manage link to confirm server revocation.'),
                 )
             elif kind in (
                 'unavailable', 'https_failed', 'request_failed',
@@ -3695,9 +3745,11 @@ class LinkingManager:
             else:
                 self._clear_handoff()
                 self._status.set(
-                    'Linking could not be verified; an older server may not '
-                    'support it. Saved API-key upload remains available. '
-                    'A server grant may exist; review gallery links.',
+                    gettext(
+                        "Linking could not be verified; an older server may not "
+                        "support it. Saved API-key upload remains available. "
+                        "A server grant may exist; review gallery links."
+                    ),
                 )
         if self._handoff is not None and time.monotonic() >= self._handoff.expires_at:
             self._clear_handoff()
@@ -3880,7 +3932,7 @@ class LinkingManager:
             self._direct_owner = owner
         if silent:
             self._website_request_owner = owner
-        self._status.set('Checking the securely saved connection…')
+        self._status.set(gettext('Checking the securely saved connection…'))
 
         def worker() -> None:
             """Rotate and verify the same identity without touching Tk.
@@ -3943,7 +3995,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._status.set('Could not start the secure reconnect.')
+            self._status.set(gettext('Could not start the secure reconnect.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -3959,17 +4011,19 @@ class LinkingManager:
                 or self._worker is not None and self._worker.is_alive()):
             return
         if not messagebox.askyesno(
-            'Forget saved link',
-            'Remove the saved local credential? The current session remains active. '
-            'This does not revoke the server grant. Manage gallery links to '
-            'review or revoke it.',
+            gettext('Forget saved link'),
+            gettext(
+                "Remove the saved local credential? The current session remains active. "
+                "This does not revoke the server grant. Manage gallery links to "
+                "review or revoke it."
+            ),
             parent=self._window,
         ):
             return
         path = self._offline_binding_path(binding)
         owner = object()
         self._owner = owner
-        self._status.set('Removing the saved local link…')
+        self._status.set(gettext('Removing the saved local link…'))
 
         def worker() -> None:
             """Discard only the selected local binding and credential.
@@ -3990,7 +4044,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._status.set('Could not start local removal.')
+            self._status.set(gettext('Could not start local removal.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4008,7 +4062,7 @@ class LinkingManager:
                 or self._worker is not None and self._worker.is_alive()):
             return
         title = simpledialog.askstring(
-            'Create gallery', 'Gallery title:', parent=self._window,
+            gettext('Create gallery'), gettext('Gallery title:'), parent=self._window,
         )
         if title is None:
             return
@@ -4017,9 +4071,11 @@ class LinkingManager:
         if page is not None and 0 <= index < len(page.galleries):
             parent = page.galleries[index]
             use_parent = messagebox.askyesnocancel(
-                'Create gallery',
-                'Create inside ' + _gallery_label(parent)
-                + '? Choose No to create at the root.', parent=self._window,
+                gettext('Create gallery'),
+                gettext('Create inside {gallery}? Choose No to create at the root.').format(
+                    gallery=_gallery_label(parent),
+                ),
+                parent=self._window,
             )
             if use_parent is None:
                 return
@@ -4064,7 +4120,7 @@ class LinkingManager:
                     or abandon_intent is not None else None)
         self._create_dispatch = dispatch
         self._owner = owner
-        self._gallery_status.set('Checking gallery creation…')
+        self._gallery_status.set(gettext('Checking gallery creation…'))
 
         def worker() -> None:
             """Perform the single journalled action without accessing Tk.
@@ -4103,7 +4159,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not start gallery creation.')
+            self._gallery_status.set(gettext('Could not start gallery creation.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4140,7 +4196,7 @@ class LinkingManager:
             return
         owner, issuer, account = object(), self._session_issuer, self._session_user_id
         self._owner = owner
-        self._gallery_status.set('Reading the original creation request…')
+        self._gallery_status.set(gettext('Reading the original creation request…'))
 
         def worker() -> None:
             """Read only the validated profile-bound intent off the Tk thread.
@@ -4162,7 +4218,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not read the original creation request.')
+            self._gallery_status.set(gettext('Could not read the original creation request.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4184,7 +4240,7 @@ class LinkingManager:
         self._detail_snapshot = None
         owner = object()
         self._owner = owner
-        self._gallery_status.set('Acknowledging the saved creation receipt…')
+        self._gallery_status.set(gettext('Acknowledging the saved creation receipt…'))
 
         def worker() -> None:
             """Clear only the completed receipt explicitly acknowledged here.
@@ -4208,7 +4264,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not acknowledge the creation receipt.')
+            self._gallery_status.set(gettext('Could not acknowledge the creation receipt.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4242,7 +4298,7 @@ class LinkingManager:
             self._gallery_search_cancel = gallery_cancel
         self._direct_owner = owner if self._window is None else None
         self._gallery_status.set(self._text('linking_gallery_searching') if query
-                                 else 'Loading the current gallery page…')
+                                 else gettext('Loading the current gallery page…'))
 
         def worker() -> None:
             """Fetch one server-authorized page without accessing Tk widgets.
@@ -4271,7 +4327,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not start the gallery request.')
+            self._gallery_status.set(gettext('Could not start the gallery request.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4329,9 +4385,11 @@ class LinkingManager:
                 or self._worker is not None and self._worker.is_alive()):
             return
         size = simpledialog.askinteger(
-            'Check uncertain upload',
-            'Enter the original file size in bytes. No local file is opened. '
-            'A match only reports observed bytes and does not confirm an upload.',
+            gettext('Check uncertain upload'),
+            gettext(
+                "Enter the original file size in bytes. No local file is opened. "
+                "A match only reports observed bytes and does not confirm an upload."
+            ),
             parent=self._window, minvalue=1, maxvalue=LINKING_RECOVERY_MAX_FILE_BYTES,
         )
         if (size is None or self._window is None
@@ -4342,7 +4400,7 @@ class LinkingManager:
             return
         owner = object()
         self._owner = owner
-        self._gallery_status.set('Checking the uncertain upload once…')
+        self._gallery_status.set(gettext('Checking the uncertain upload once…'))
 
         def worker() -> None:
             """Observe the journaled hash without accessing Tk or its source.
@@ -4363,7 +4421,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not start the upload observation.')
+            self._gallery_status.set(gettext('Could not start the upload observation.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4386,7 +4444,7 @@ class LinkingManager:
         self._detail_snapshot = None
         owner, cancel = object(), threading.Event()
         self._owner, self._gallery_cancel = owner, cancel
-        self._gallery_status.set('Reading the selected gallery details…')
+        self._gallery_status.set(gettext('Reading the selected gallery details…'))
 
         def worker() -> None:
             """Read one selected gallery without touching Tk widgets.
@@ -4407,7 +4465,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not start the gallery detail request.')
+            self._gallery_status.set(gettext('Could not start the gallery detail request.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4448,7 +4506,12 @@ class LinkingManager:
             return
         session, page = self._session, self._gallery_page
         selected = self._gallery_choice.current()
-        target = self._visibility_choice.get()
+        labels = _visibility_labels()
+        selected_label = self._visibility_choice.get()
+        target = next(
+            (code for code, label in labels.items() if label == selected_label),
+            "",
+        )
         if (snapshot is None or session is not snapshot[1]
                 or self._session_issuer != self._current_issuer
                 or self._current_issuer != snapshot[2]
@@ -4462,12 +4525,14 @@ class LinkingManager:
         detail = snapshot[0]
         previous = 'unpublished' if detail.visibility == 'draft' else detail.visibility
         if target == previous:
-            self._gallery_status.set('Choose a different visibility.')
+            self._gallery_status.set(gettext('Choose a different visibility.'))
             return
         if not messagebox.askyesno(
             self._text('linking_visibility_action'),
             self._text('linking_visibility_confirm').format(
-                gallery=detail.gallery_id, previous=detail.visibility, target=target,
+                gallery=detail.gallery_id,
+                previous=labels.get(previous, gettext(previous)),
+                target=labels[target],
             ),
             parent=self._window, default=messagebox.NO,
         ):
@@ -4510,7 +4575,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not start the visibility request; read details again.')
+            self._gallery_status.set(gettext('Could not start the visibility request; read details again.'))
             self._refresh(self._current_issuer)
             return
         self._refresh(self._current_issuer)
@@ -4525,8 +4590,10 @@ class LinkingManager:
         """
         if not (LINKING_UPLOAD_TARGET_READY and LINKING_CREATED_TARGET_READY):
             self._gallery_status.set(
-                'Linked upload selection is temporarily unavailable. '
-                'The current connection remains selected.',
+                gettext(
+                    "Linked upload selection is temporarily unavailable. "
+                    "The current connection remains selected."
+                ),
             )
             return
         if not self._check_upload_workspace():
@@ -4538,7 +4605,7 @@ class LinkingManager:
         if (self._session is not session or self._session_issuer != issuer
                 or self._current_issuer != issuer or self._session_user_id != account
                 or getattr(self, '_commit_linked_target', None) is None):
-            self._gallery_status.set('Reconnect and verify the created gallery first.')
+            self._gallery_status.set(gettext('Reconnect and verify the created gallery first.'))
             return
         try:
             if (not session.can_upload() or not session.can_create_gallery()
@@ -4546,13 +4613,13 @@ class LinkingManager:
                 raise LinkingError('Gallery session is unavailable.')
             scope = session.approved_scope()
         except Exception:
-            self._gallery_status.set('Reconnect and verify the created gallery first.')
+            self._gallery_status.set(gettext('Reconnect and verify the created gallery first.'))
             return
         owner = object()
         cancel = threading.Event()
         self._owner = owner
         self._gallery_cancel = cancel
-        self._gallery_status.set('Verifying the created gallery before selection…')
+        self._gallery_status.set(gettext('Verifying the created gallery before selection…'))
 
         def worker() -> None:
             """Verify the original receipt and the independent current gallery.
@@ -4587,7 +4654,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._gallery_status.set('Could not verify the created gallery.')
+            self._gallery_status.set(gettext('Could not verify the created gallery.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -4613,8 +4680,10 @@ class LinkingManager:
         """
         if not (LINKING_UPLOAD_TARGET_READY and LINKING_CREATED_TARGET_READY):
             self._gallery_status.set(
-                'Linked upload selection is temporarily unavailable. '
-                'The current connection remains selected.',
+                gettext(
+                    "Linked upload selection is temporarily unavailable. "
+                    "The current connection remains selected."
+                ),
             )
             return
         created = self._created_gallery
@@ -4629,7 +4698,7 @@ class LinkingManager:
                 or target.session is not session or target.issuer != issuer
                 or target.user_id != account
                 or target.gallery_id != bound.gallery.gallery_id):
-            self._gallery_status.set('The created gallery verification is no longer current.')
+            self._gallery_status.set(gettext('The created gallery verification is no longer current.'))
             return
         try:
             if (not session.can_upload() or not session.can_create_gallery()
@@ -4637,7 +4706,7 @@ class LinkingManager:
                     or session.approved_scope() != scope):
                 raise LinkingError('Created gallery session changed.')
         except Exception:
-            self._gallery_status.set('The created gallery verification is no longer current.')
+            self._gallery_status.set(gettext('The created gallery verification is no longer current.'))
             return
 
         previous_target = self._active_upload_target
@@ -4671,15 +4740,17 @@ class LinkingManager:
             self._active_upload_target = target
             self._selected_gallery = gallery
             self._gallery_status.set(
-                'Linked upload target: ' + _gallery_label(gallery)
-                + '. The saved API key remains unchanged.',
+                gettext('Linked upload target: ') + _gallery_label(gallery)
+                + gettext('. The saved API key remains unchanged.'),
             )
             try:
                 self._notify_target_changed()
             except Exception:
                 self._gallery_status.set(
-                    'Upload mode was activated, but the display did not refresh. '
-                    'Reopen the connection view to verify the target.',
+                    gettext(
+                        "Upload mode was activated, but the display did not refresh. "
+                        "Reopen the connection view to verify the target."
+                    ),
                 )
             return True
 
@@ -4705,16 +4776,20 @@ class LinkingManager:
                 # A closed or broken Tk view must not undo the target rollback.
                 pass
             self._gallery_status.set(
-                'Linked upload mode is unconfirmed. Reconnect and verify the '
-                'saved mode before attempting any upload.',
+                gettext(
+                    "Linked upload mode is unconfirmed. Reconnect and verify the "
+                    "saved mode before attempting any upload."
+                ),
             )
             return
         # Retain the previous target even if the host cannot repaint.
         self._active_upload_target = previous_target
         self._selected_gallery = previous_gallery
         self._gallery_status.set(
-            'Finish or resolve existing upload work and verify the original '
-            'creation receipt before changing target.',
+            gettext(
+                "Finish or resolve existing upload work and verify the original "
+                "creation receipt before changing target."
+            ),
         )
 
     def _apply_verified_upload_target(
@@ -4759,8 +4834,10 @@ class LinkingManager:
             except Exception:  # noqa: BLE001
                 pass
             self._gallery_status.set(
-                'Linked upload permission changed; reconnect and verify the '
-                'saved mode before uploading.',
+                gettext(
+                    "Linked upload permission changed; reconnect and verify the "
+                    "saved mode before uploading."
+                ),
             )
             return False
         if (not LINKING_UPLOAD_TARGET_READY
@@ -4774,8 +4851,10 @@ class LinkingManager:
                 or page is None or not 0 <= index < len(page.galleries)
                 or page.galleries[index] is not gallery):
             self._gallery_status.set(
-                'The gallery selection changed during verification. '
-                'The previous upload target remains unchanged.',
+                gettext(
+                    "The gallery selection changed during verification. "
+                    "The previous upload target remains unchanged."
+                ),
             )
             return False
         refusal = self._target_refusal(target.binding())
@@ -4796,21 +4875,25 @@ class LinkingManager:
             except Exception:  # noqa: BLE001
                 pass
             self._gallery_status.set(
-                'Linked upload mode is unconfirmed. Reconnect and verify the '
-                'saved mode before attempting any upload.',
+                gettext(
+                    "Linked upload mode is unconfirmed. Reconnect and verify the "
+                    "saved mode before attempting any upload."
+                ),
             )
             return False
         self._active_upload_target = target
         self._selected_gallery = gallery
         self._gallery_status.set(
-            'Upload gallery: ' + _gallery_label(gallery),
+            gettext('Upload gallery: ') + _gallery_label(gallery),
         )
         try:
             self._notify_target_changed()
         except Exception:
             self._gallery_status.set(
-                'Upload mode was activated, but the display did not refresh. '
-                'Reopen the connection view to verify the target.',
+                gettext(
+                    "Upload mode was activated, but the display did not refresh. "
+                    "Reopen the connection view to verify the target."
+                ),
             )
             return False
         return True
@@ -4845,20 +4928,22 @@ class LinkingManager:
         if self._session.can_upload():
             if not LINKING_UPLOAD_TARGET_READY:
                 self._gallery_status.set(
-                    'Linked upload selection is temporarily unavailable. '
-                    'The current connection remains selected.',
+                    gettext(
+                        "Linked upload selection is temporarily unavailable. "
+                        "The current connection remains selected."
+                    ),
                 )
                 return
             if not self._check_upload_workspace():
                 return
             if getattr(self, '_commit_linked_target', None) is None:
                 self._gallery_status.set(
-                    'The application cannot safely commit a linked upload mode.',
+                    gettext('The application cannot safely commit a linked upload mode.'),
                 )
                 return
             if self._worker is not None and self._worker.is_alive():
                 self._gallery_status.set(
-                    'Wait for the previous gallery verification to finish.',
+                    gettext('Wait for the previous gallery verification to finish.'),
                 )
                 return
             session = self._session
@@ -4870,7 +4955,7 @@ class LinkingManager:
             self._owner = owner
             self._gallery_cancel = cancel
             self._gallery_status.set(
-                'Verifying the administrator and selected gallery…',
+                gettext('Verifying the administrator and selected gallery…'),
             )
 
             def worker() -> None:
@@ -4897,7 +4982,7 @@ class LinkingManager:
                 self._worker.start()
             except RuntimeError:
                 self._worker = None
-                self._gallery_status.set('Could not start gallery verification.')
+                self._gallery_status.set(gettext('Could not start gallery verification.'))
                 return
             self._refresh(self._current_issuer)
             self._schedule_poll()
@@ -4951,7 +5036,7 @@ class LinkingManager:
             opened = False
         if not opened:
             if self._window is None and self._address_prompt is None:
-                self._status.set('Could not open the browser. Try connecting again.')
+                self._status.set(gettext('Could not open the browser. Try connecting again.'))
                 self._clear_handoff()
                 self._cancel.set()
                 self._owner = None
@@ -4975,7 +5060,7 @@ class LinkingManager:
         """
         issuer = self._session_issuer or self._current_issuer
         if not issuer:
-            self._status.set('Enter a valid gallery address first.')
+            self._status.set(gettext('Enter a valid gallery address first.'))
             return
         try:
             opened = webbrowser.open(
@@ -4984,7 +5069,7 @@ class LinkingManager:
         except Exception:  # noqa: BLE001
             opened = False
         if not opened:
-            self._status.set('Could not open the gallery in your browser.')
+            self._status.set(gettext('Could not open the gallery in your browser.'))
 
     def unlink(self, issuer: str | None = None) -> None:
         """Disconnect one selected live link and request server revocation.
@@ -5004,7 +5089,7 @@ class LinkingManager:
             return
         session = site.session
         if self._worker is not None and self._worker.is_alive():
-            self._status.set('Wait for the current gallery request to finish.')
+            self._status.set(gettext('Wait for the current gallery request to finish.'))
             return
         target = self._active_upload_target
         disconnects_upload = target is not None and target.session is session
@@ -5018,7 +5103,7 @@ class LinkingManager:
         owner = object()
         self._owner = owner
         self._direct_owner = owner if self._window is None else None
-        self._status.set('Removing the saved connection…')
+        self._status.set(gettext('Removing the saved connection…'))
 
         def cleanup_worker() -> None:
             """Remove the matching vault grant and revoke its latest credential.
@@ -5058,7 +5143,7 @@ class LinkingManager:
             self._worker.start()
         except RuntimeError:
             self._worker = None
-            self._status.set('Could not start secure unlink cleanup.')
+            self._status.set(gettext('Could not start secure unlink cleanup.'))
             return
         self._refresh(self._current_issuer)
         self._schedule_poll()
@@ -5092,12 +5177,12 @@ class LinkingManager:
         else:
             self._parked_links = tuple(link for link in self._parked_links
                                        if link.session is not session)
-        self._status.set('Unlinking gallery…')
+        self._status.set(gettext('Unlinking gallery…'))
         if revoked is not None:
             session.close()
             self._status.set(
-                'Gallery unlinked.' if revoked else
-                'Unlinked locally. Check Manage link to confirm server revocation.',
+                gettext('Gallery unlinked.') if revoked else
+                gettext('Unlinked locally. Check Manage link to confirm server revocation.'),
             )
             if disconnects_upload:
                 self._notify_target_changed()
@@ -5125,7 +5210,7 @@ class LinkingManager:
         except RuntimeError:
             session.close()
             self._worker = None
-            self._status.set('Unlinked locally. Check Manage link to revoke access.')
+            self._status.set(gettext('Unlinked locally. Check Manage link to revoke access.'))
         else:
             self._refresh(self._current_issuer)
             self._schedule_poll()
