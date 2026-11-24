@@ -1,5 +1,131 @@
 # Patch notes
 
+## Version 1.5.5
+
+PHP Gallery 1.5.5 includes WinApp 1.5.5 with smoother Watcher, Import and
+Lightbox interactions during background work.
+
+### Highlights
+
+#### WinApp responsiveness
+
+- Reduced repeated Watcher and Activity updates so the desktop interface
+  stays responsive while files are monitored and uploaded.
+  [#434](https://github.com/klusik/PHP_gallery/issues/434)
+- Kept Import controls responsive during large jobs by updating changed rows
+  in batches and loading saved history in the background.
+- Improved Lightbox navigation and zoom on large images. The viewer prepares a
+  preview during interaction and displays a full-quality render after input
+  settles.
+
+### Technical Details
+
+#### WinApp
+
+- Batched presentation updates while preserving Watcher event order and durable
+  Activity writes.
+- Published immutable Import progress snapshots after the job state was saved
+  and verified. The presentation retains selection, scroll and focus when rows
+  are updated.
+- Moved Lightbox raster preparation to a bounded Pillow worker in
+  `winapp/uploader/lightbox_raster.py`. Tk retains the Canvas photo item and
+  checks the active image and access before publishing a result.
+
+#### Tests and measurements
+
+- Added regressions for Watcher presentation, Import persistence and stale
+  events, Lightbox access revocation, and final-raster pixel quality.
+- Added a hosted paired benchmark and report for responsiveness, throughput
+  and resource use under both normal and mixed workloads.
+
+#### Hosted performance measurements
+
+The final Windows benchmark compared B0 (WinApp 1.5.4) with BF, the Phase 2
+runtime source carried into WinApp 1.5.5. It completed 47 workload/cache cells
+and 463 matched pairs. Primary cells used 10 pairs on the same runner in
+alternating order. The 180-second stress cell used three pairs. The table
+shows medians across independent processes, with percentages calculated
+from those medians. Cold and warm cache results are listed separately.
+[Benchmark, raw data and report](https://github.com/klusik/PHP_gallery/actions/runs/45310622902/attempts/3)
+
+| Workload and metric | B0 | BF | Change |
+| --- | ---: | ---: | ---: |
+| Idle for 60 s, process CPU time | 4.48 s | 2.05 s | −54.3% |
+| Idle for 60 s, repeated `StringVar` assignments | 3,967 | 58 | −98.5% |
+| Regular Watcher, warm, event-loop drift p95 | 41.83 ms | 14.65 ms | −65.0% |
+| Regular Watcher, warm, processed events/s | 194.84 | 252.81 | +29.8% |
+| Saturated Watcher, warm, event-loop drift p95 | 61.80 ms | 35.97 ms | −41.8% |
+| Saturated Watcher, warm, processed events/s | 280.33 | 1,752.58 | 6.25× |
+| Import 1,000 items, warm, event-loop drift p95 | 439.16 ms | 20.64 ms | −95.3% |
+| Import 5,000 items, cold, event-loop drift p95 | 542.98 ms | 37.73 ms | −93.1% |
+| Import 5,000 items, warm, event-loop drift p95 | 614.10 ms | 56.14 ms | −90.9% |
+| Import 5,000 items, cold, upload-state JSON decodes on Tk | 102 | 0 | −100% |
+| Import 5,000 items, warm, confirmed items/s | 1.64 | 1.85 | +12.9% |
+| Photos with Watcher, cold, event-loop drift p95 | 44.65 ms | 15.51 ms | −65.3% |
+| Rapid 4K Lightbox, warm, event-loop drift p95 | 885.71 ms | 48.26 ms | −94.6% |
+| Rapid 4K Lightbox, warm, event-loop drift p99 | 889.07 ms | 49.08 ms | −94.5% |
+| Rapid 4K Lightbox, warm, software input feedback p95 | 890.67 ms | 1.31 ms | −99.9% |
+| Rapid 4K Lightbox, warm, Canvas item creates in the window | 136 | 0 | −100% |
+| Regular 4K Lightbox, warm, event-loop drift p95 | 185.79 ms | 70.23 ms | −62.2% |
+| Import with Photos/Lightbox, cold, event-loop drift p95 | 1,087.93 ms | 267.33 ms | −75.4% |
+| Import with Photos/Lightbox, warm, event-loop drift p95 | 1,042.12 ms | 268.13 ms | −74.3% |
+| Mixed 180 s session, event-loop drift p95 | 957.58 ms | 274.09 ms | −71.4% |
+
+The paired 95% confidence intervals for mean changes were −29.48 to
+−27.13 ms for regular warm Watcher drift p95, −548.11 to −488.34 ms for cold
+5,000-item Import drift p95, and −839.35 to −822.40 ms for rapid warm 4K
+drift p95. Event-loop drift measures Tk scheduling delay. Software input
+feedback and final Canvas publication have separate timers. Physical display
+latency and hardware HDR are outside this measurement. Idle event-loop drift
+p95 stayed near 14.8 ms as repeated updates and CPU time fell.
+
+#### Heavy-load trade-offs
+
+| Workload and metric | B0 | BF | Change |
+| --- | ---: | ---: | ---: |
+| Regular 4K Lightbox, warm, final raster publication p95 | 107.76 ms | 155.57 ms | +44.4% |
+| Import with Photos/Lightbox, cold, confirmed items/s | 2.740 | 2.365 | −13.7% |
+| Import with Photos/Lightbox, warm, confirmed items/s | 2.852 | 2.484 | −12.9% |
+| Saturated Watcher, cold, event-loop drift p99 | 41.74 ms | 68.55 ms | +64.2% |
+| Saturated Watcher, cold, processed events/s | 218.86 | 1,592.60 | 7.28× |
+| Mixed 180 s session, completed GUI workload steps | 273 | 572 | 2.10× |
+| Mixed 180 s session, processed Watcher events/s | 18.02 | 200.42 | 11.12× |
+| Mixed 180 s session, confirmed Import items/s | 2.589 | 1.716 | −33.7% |
+| Mixed 180 s session, Lightbox preview publication p95 | 122.27 ms | 159.49 ms | +30.4% |
+| Mixed 180 s session, Lightbox final publication p95 | 160.02 ms | 252.80 ms | +58.0% |
+| Mixed 180 s session, steady sampled working set | 163.4 MiB | 181.8 MiB | +11.2% |
+| Mixed 180 s session, OS peak working set | 466.0 MiB | 463.9 MiB | −0.4% |
+
+- The Lightbox favors responsive controls while the final raster is
+  prepared. The regular warm 4K final raster took about 48 ms longer at p95.
+  Its paired 95% confidence interval was +47.47 to +50.61 ms. The viewer can
+  keep the authorized previous frame visible while the next render is prepared.
+- During a cold Watcher burst, the offered event rate stayed near 2,450/s.
+  The queue drained many more events while p99 Tk delay increased.
+- In the fixed-length mixed fixture, faster GUI steps also offered more
+  Watcher work, from 95.81 to 197.11 events/s. The aggregate worker time
+  inside the accepted-work state owner rose from 159.25 to 175.25 s. Import
+  throughput in this fixture fell by 0.87 items/s, with a paired 95%
+  confidence interval of −1.07 to −0.73 items/s. The result describes the
+  combined workload as delivered, including its higher effective load.
+- The benchmark reports 16 performance-margin exceedances and four
+  inconclusive comparisons. Detailed results, intervals, scenario definitions
+  and retained retry evidence are linked in the issue.
+  [#434 measurement readout](https://github.com/klusik/PHP_gallery/issues/434#issuecomment-7121176587)
+
+### User Impact
+
+#### For WinApp users
+
+- Improved responsiveness when browsing photos during a large import or while
+  Watcher is active. In hosted testing, the final Lightbox image could appear
+  later at full quality and Import throughput could fall under heavy combined
+  load.
+
+#### For gallery users
+
+- This patch focuses on desktop companion workflows and the WinApp installer.
+
 ## Version 1.5.4
 
 Restored WinApp website approval in Firefox and refreshed the repository
