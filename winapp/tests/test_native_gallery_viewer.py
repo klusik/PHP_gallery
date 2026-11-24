@@ -8747,8 +8747,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._select_photo(0)
         self._wait_until(
             lambda: viewer._lightbox is not None
-            and viewer._lightbox._source_image is not None,
-            'The lightbox did not prepare the selected photo.',
+            and viewer._lightbox._photo is not None,
+            'The Lightbox did not attach the selected photo before zoom input.',
         )
         lightbox = viewer._lightbox
         assert lightbox is not None
@@ -9068,6 +9068,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._move_lightbox(-1)
         self._wait_until(
             lambda: viewer._slide_index == 0
+            and viewer._lightbox._photo is not None
             and ImageTk.getimage(viewer._lightbox._photo).getpixel((0, 0))
             == (220, 35, 45, 255),
             'Left navigation did not reach the album’s first photo.',
@@ -9075,6 +9076,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._move_lightbox(-1)
         self._wait_until(
             lambda: viewer._slide_index == len(first_page.photos)
+            and viewer._lightbox._photo is not None
             and ImageTk.getimage(viewer._lightbox._photo).getpixel((0, 0))
             == (50, 70, 240, 255),
             'Left navigation did not wrap from the first to the last photo.',
@@ -9088,6 +9090,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._move_lightbox(1)
         self._wait_until(
             lambda: viewer._slide_index == 0
+            and viewer._lightbox._photo is not None
             and ImageTk.getimage(viewer._lightbox._photo).getpixel((0, 0))
             == (220, 35, 45, 255),
             'Right navigation did not wrap from the last to the first photo.',
@@ -9518,6 +9521,43 @@ class NativeGalleryViewerTests(unittest.TestCase):
             str(viewer._tile_buttons[0]), str(self.root.focus_get()),
         )
         viewer.close()
+
+    def test_lightbox_revocation_clears_the_photo_before_pending_publication(self) -> None:
+        """Fence the mounted viewer's retained photo at the session boundary.
+
+        Returns:
+            None: Revocation clears an attached photo and any pending resize.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Pending raster grant'),
+        )
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: len(viewer._tile_buttons) == len(page.photos)
+            and viewer._worker is None,
+            'The authorised viewer did not finish opening the gallery.',
+        )
+        viewer._open_grid_photo(0)
+        self._wait_until(
+            lambda: viewer._lightbox is not None and viewer._lightbox._photo is not None,
+            'The authorised Lightbox did not attach its first photo.',
+        )
+        lightbox = viewer._lightbox
+        assert lightbox is not None
+        with mock.patch.object(
+            lightbox, '_publish_raster_result', wraps=lightbox._publish_raster_result,
+        ) as publish:
+            lightbox._zoom = native_gallery_viewer.LIGHTBOX_ZOOM_STEP
+            lightbox._render_image()
+            self.assertTrue(lightbox._raster_request_inflight)
+            session.can_read_media.return_value = False
+            self._wait_until(
+                lambda: lightbox._photo is None and not lightbox.visible,
+                'The old photo remained attached after withdrawal of access.',
+            )
+            publish.assert_not_called()
 
     def test_lightbox_f_fullscreen_keys_and_command_text_guards(self) -> None:
         """Toggle fullscreen once from the focused overlay and preserve text.
@@ -10061,10 +10101,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer.close()
 
     def test_adjacent_detail_prefetch_makes_arrow_navigation_immediate(self) -> None:
-        """Use bounded prepared neighbors without a second foreground request.
+        """Keep the current frame visible while publishing a prefetched neighbor.
 
         Returns:
-            None: The adjacent image displays from memory after its prefetch.
+            None: Selection advances immediately and the new authorized pixels
+                reuse the same Canvas item without another foreground request.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -10099,16 +10140,24 @@ class NativeGalleryViewerTests(unittest.TestCase):
             [TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID], detail_ids,
         )
 
+        lightbox = viewer._lightbox
+        assert lightbox is not None
+        previous = lightbox._photo
+        retained_item = lightbox._photo_item_id
         viewer._move_lightbox(1)
 
         self.assertEqual(
             TEST_SECOND_IMAGE_ID,
             viewer._photos[viewer._slide_index].image_id,
         )
-        self.assertEqual(
-            (20, 190, 95, 255),
-            ImageTk.getimage(viewer._lightbox._photo).getpixel((0, 0)),
+        self.assertIs(previous, lightbox._photo)
+        self._wait_until(
+            lambda: lightbox._photo is not None
+            and ImageTk.getimage(lightbox._photo).getpixel((0, 0))
+            == (20, 190, 95, 255),
+            'The prefetched neighbor did not publish its pixels.',
         )
+        self.assertEqual(retained_item, lightbox._photo_item_id)
         self.assertEqual(
             detail_ids,
             [

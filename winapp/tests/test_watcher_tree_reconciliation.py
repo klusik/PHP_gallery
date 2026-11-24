@@ -15,6 +15,7 @@ import importlib.util
 import sys
 import unittest
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Dict, Tuple, cast
@@ -25,6 +26,12 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+from uploader.import_history_reader import ImportHistoryReadResult
+from uploader.import_ui_snapshot import (
+    ImportHistorySummary,
+    ImportProgressSnapshot,
+    new_worker_generation,
+)
 from uploader.models import ActivityEvent, ImportItem, ImportJob
 
 
@@ -452,6 +459,259 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
             created_at=JOB_FIXTURE_EPOCH_SECONDS + created_offset_seconds,
         )
 
+    def _history_rows(
+        self, jobs: list[ImportJob], revision: int,
+    ) -> tuple[ImportHistorySummary, ...]:
+        """Create immutable history summaries through the real projection model.
+
+        Args:
+            jobs (list[ImportJob]): Ordered durable jobs to project.
+            revision (int): Synthetic reader revision for the fixture snapshot.
+
+        Returns:
+            tuple[ImportHistorySummary, ...]: Stable rows in the supplied order.
+        """
+        summaries: list[ImportHistorySummary] = []
+        for job in jobs:
+            snapshot = ImportProgressSnapshot.from_job(
+                job,
+                new_worker_generation(),
+                revision,
+                MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+            )
+            summaries.append(replace(
+                snapshot.history,
+                created_label=f"created-{job.created_at}",
+            ))
+        return tuple(summaries)
+
+    def _prepare_async_history_host(self, reader: SimpleNamespace) -> None:
+        """Initialize the projection lifecycle fields for constructor bypass.
+
+        Args:
+            reader (SimpleNamespace): Deterministic reader double for the event pump.
+
+        Returns:
+            None: History selection and immediate presentation can be exercised.
+        """
+        self.app._import_presentation_after = 0.0
+        self.app._import_presentation_flushes = 0
+        self.app._presented_import_views = {}
+        self.app._history_import_view = None
+        self.app._live_import_view = None
+        self.app._import_history_rows = {}
+        self.app._import_history_dirty = {}
+        self.app._import_history_rebuild = False
+        self.app._import_history_requested = False
+        self.app._recheck_import_history = False
+        self.app._import_detail_request = None
+        self.app._import_history_reader = reader
+        self.app.current_job = None
+        self.app.manual_plan = None
+        self.app._activity_tab_selected = True
+        self.app._import_tab_selected = False
+        self.app.activity_job_summary_var = Mock()
+        self.app.retry_failed_button = Mock()
+
+    def test_history_refresh_preserves_job_selection_and_recovery_action(self) -> None:
+        """Preserve history viewport and adopt only a fenced detail result.
+
+        Returns:
+            None: Async history keeps row state and selection enables explicit retry.
+        """
+        jobs = [
+            self.make_job(f"job-{index}", float(-index))
+            for index in range(
+                MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
+                + HISTORY_OVER_CAP_EXTRA_ROWS
+            )
+        ]
+        selected_job = jobs[SELECTED_HISTORY_FIXTURE_INDEX]
+        selected_job.items.append(ImportItem(
+            id="retry-item",
+            path="retry.jpg",
+            source_label="retry.jpg",
+            state="failed_retryable",
+        ))
+        newest_job = self.make_job("newest-job", float(len(jobs)))
+        reader = SimpleNamespace(
+            request_history=Mock(side_effect=(1, 2)),
+            request_job=Mock(return_value=3),
+            poll_ready=Mock(side_effect=(
+                (ImportHistoryReadResult(
+                    kind="history", ticket=1,
+                    history=self._history_rows(
+                        jobs[:MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT], 1,
+                    ),
+                ),),
+            )),
+        )
+        self._prepare_async_history_host(reader)
+
+        MAIN.WatcherApp.refresh_job_history(self.app)
+        MAIN.WatcherApp._receive_import_history(self.app)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+
+        history = self.app.job_history_tree
+        selected_id = selected_job.id
+        history.selection_set(selected_id)
+        history.focus(selected_id)
+        history.vertical_view = TEST_VIEW_FRACTIONS
+        history.horizontal_view = TEST_VIEW_FRACTIONS
+        selected_job.source_label = "Updated selected source"
+        history.calls.clear()
+
+        latest_history_result = ImportHistoryReadResult(
+            kind="history", ticket=2,
+            history=self._history_rows(
+                [newest_job, *jobs][
+                    :MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
+                ],
+                2,
+            ),
+        )
+        detail_result = ImportHistoryReadResult(
+            kind="detail", ticket=3, job=selected_job,
+            snapshot=ImportProgressSnapshot.from_job(
+                selected_job, new_worker_generation(), 3,
+                MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+            ),
+        )
+        reader.poll_ready.side_effect = (
+            (latest_history_result,), (detail_result,),
+        )
+
+        MAIN.WatcherApp.refresh_job_history(self.app)
+        MAIN.WatcherApp._receive_import_history(self.app)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+
+        self.assertEqual(
+            MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT,
+            len(history.get_children("")),
+        )
+        self.assertEqual(
+            "newest-job",
+            history.get_children("")[FIRST_TREE_ROW_INDEX],
+        )
+        self.assertIn(selected_id, history.get_children(""))
+        self.assertEqual(
+            "Updated selected source",
+            history.item(selected_id, "values")[HISTORY_SOURCE_COLUMN_INDEX],
+        )
+        self.assertFalse(history.calls["selection_set"])
+        self.assertEqual((selected_id,), history.selection())
+        self.assertEqual(selected_id, history.focus())
+        self.assertEqual(TEST_VIEW_FRACTIONS, history.yview())
+        self.assertEqual(TEST_VIEW_FRACTIONS, history.xview())
+
+        MAIN.WatcherApp.select_history_job(self.app)
+        self.assertEqual((3, selected_id, "selected"), self.app._import_detail_request)
+        MAIN.WatcherApp._receive_import_history(self.app)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+
+        self.assertIs(selected_job, self.app.current_job)
+        self.assertIs(selected_job, self.app.manual_plan.job)
+        self.assertIn(
+            "target Synthetic gallery",
+            self.app.activity_job_summary_var.set.call_args.args[0],
+        )
+        self.app.retry_failed_button.configure.assert_called_once_with(
+            state="normal",
+        )
+
+    def test_stale_detail_ticket_cannot_replace_current_selection(self) -> None:
+        """Keep the selected job from the newest detail ticket only.
+
+        Returns:
+            None: A stale earlier result is ignored before the current result lands.
+        """
+        stale_job = self.make_job("stale-job", 0.0)
+        current_job = self.make_job("current-job", 1.0)
+        current_generation = new_worker_generation()
+        current_snapshot = ImportProgressSnapshot.from_job(
+            current_job, current_generation, 22,
+            MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+        )
+        reader = SimpleNamespace(
+            request_history=Mock(),
+            request_job=Mock(return_value=22),
+            poll_ready=Mock(return_value=(
+                ImportHistoryReadResult(
+                    kind="detail", ticket=21, job=stale_job,
+                    snapshot=ImportProgressSnapshot.from_job(
+                        stale_job, new_worker_generation(), 21,
+                        MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+                    ),
+                ),
+                ImportHistoryReadResult(
+                    kind="detail", ticket=22, job=current_job,
+                    snapshot=current_snapshot,
+                ),
+            )),
+        )
+        self._prepare_async_history_host(reader)
+        self.app.job_history_tree.selection_set(current_job.id)
+        self.app._import_detail_request = (22, current_job.id, "selected")
+
+        MAIN.WatcherApp._receive_import_history(self.app)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+
+        self.assertIs(current_job, self.app.current_job)
+        self.assertIs(current_job, self.app.manual_plan.job)
+        self.assertEqual("current-job", self.app._history_import_view.latest.history.job_id)
+        self.assertIsNone(self.app._import_detail_request)
+
+    def test_repeated_history_refresh_keeps_active_result_and_one_followup(self) -> None:
+        """Coalesce repeated list refreshes without discarding the active result.
+
+        Returns:
+            None: The first list applies and exactly one follow-up request is issued.
+        """
+        first_job = self.make_job("first-history-job", 0.0)
+        second_job = self.make_job("second-history-job", 1.0)
+        reader = SimpleNamespace(
+            request_history=Mock(side_effect=(31, 32)),
+            request_job=Mock(),
+            poll_ready=Mock(side_effect=(
+                (ImportHistoryReadResult(
+                    kind="history", ticket=31,
+                    history=self._history_rows([first_job], 31),
+                ),),
+                (ImportHistoryReadResult(
+                    kind="history", ticket=32,
+                    history=self._history_rows(
+                        [second_job, first_job], 32,
+                    ),
+                ),),
+            )),
+        )
+        self._prepare_async_history_host(reader)
+
+        MAIN.WatcherApp.refresh_job_history(self.app)
+        MAIN.WatcherApp.refresh_job_history(self.app)
+        self.assertEqual(1, reader.request_history.call_count)
+        self.assertTrue(self.app._recheck_import_history)
+
+        MAIN.WatcherApp._receive_import_history(self.app)
+        self.assertEqual(2, reader.request_history.call_count)
+        self.assertTrue(self.app._import_history_requested)
+        self.assertFalse(self.app._recheck_import_history)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+        self.assertEqual(
+            ("first-history-job",),
+            self.app.job_history_tree.get_children(""),
+        )
+
+        MAIN.WatcherApp._receive_import_history(self.app)
+        MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
+
+        self.assertEqual(
+            ("second-history-job", "first-history-job"),
+            self.app.job_history_tree.get_children(""),
+        )
+        self.assertEqual(2, reader.request_history.call_count)
+        self.assertFalse(self.app._import_history_requested)
+
     def test_reconciliation_is_idempotent_and_updates_only_changed_rows(
         self,
     ) -> None:
@@ -645,81 +905,6 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
 
         self.assertFalse(self.app.import_item_tree.get_children(""))
         self.assertFalse(self.app.activity_item_tree.get_children(""))
-
-    def test_history_refresh_preserves_job_selection_and_recovery_action(self) -> None:
-        """Keep a selected job attached through updates and expose its retry state.
-
-        Returns:
-            None: The same history item remains selected and the callback binds it.
-        """
-        jobs = [
-            self.make_job(f"job-{index}", float(-index))
-            for index in range(
-                MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
-                + HISTORY_OVER_CAP_EXTRA_ROWS
-            )
-        ]
-        selected_job = jobs[SELECTED_HISTORY_FIXTURE_INDEX]
-        selected_job.items.append(ImportItem(
-            id="retry-item",
-            path="retry.jpg",
-            source_label="retry.jpg",
-            state="failed_retryable",
-        ))
-        job_store = SimpleNamespace(
-            list_jobs=Mock(return_value=jobs),
-            get_job=Mock(return_value=selected_job),
-        )
-        self.app.job_store = job_store
-
-        MAIN.WatcherApp.refresh_job_history(self.app)
-
-        history = self.app.job_history_tree
-        selected_id = selected_job.id
-        history.selection_set(selected_id)
-        history.focus(selected_id)
-        history.vertical_view = TEST_VIEW_FRACTIONS
-        history.horizontal_view = TEST_VIEW_FRACTIONS
-        selected_job.source_label = "Updated selected source"
-        new_job = self.make_job("newest-job", float(len(jobs)))
-        job_store.list_jobs.return_value = [new_job, *jobs]
-        history.calls.clear()
-
-        MAIN.WatcherApp.refresh_job_history(self.app)
-
-        self.assertEqual(
-            MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT,
-            len(history.get_children("")),
-        )
-        self.assertEqual(
-            "newest-job",
-            history.get_children("")[FIRST_TREE_ROW_INDEX],
-        )
-        self.assertIn(selected_id, history.get_children(""))
-        self.assertEqual(
-            "Updated selected source",
-            history.item(selected_id, "values")[HISTORY_SOURCE_COLUMN_INDEX],
-        )
-        self.assertFalse(history.calls["selection_set"])
-        self.assertEqual((selected_id,), history.selection())
-        self.assertEqual(selected_id, history.focus())
-        self.assertEqual(TEST_VIEW_FRACTIONS, history.yview())
-        self.assertEqual(TEST_VIEW_FRACTIONS, history.xview())
-
-        self.app.current_job = None
-        self.app.activity_job_summary_var = Mock()
-        self.app.describe_job = Mock(return_value="Selected job")
-        self.app.retry_failed_button = Mock()
-        MAIN.WatcherApp.select_history_job(self.app)
-
-        self.assertIs(selected_job, self.app.current_job)
-        self.assertIs(selected_job, self.app.manual_plan.job)
-        self.app.activity_job_summary_var.set.assert_called_once_with(
-            "Selected job",
-        )
-        self.app.retry_failed_button.configure.assert_called_once_with(
-            state="normal",
-        )
 
     def test_activity_filter_keeps_order_cap_and_identity(self) -> None:
         """Preserve filtered order, stable event rows, and surviving selection.

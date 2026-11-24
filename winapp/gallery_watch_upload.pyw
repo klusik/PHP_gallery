@@ -57,6 +57,7 @@ import threading
 import time
 import uuid
 import webbrowser
+from collections import deque
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import TracebackType
@@ -87,9 +88,9 @@ WATCHER_EVENT_BATCH_LIMIT = 64
 WATCHER_EVENT_BATCH_BUDGET_MS = 8.0
 # Purpose: Give a budget-limited event queue prompt, non-spinning continuation.
 # Type: int; Units: milliseconds; Scope: continuation after a bounded batch;
-# Consumers: WatcherApp.drain_events; Rationale: preserve responsiveness
-# without scheduling a zero-delay callback loop.
-WATCHER_EVENT_CONTINUATION_MS = 16
+# Consumers: WatcherApp.drain_events; Rationale: 24 ms gives Tk more time
+# between saturated batches while steady queue polling keeps its own cadence.
+WATCHER_EVENT_CONTINUATION_MS = 24
 # Purpose: Preserve the ordinary worker-event poll cadence when a batch drains.
 # Type: int; Units: milliseconds; Scope: idle event queue polling;
 # Consumers: WatcherApp.drain_events; Rationale: retain the existing 200 ms
@@ -126,6 +127,13 @@ WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS = 15.0
 # Consumers: WatcherApp.refresh_import_item_tree.
 # Rationale: Preserve the existing 1000-item UI admission cap.
 WATCHER_IMPORT_TREE_ROW_LIMIT = 1000
+
+# Purpose: Bound routine presentation bursts while accepted Import work continues.
+# Type: int; Units: milliseconds; Scope: one active manual-import GUI projection.
+# Consumers: WatcherApp._flush_import_presentation, WatcherApp.drain_events.
+# Rationale: 100 ms targets ten visual updates per second. Terminal progress
+#   and explicit lifecycle actions publish immediately.
+IMPORT_PRESENTATION_INTERVAL_MS = 100
 
 # Purpose: Bound durable jobs rendered in the Activity history table.
 # Type: int.
@@ -294,6 +302,13 @@ from uploader.state_store import (
     _reject_mode_history_constant,
     _strict_mode_history_float,
 )
+from uploader.import_ui_snapshot import (
+    ImportHistorySummary,
+    ImportItemView,
+    ImportProgressSnapshot,
+    new_worker_generation,
+)
+from uploader.import_history_reader import ImportHistoryReader, ImportHistoryReadResult
 
 try:
     import tkinter as tk
@@ -6952,7 +6967,7 @@ class ManualUploadThread(threading.Thread):
                 uploads.
             events (queue.Queue[Any]): Thread-safe queue used to send status
                 messages to the GUI.
-            job (Optional[ImportJob]): Durable import job record used for
+            job (Optional[ImportJob]): Worker-owned durable job copy used for
                 progress and restart recovery.
             job_store (Optional[JobStateStore]): Shared state store for job and
                 activity persistence.
@@ -6995,10 +7010,18 @@ class ManualUploadThread(threading.Thread):
         self.job = job
         self.job_store = job_store
         self.job_lock = threading.RLock()
+        self.import_generation = new_worker_generation()
+        self.import_job_id = job.id if job is not None else ""
+        self._progress_lock = threading.Lock()
+        self._progress_snapshot: ImportProgressSnapshot | None = None
+        self._progress_rows: dict[int, ImportItemView] = {}
+        self._dirty_job_items: set[int] = set()
         self.item_by_path: Dict[str, ImportItem] = {}
+        self._job_item_indices: dict[int, int] = {}
         if self.job is not None:
-            for item in self.job.items:
+            for index, item in enumerate(self.job.items):
                 self.item_by_path[os.path.normcase(os.path.abspath(item.path))] = item
+                self._job_item_indices[id(item)] = index
 
 
     def _redirect_checkpoint(self) -> None:
@@ -7048,16 +7071,28 @@ class ManualUploadThread(threading.Thread):
         self.pause_event.clear()
 
     def pause(self) -> None:
-        """Pause submission of new manual-import work while in-flight requests finish."""
+        """Pause submission of new work while in-flight requests finish.
+
+        Returns:
+            None: Signals the pause and queues the worker's lifecycle transition.
+        """
         self.pause_event.set()
         self.emit("info", "Manual import paused. In-flight requests may still finish.")
-        self.emit_structured("job_control", {"paused": True})
+        self.emit_structured(
+            "job_control", {"generation": self.import_generation, "paused": True},
+        )
 
     def resume(self) -> None:
-        """Resume a previously paused manual import."""
+        """Resume a previously paused manual import.
+
+        Returns:
+            None: Signals the resume and queues the worker's lifecycle transition.
+        """
         self.pause_event.clear()
         self.emit("info", "Manual import resumed.")
-        self.emit_structured("job_control", {"paused": False})
+        self.emit_structured(
+            "job_control", {"generation": self.import_generation, "paused": False},
+        )
 
     def wait_if_paused(self) -> bool:
         """Wait while paused and return False when cancellation was requested."""
@@ -7076,22 +7111,60 @@ class ManualUploadThread(threading.Thread):
         """Return the durable item record associated with one local path."""
         return self.item_by_path.get(os.path.normcase(os.path.abspath(str(path))))
 
-    def persist_job(self) -> None:
-        """Persist the current import job and emit a throttled-safe UI snapshot."""
+    def persist_job(self, *, complete_rows: bool = True) -> None:
+        """Publish a bounded UI revision after the exact durable save succeeds.
+
+        Args:
+            complete_rows (bool): Include the complete visible prefix at start,
+                cancellation and finish. Ordinary transitions send dirty rows.
+
+        Returns:
+            None: Queues a presentation revision after save and readback.
+
+        Raises:
+            OSError: The original durable job write or verification failed.
+            ValueError: Job identity or durable item evidence could not be saved.
+            RuntimeError: The accepted-work owner could not be acquired.
+        """
         if self.job is None or self.job_store is None:
             return
         with self.job_lock:
             self.job_store.save_job(self.job)
-            counts = self.job.counts()
-            self.emit_structured(
-                "job_progress",
-                {
-                    "counts": counts,
-                    "bytes_total": self.job.bytes_total,
-                    "bytes_sent": self.job.bytes_sent,
-                    "started_at": self.job.started_at,
-                    "finished_at": self.job.finished_at,
-                },
+            previous = self._progress_snapshot
+            # The first revision seeds both detail views. Changes made by
+            # multiple upload threads before this save belong to this revision.
+            snapshot = ImportProgressSnapshot.from_job(
+                self.job,
+                self.import_generation,
+                previous.revision + 1 if previous is not None else 1,
+                WATCHER_IMPORT_TREE_ROW_LIMIT,
+                None if complete_rows or previous is None else frozenset(
+                    self._dirty_job_items,
+                ),
+            )
+            with self._progress_lock:
+                if snapshot.complete_rows:
+                    self._progress_rows.clear()
+                self._progress_rows.update(
+                    (row.source_index, row) for row in snapshot.items
+                )
+                self._progress_snapshot = snapshot
+            self._dirty_job_items.clear()
+            self.emit_structured("job_progress", {"snapshot": snapshot})
+
+    def latest_import_projection(self) -> ImportProgressSnapshot | None:
+        """Recover the complete bounded projection after a GUI revision gap.
+
+        Returns:
+            ImportProgressSnapshot | None: Latest saved revision with its rows,
+                or None before any save. No job lock, disk or Tk is involved.
+        """
+        with self._progress_lock:
+            snapshot = self._progress_snapshot
+            if snapshot is None or snapshot.complete_rows:
+                return snapshot
+            return replace(
+                snapshot, items=tuple(self._progress_rows.values()), complete_rows=True,
             )
 
     def update_item(
@@ -7100,17 +7173,37 @@ class ManualUploadThread(threading.Thread):
         state: str,
         reason: str = "",
         file_hash: str = "",
-        server_result: Optional[Dict[str, Any]] = None,
+        server_result: dict[str, JsonValue] | None = None,
         increment_attempt: bool = False,
         count_bytes: bool = False,
     ) -> None:
-        """Apply one durable item transition and save the enclosing job."""
+        """Apply one durable item transition and save the enclosing job.
+
+        Args:
+            path (Path): Accepted local source whose existing item is changed.
+            state (str): Requested import state as validated by the item model.
+            reason (str): Optional presentation detail about the transition.
+            file_hash (str): Optional verified source digest.
+            server_result (dict[str, JsonValue] | None): Server response fields from
+                which the allowed receipt summary is retained.
+            increment_attempt (bool): Record a dispatched transport attempt.
+            count_bytes (bool): Advance durable byte progress on confirmation.
+
+        Returns:
+            None: Saves the changed item or leaves an unknown path alone.
+
+        Raises:
+            OSError: The required save or readback failed.
+            ValueError: The transition or durable identity is invalid.
+            RuntimeError: Durable accepted-work ownership is unavailable.
+        """
         item = self.item_for_path(path)
         if item is None or self.job is None:
             return
         with self.job_lock:
             previous_state = item.state
             item.transition(state, reason)
+            self._dirty_job_items.add(self._job_item_indices[id(item)])
             if file_hash:
                 item.sha256 = file_hash
             if increment_attempt:
@@ -7120,7 +7213,7 @@ class ManualUploadThread(threading.Thread):
                 item.server_result = {key: value for key, value in server_result.items() if key in allowed}
             if count_bytes and previous_state != "confirmed":
                 self.job.bytes_sent = min(self.job.bytes_total, self.job.bytes_sent + max(0, item.size))
-        self.persist_job()
+        self.persist_job(complete_rows=False)
 
     def mark_remaining_cancelled(self) -> None:
         """Persist cancellation for work that never reached a terminal state."""
@@ -7183,9 +7276,11 @@ class ManualUploadThread(threading.Thread):
         """Retain the target lease throughout one manual import worker.
 
         Returns:
-            None: Refuses linked work when exclusive recovery state is unavailable.
+            None: Releases transport ownership and reports this generation's
+                actual lifecycle outcome. Incomplete work remains recoverable.
         """
         pipeline = UploadPipelineLease(CONFIG_DIR)
+        completed = False
         try:
             pipeline.acquire()
             if self._gui_admission is not None:
@@ -7199,6 +7294,7 @@ class ManualUploadThread(threading.Thread):
                 self._linked_lease.acquire()
                 self.linked_state = LinkedUploadState(self.linked_target)
             self._run_owned()
+            completed = True
         except (OSError, ValueError, RuntimeError) as exc:
             self.emit('error', f'Import cannot acquire safe recovery state: {exc}')
         finally:
@@ -7207,6 +7303,15 @@ class ManualUploadThread(threading.Thread):
                 self._gui_work.close()
             if self._linked_lease is not None:
                 self._linked_lease.release()
+            if self.import_job_id:
+                last_saved = self._progress_snapshot
+                self.emit_structured("job_completed", {
+                    "generation": self.import_generation,
+                    "cancelled": self.stop_event.is_set(),
+                    "needs_review": (
+                        not completed or last_saved is None or not last_saved.finished_at
+                    ),
+                })
 
     def _run_owned(self) -> None:
         """Run the selected manual upload mode under its captured owner.
@@ -8452,6 +8557,87 @@ class _TreeRowSnapshot:
     )
 
 
+ImportDetailPane = Literal["import", "activity"]
+
+
+@dataclass(slots=True)
+class _ImportViewProjection:
+    """Retain bounded rows while each visible import pane catches up separately."""
+
+    latest: ImportProgressSnapshot | None = None
+    rows: dict[int, ImportItemView] = field(default_factory=dict)
+    import_dirty: dict[int, ImportItemView] = field(default_factory=dict)
+    activity_dirty: dict[int, ImportItemView] = field(default_factory=dict)
+    full_panes: set[ImportDetailPane] = field(default_factory=set)
+    presented_revisions: dict[ImportDetailPane, int] = field(default_factory=dict)
+
+    def update(self, snapshot: ImportProgressSnapshot) -> None:
+        """Fold one fenced revision into both panes' bounded pending changes.
+
+        Args:
+            snapshot (ImportProgressSnapshot): Next accepted worker revision or
+                full synchronization of a newly selected durable job.
+
+        Returns:
+            None: Retains current rows even when neither pane is visible.
+        """
+        self.latest = snapshot
+        if snapshot.complete_rows and len(snapshot.items) != len(self.rows):
+            self.rows = {row.source_index: row for row in snapshot.items}
+            self.full_panes.update(("import", "activity"))
+            self.import_dirty.clear()
+            self.activity_dirty.clear()
+            return
+        for row in snapshot.items:
+            index = row.source_index
+            if self.rows.get(index) != row:
+                self.rows[index] = row
+                self.import_dirty[index] = row
+                self.activity_dirty[index] = row
+
+
+def _publish_watcher_value(
+    host: "WatcherApp",
+    slot: str,
+    target: "tk.Misc | tk.Variable",
+    value: "str | bool | tuple[str, str]",
+    publish: Callable[[], None],
+) -> None:
+    """Apply one owned Watcher presentation value when its target or value changes.
+
+    Args:
+        host (WatcherApp): Tk owner retaining the latest successfully published values.
+        slot (str): Stable field or widget property owned by this projection.
+        target (tk.Misc | tk.Variable): Current Tk object for that slot.
+        value (str | bool | tuple[str, str]): Desired text, flag or paired options.
+        publish (Callable[[], None]): Apply the supplied value to the current target.
+
+    Returns:
+        None: The target is synchronized at most once for this value and identity.
+    """
+    rendered = host.__dict__.setdefault("_published_watcher_values", {})
+    previous = rendered.get(slot)
+    if previous is not None and previous[0] is target and previous[1] == value:
+        return
+    publish()
+    rendered[slot] = (target, value)
+
+
+def _publish_watcher_text(host: "WatcherApp", slot: str, value: str) -> None:
+    """Set text on a Watcher-owned display variable only on a real change.
+
+    Args:
+        host (WatcherApp): Tk owner of the display variable.
+        slot (str): Attribute holding a StringVar written by this projection.
+        value (str): Current display text in the applicable language or context.
+
+    Returns:
+        None: The current variable has the requested text.
+    """
+    variable = getattr(host, slot)
+    _publish_watcher_value(host, slot, variable, value, lambda: variable.set(value))
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -8612,6 +8798,18 @@ class WatcherApp:
         self.manual_plan: Optional[ImportPlan] = None
         self._preflight_approved: Optional[Tuple[str, object, str]] = None
         self.current_job: Optional[ImportJob] = None
+        self._live_import_view: _ImportViewProjection | None = None
+        self._history_import_view: _ImportViewProjection | None = None
+        self._presented_import_views: dict[ImportDetailPane, _ImportViewProjection] = {}
+        self._import_presentation_after = 0.0
+        self._import_presentation_flushes = 0
+        self._import_history_reader: ImportHistoryReader | None = None
+        self._import_detail_request: tuple[int, str, Literal["selected", "finished"]] | None = None
+        self._import_history_requested = False
+        self._recheck_import_history = False
+        self._import_history_rows: dict[str, ImportHistorySummary] = {}
+        self._import_history_dirty: dict[str, ImportHistorySummary] = {}
+        self._import_history_rebuild = False
         self.tray_icon: Optional[Any] = None
         self.tray_thread: Optional[threading.Thread] = None
         self.update_available_version: Optional[str] = None
@@ -8633,6 +8831,14 @@ class WatcherApp:
         self._event_drain_last_ms = 0.0
         self._event_drain_max_ms = 0.0
         self._activity_drawer_flush_count = 0
+        self._activity_drawer_dirty = False
+        self._activity_tab_selected = False
+        self._import_tab_selected = False
+        self._pending_activity_footer: ActivityEvent | None = None
+        self._pending_log_lines: deque[tuple[str, str, str]] = deque(
+            maxlen=self.job_store.history_limit,
+        )
+        self._displayed_log_lines = 0
         self.activity_events: List[ActivityEvent] = self.job_store.list_events()
         self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
 
@@ -9428,9 +9634,21 @@ class WatcherApp:
             _event (tk.Event | None): Optional notebook selection event.
 
         Returns:
-            None: Highlights the selected page and updates contextual link actions.
+            None: Highlights the selected page, restores its Activity projection
+                when needed, and updates contextual link actions.
         """
         selected = self.notebook.index("current")
+        self._activity_tab_selected = self.tab_indices.get("activity") == selected
+        self._import_tab_selected = self.tab_indices.get("import") == selected
+        if self._activity_tab_selected:
+            WatcherApp._flush_visible_log(self)
+        if hasattr(self, "_import_presentation_after"):
+            self._flush_import_presentation(force=True)
+        if (
+            self._activity_tab_selected
+            and getattr(self, "_activity_drawer_dirty", False) is True
+        ):
+            self._schedule_activity_drawer_refresh()
         for key, button in self.navigation_buttons.items():
             button.configure(style=(
                 "Primary.Icon.TButton"
@@ -9471,20 +9689,25 @@ class WatcherApp:
         """Match the primary Watcher caption to capture, drain or recovery.
 
         Returns:
-            None: Shows Continue for pending work and Interrupt while a worker
-                can safely stop with its queue retained.
+            None: Synchronizes the primary action and the existing interruption
+                controls when their labels, enabled state or visibility change.
         """
-        if self.watcher_action_button is None:
+        action_button = self.watcher_action_button
+        if action_button is None:
             return
         interrupt_button = getattr(self, 'watch_recovery_action_button', None)
         if getattr(self, "_watch_start_pending", False) is True:
-            self.watcher_action_button.configure(
-                text="Starting Watcher…", state="disabled",
+            pending_label = "Starting Watcher…"
+            _publish_watcher_value(
+                self, "watch_action", action_button, (pending_label, "disabled"),
+                lambda: action_button.configure(text=pending_label, state="disabled"),
             )
             if interrupt_button is not None:
-                interrupt_button.pack_forget()
+                _publish_watcher_value(
+                    self, "watch_interrupt_visible", interrupt_button, False,
+                    interrupt_button.pack_forget,
+                )
             return
-        self.watcher_action_button.configure(state="normal")
         state = self.flights.session_state()
         if (state == "active"
                 and isinstance(getattr(self, "_contextual_watch_target", None),
@@ -9506,27 +9729,40 @@ class WatcherApp:
         )
         if capture_live and getattr(worker, '_recovery_review_only', False) is True:
             labels[state] = continue_text
-        self.watcher_action_button.configure(text=labels[state])
-        if interrupt_button is not None:
-            operation = self.flights.operation
-            if capture_live and (operation is None or not operation.server_request_sent):
-                interrupt_button.configure(text=recovery_text(language, 'force_stop_watch'))
-                if interrupt_button.winfo_manager() != 'pack':
-                    interrupt_button.pack(side='right')
-            else:
-                interrupt_button.pack_forget()
-        indicator = getattr(self, "watcher_capture_label", None)
-        if indicator is not None:
-            if state == "active":
-                indicator.grid()
-            else:
-                indicator.grid_remove()
+        label = labels[state]
         if (state == "idle"
                 and isinstance(getattr(self, "_contextual_watch_target", None),
                                LinkedUploadTarget)):
-            self.watcher_action_button.configure(
-                text="Closing Watcher access…" if self._watcher_key_closing
-                else "Retry closing Watcher access",
+            label = (
+                "Closing Watcher access…" if self._watcher_key_closing
+                else "Retry closing Watcher access"
+            )
+        _publish_watcher_value(
+            self, "watch_action", action_button, (label, "normal"),
+            lambda: action_button.configure(text=label, state="normal"),
+        )
+        if interrupt_button is not None:
+            operation = self.flights.operation
+            can_interrupt = capture_live and (
+                operation is None or not operation.server_request_sent
+            )
+            if can_interrupt:
+                interrupt_label = recovery_text(language, 'force_stop_watch')
+                _publish_watcher_value(
+                    self, "watch_interrupt_text", interrupt_button, interrupt_label,
+                    lambda: interrupt_button.configure(text=interrupt_label),
+                )
+            _publish_watcher_value(
+                self, "watch_interrupt_visible", interrupt_button, can_interrupt,
+                (lambda: interrupt_button.pack(side='right')) if can_interrupt
+                else interrupt_button.pack_forget,
+            )
+        indicator = getattr(self, "watcher_capture_label", None)
+        if indicator is not None:
+            capturing = state == "active"
+            _publish_watcher_value(
+                self, "watch_capture_visible", indicator, capturing,
+                indicator.grid if capturing else indicator.grid_remove,
             )
 
     def _set_watcher_recording(
@@ -10035,7 +10271,8 @@ class WatcherApp:
         """Show the existing window after a tray action or explicit relaunch.
 
         Returns:
-            None: Restores/focuses the window and admits deferred recovery once.
+            None: Restores the focused window and its latest Activity
+                presentation, then admits deferred recovery once.
         """
         if self.exiting:
             return
@@ -10051,6 +10288,12 @@ class WatcherApp:
             logging.debug("Could not force normal window state.", exc_info=True)
         self.root.lift()
         self.root.focus_force()
+        self._flush_activity_footer()
+        WatcherApp._flush_visible_log(self)
+        if hasattr(self, "_import_presentation_after"):
+            self._flush_import_presentation(force=True)
+        if getattr(self, "_activity_drawer_dirty", False) is True:
+            self._schedule_activity_drawer_refresh()
         if getattr(self, "recovery_offer_pending", False):
             self.recovery_offer_pending = False
             self.root.after_idle(self.offer_recoverable_jobs)
@@ -11826,20 +12069,15 @@ class WatcherApp:
                 "Import", "The previous preflight is stopping. Clear the selection again after it finishes.",
             )
             return
-        if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
-            try:
-                self.flights.import_bindings.discard_unbound_preflight(
-                    self.job_store, self.manual_plan.job.id,
-                )
-            except (OSError, ValueError, RuntimeError):
-                messagebox.showwarning("Import recovery", str(exc))
-                return
+        if not self._discard_unstarted_import_preflight():
+            return
         self.manual_paths = []
         self.manual_folder = None
         self.manual_zip = None
         self.manual_plan = None
         self._preflight_approved = None
         self.current_job = None
+        self._import_detail_request = None
         self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
         self.manual_preflight_var.set("Select a source to build an import summary. Nothing uploads until you press Start import.")
         self.manual_progress_var.set(0.0)
@@ -11882,17 +12120,12 @@ class WatcherApp:
         except ValueError as exc:
             messagebox.showerror("Invalid settings", str(exc))
             return
-        if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
-            try:
-                self.flights.import_bindings.discard_unbound_preflight(
-                    self.job_store, self.manual_plan.job.id,
-                )
-            except (OSError, ValueError, RuntimeError):
-                messagebox.showwarning("Import recovery", str(exc))
-                return
+        if not self._discard_unstarted_import_preflight():
+            return
         self.manual_plan = None
         self._preflight_approved = None
         self.current_job = None
+        self._import_detail_request = None
         self.start_import_button.configure(state="disabled")
         self.retry_failed_button.configure(state="disabled")
         self.manual_preflight_var.set("Inspecting source, hashing files, checking media capabilities, and comparing remote inventory...")
@@ -12075,6 +12308,9 @@ class WatcherApp:
         """
         if not hasattr(self, "import_item_tree"):
             return
+        if hasattr(self, "_presented_import_views"):
+            self._presented_import_views.clear()
+        self._history_import_view = None
         items = (
             job.items[:WATCHER_IMPORT_TREE_ROW_LIMIT]
             if job is not None else []
@@ -12106,6 +12342,260 @@ class WatcherApp:
         self._reconcile_tree_rows(self.import_item_tree, item_rows)
         if hasattr(self, "activity_item_tree"):
             self._reconcile_tree_rows(self.activity_item_tree, activity_rows)
+
+    def _change_import_rows(
+        self,
+        tree: "ttk.Treeview",
+        rows: Iterable[tuple[str, tuple[str | int | float, ...]]],
+    ) -> None:
+        """Change values of known rows while retaining their position and focus.
+
+        Args:
+            tree (ttk.Treeview): Detail or history table with a reconciled prefix.
+            rows (Iterable[tuple[str, tuple[str | int | float, ...]]]): Stable
+                item IDs and displayed values for changed rows only.
+
+        Returns:
+            None: Writes only changed retained cells and never alters selection.
+        """
+        snapshot = getattr(tree, "_watcher_row_snapshot", None)
+        if not isinstance(snapshot, _TreeRowSnapshot):
+            return
+        for item_id, values in rows:
+            if item_id in snapshot.rows and snapshot.rows[item_id] != values:
+                tree.item(item_id, values=values)
+                snapshot.rows[item_id] = values
+
+    def _selected_import_view(self) -> _ImportViewProjection | None:
+        """Return the visible job's projection, preferring its live generation.
+
+        Returns:
+            _ImportViewProjection | None: A matching live or historical view.
+        """
+        job = getattr(self, "current_job", None)
+        if job is None:
+            return None
+        for view in (
+            getattr(self, "_live_import_view", None),
+            getattr(self, "_history_import_view", None),
+        ):
+            if view is not None and view.latest is not None:
+                if view.latest.history.job_id == job.id:
+                    return view
+        return None
+
+    def _accept_import_progress(self, snapshot: ImportProgressSnapshot) -> None:
+        """Merge a saved worker revision while leaving durable ownership alone.
+
+        Args:
+            snapshot (ImportProgressSnapshot): Immutable post-save projection.
+
+        Returns:
+            None: Fences the generation and recovers any missing visible prefix
+                from the worker's in-memory post-save projection.
+        """
+        worker = self.manual_worker
+        if (worker is None or snapshot.generation != worker.import_generation
+                or snapshot.history.job_id != worker.import_job_id):
+            return
+        view = getattr(self, "_live_import_view", None)
+        previous = view.latest if view is not None else None
+        if previous is None or previous.generation != snapshot.generation:
+            view = _ImportViewProjection()
+            self._live_import_view = view
+            previous = None
+        if previous is not None and snapshot.revision <= previous.revision:
+            return
+        if not snapshot.complete_rows and (
+            previous is None or snapshot.revision != previous.revision + 1
+        ):
+            complete = worker.latest_import_projection()
+            if complete is None:
+                return
+            snapshot = complete
+        view.update(snapshot)
+        job_id = snapshot.history.job_id
+        history_rows = getattr(self, "_import_history_rows", {})
+        history_row = history_rows.get(job_id)
+        if history_row is not None and history_row.status != snapshot.history.status:
+            row = replace(snapshot.history, created_label=history_row.created_label)
+            history_rows[job_id] = row
+            self._import_history_dirty[job_id] = row
+        if snapshot.finished_at:
+            self._flush_import_presentation(force=True)
+
+    def _render_import_view(
+        self, view: _ImportViewProjection, pane: ImportDetailPane,
+    ) -> bool:
+        """Publish one visible tab's retained cells and current progress text.
+
+        Args:
+            view (_ImportViewProjection): Selected job's cached rows and counters.
+            pane (ImportDetailPane): Currently visible Import or Activity tab.
+
+        Returns:
+            bool: True when this presentation consumed a new revision or view.
+        """
+        snapshot = view.latest
+        if snapshot is None:
+            return False
+        switched = self._presented_import_views.get(pane) is not view
+        if not switched and view.presented_revisions.get(pane) == snapshot.revision:
+            return False
+        full = switched or pane in view.full_panes
+        dirty = view.import_dirty if pane == "import" else view.activity_dirty
+        sources = view.rows.values() if full else dirty.values()
+        if pane == "import":
+            tree = self.import_item_tree
+            rows = [
+                (row.item_id, row.item_values(self.format_bytes(row.size_bytes)))
+                for row in sources
+            ]
+            if view is self._live_import_view:
+                self._render_active_import_progress(snapshot)
+        else:
+            tree = self.activity_item_tree
+            rows = [("activity-" + row.item_id, row.activity_values()) for row in sources]
+            summary = self._describe_import_progress(snapshot)
+            if self.activity_job_summary_var.get() != summary:
+                self.activity_job_summary_var.set(summary)
+        if full:
+            self._reconcile_tree_rows(tree, rows)
+            view.full_panes.discard(pane)
+        else:
+            self._change_import_rows(tree, rows)
+        dirty.clear()
+        view.presented_revisions[pane] = snapshot.revision
+        self._presented_import_views[pane] = view
+        return True
+
+    def _render_active_import_progress(self, snapshot: ImportProgressSnapshot) -> None:
+        """Refresh progress counters and throughput without reading the job file.
+
+        Args:
+            snapshot (ImportProgressSnapshot): Newest saved revision for Import.
+
+        Returns:
+            None: Publishes the displayed progress amount and status only.
+        """
+        counts = snapshot.counts
+        terminal = counts.uploaded + counts.duplicates + counts.failed
+        terminal += counts.cancelled + counts.skipped
+        total = max(1, snapshot.item_total + snapshot.skipped_total)
+        percent = min(100.0, terminal * 100.0 / total)
+        if self.manual_progress_var.get() != percent:
+            self.manual_progress_var.set(percent)
+        elapsed = max(0.001, time.time() - snapshot.started_at) if snapshot.started_at else 0.0
+        rate = snapshot.bytes_sent / elapsed if elapsed else 0.0
+        remaining = max(0, snapshot.bytes_total - snapshot.bytes_sent)
+        eta = remaining / rate if rate > 0 else 0.0
+        rate_text = f"{self.format_bytes(int(rate))}/s" if rate > 0 else "rate pending"
+        eta_text = f"ETA {int(eta)}s" if eta > 0 else "ETA pending"
+        text = (
+            f"{terminal}/{total} terminal | "
+            f"{self.format_bytes(snapshot.bytes_sent)} / "
+            f"{self.format_bytes(snapshot.bytes_total)} | {rate_text} | {eta_text}"
+        )
+        if self.manual_progress_text_var.get() != text:
+            self.manual_progress_text_var.set(text)
+
+    def _describe_import_progress(self, snapshot: ImportProgressSnapshot) -> str:
+        """Describe the selected job from copied counters and labels.
+
+        Args:
+            snapshot (ImportProgressSnapshot): Saved counters and display labels.
+
+        Returns:
+            str: Activity status and, for active jobs, measurable throughput.
+        """
+        history = snapshot.history
+        counts = snapshot.counts
+        progress = (
+            f"{self.format_bytes(snapshot.bytes_sent)} / "
+            f"{self.format_bytes(snapshot.bytes_total)}"
+        )
+        if snapshot.started_at and not snapshot.finished_at:
+            elapsed = max(0.001, time.time() - snapshot.started_at)
+            rate = snapshot.bytes_sent / elapsed
+            if rate > 0:
+                remaining = max(0, snapshot.bytes_total - snapshot.bytes_sent)
+                progress += f" at {self.format_bytes(int(rate))}/s, ETA {int(remaining / rate)}s"
+        return (
+            f"{history.source_kind}: {history.source_label} | target {history.target_gallery_label} | "
+            f"confirmed {counts.uploaded}, duplicates {counts.duplicates}, failed {counts.failed}, "
+            f"cancelled {counts.cancelled}, active {counts.active} | {progress}"
+        )
+
+    def _flush_import_presentation(self, *, force: bool = False) -> None:
+        """Coalesce ordinary projections while giving a newly visible pane its state.
+
+        Args:
+            force (bool): Publish immediately on visibility or a terminal transition.
+
+        Returns:
+            None: Applies current visible rows, counters and history without I/O.
+        """
+        if getattr(self, "window_hidden_to_tray", False) is True:
+            return
+        now = time.monotonic()
+        if not force and now < self._import_presentation_after:
+            return
+        view = self._selected_import_view()
+        rendered = False
+        if getattr(self, "_import_tab_selected", False):
+            if view is not None:
+                rendered = self._render_import_view(view, "import")
+        elif getattr(self, "_activity_tab_selected", False):
+            if view is not None:
+                rendered = self._render_import_view(view, "activity")
+            rendered = self._render_import_history() or rendered
+        if rendered:
+            self._import_presentation_after = now + IMPORT_PRESENTATION_INTERVAL_MS / 1000.0
+            self._import_presentation_flushes += 1
+
+    def _finish_import_presentation(
+        self, job_id: str, *, cancelled: bool, needs_review: bool,
+    ) -> None:
+        """Publish the current worker's terminal outcome immediately.
+
+        Args:
+            job_id (str): Durable job of the already-fenced worker.
+            cancelled (bool): Whether this logical run was cancelled.
+            needs_review (bool): Whether required completion evidence was
+                unavailable or the worker stopped on a recovery/state error.
+
+        Returns:
+            None: Updates lifecycle controls and schedules a separate durable
+                read for later explicit actions on the selected job.
+        """
+        self._flush_import_presentation(force=True)
+        view = self._live_import_view
+        snapshot = view.latest if view is not None else None
+        failed = snapshot.counts.failed if snapshot is not None else 0
+        cancelled_items = snapshot.counts.cancelled if snapshot is not None else 0
+        status = "Import cancelled" if cancelled else "Import finished"
+        if needs_review:
+            status = "Import needs review"
+        self.manual_status_var.set(status)
+        self.import_activity_var.set(
+            "Import: needs review" if needs_review
+            else "Import: failed items" if failed else "Import: idle",
+        )
+        for button in (
+            self.pause_import_button, self.resume_import_button, self.cancel_import_button,
+        ):
+            button.configure(state="disabled")
+        if self.current_job is not None and self.current_job.id == job_id:
+            self.start_import_button.configure(state="disabled")
+            if not needs_review and not failed and not cancelled_items:
+                if self.manual_progress_var.get() != 100.0:
+                    self.manual_progress_var.set(100.0)
+            self.retry_failed_button.configure(
+                state="normal" if failed or cancelled_items or needs_review else "disabled",
+            )
+            if self._import_detail_request is None:
+                self._request_import_detail(job_id, purpose="finished")
+        self.refresh_job_history()
 
     def describe_job(self, job: ImportJob) -> str:
         """Return one compact status sentence for Activity and tray views."""
@@ -12310,6 +12800,7 @@ class WatcherApp:
             None: Keeps the saved API-key fields untouched and requires a fresh
                 import preflight for the newly selected destination.
         """
+        self._import_detail_request = None
         if (self.manual_plan is not None
                 and not (self.manual_worker and self.manual_worker.is_alive())):
             self.manual_plan = None
@@ -13731,9 +14222,11 @@ class WatcherApp:
                 progress.grid_remove()
         button = getattr(self, "watcher_action_button", None)
         if button is not None:
-            button.configure(
-                text="Starting Watcher…" if active else "▶  Start Watcher",
-                state="disabled" if active else "normal",
+            caption = "Starting Watcher…" if active else "▶  Start Watcher"
+            state = "disabled" if active else "normal"
+            _publish_watcher_value(
+                self, "watch_action", button, (caption, state),
+                lambda: button.configure(text=caption, state=state),
             )
         self.refresh_watcher_header()
         if active:
@@ -14187,21 +14680,21 @@ class WatcherApp:
         """Hide simulator-only controls outside a detected flight context.
 
         Returns:
-            None: The UTC preference remains saved while its row and pending
-                simulator status are hidden for ordinary games.
+            None: Synchronizes the contextual row and UTC status when their
+                rendered values change, preserving the saved preference.
         """
         flight_detected = self.simulator_presence.flight_detected
         self.flights.refresh_contextual_labels()
-        if flight_detected:
-            self.watcher_utc_row.grid()
-        else:
-            self.watcher_utc_row.grid_remove()
+        row = self.watcher_utc_row
+        _publish_watcher_value(
+            self, "watch_utc_visible", row, flight_detected,
+            row.grid if flight_detected else row.grid_remove,
+        )
         status = self.utc_sync.status()
         if (not flight_detected
                 and status.startswith("UTC sync awaiting simulator:")):
             status = ""
-        if self.utc_sync_status_var.get() != status:
-            self.utc_sync_status_var.set(status)
+        _publish_watcher_text(self, "utc_sync_status_var", status)
 
     def start_manual_upload(self) -> None:
         """
@@ -14223,6 +14716,9 @@ class WatcherApp:
             return
         if self.preflight_worker and self.preflight_worker.is_alive():
             messagebox.showwarning("Import", "Preflight is still running. Review the result before starting the import.")
+            return
+        pending_detail = getattr(self, "_import_detail_request", None)
+        if pending_detail is not None:
             return
         if self.current_job is None:
             messagebox.showwarning("Import", "Choose a source and complete preflight first.")
@@ -14385,9 +14881,8 @@ class WatcherApp:
         """Refresh key settings and the shared Watcher/Import session actions.
 
         Returns:
-            None: Selects actions from the accepted work and current upload
-                mode. Begin and Finish use cached game-specific wording.
-                SimBrief controls are visible only for a detected flight.
+            None: Selects actions from accepted work and the current mode,
+                publishing changes to their wording, state and visibility.
         """
         current_url = self.gallery_url_var.get().strip()
         current_key = self.api_key_var.get().strip()
@@ -14396,11 +14891,12 @@ class WatcherApp:
         key_present = bool(current_key)
         credentials_saved = current_url == saved_url and current_key == saved_key
         if not key_present:
-            self.api_key_status_var.set("API key not configured")
+            key_status = "API key not configured"
         elif credentials_saved:
-            self.api_key_status_var.set("API key configured and saved")
+            key_status = "API key configured and saved"
         else:
-            self.api_key_status_var.set("API key or gallery URL changed, not saved")
+            key_status = "API key or gallery URL changed, not saved"
+        _publish_watcher_text(self, "api_key_status_var", key_status)
         blockers = self.api_key_request_blockers()
         if self.api_key_revoke_running:
             blocker_text = (
@@ -14415,7 +14911,7 @@ class WatcherApp:
             blocker_text = "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
         else:
             blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
-        self.revoke_blocker_var.set(blocker_text)
+        _publish_watcher_text(self, "revoke_blocker_var", blocker_text)
         enabled = key_present and credentials_saved
         action = self.flight_action_state()
         if action in ("begin", "finish"):
@@ -14433,20 +14929,30 @@ class WatcherApp:
                 "recover": "watch_recovery_resume_pending",
                 "reconnect": "reconnect_upload_gallery",
             }.get(action, "show_upload_progress"))
-        for attr in ("revoke_button",):
-            button = getattr(self, attr, None)
-            if button is not None:
-                button.state(["!disabled"] if enabled else ["disabled"])
+        button = getattr(self, "revoke_button", None)
+        if button is not None:
+            _publish_watcher_value(
+                self, "revoke_button_enabled", button, enabled,
+                lambda: button.state(["!disabled"] if enabled else ["disabled"]),
+            )
+        show_action = action != "idle"
         for attr in ("finish_flight_button", "import_revoke_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                if action == "idle":
-                    button.grid_remove()
-                else:
-                    button.configure(text=action_label)
-                    button.grid()
-                    button.state(["!disabled"])
-        legacy_cleanup = (
+                if show_action:
+                    _publish_watcher_value(
+                        self, attr + "_text", button, action_label,
+                        lambda: button.configure(text=action_label),
+                    )
+                    _publish_watcher_value(
+                        self, attr + "_enabled", button, True,
+                        lambda: button.state(["!disabled"]),
+                    )
+                _publish_watcher_value(
+                    self, attr + "_visible", button, show_action,
+                    button.grid if show_action else button.grid_remove,
+                )
+        legacy_cleanup = bool(
             saved_key and not self.linking_manager.linked_upload_mode_selected()
             and action != "progress"
         )
@@ -14454,26 +14960,38 @@ class WatcherApp:
             button = getattr(self, attr, None)
             if button is not None:
                 if legacy_cleanup:
-                    button.configure(text=self.flights.text("abandon"))
-                    button.grid()
-                    button.state(["!disabled"])
-                else:
-                    button.grid_remove()
+                    abandon_label = self.flights.text("abandon")
+                    _publish_watcher_value(
+                        self, attr + "_text", button, abandon_label,
+                        lambda: button.configure(text=abandon_label),
+                    )
+                    _publish_watcher_value(
+                        self, attr + "_enabled", button, True,
+                        lambda: button.state(["!disabled"]),
+                    )
+                _publish_watcher_value(
+                    self, attr + "_visible", button, legacy_cleanup,
+                    button.grid if legacy_cleanup else button.grid_remove,
+                )
+        flight_detected = self.simulator_presence.flight_detected
         for attr in (
             "simbrief_button", "simbrief_settings_button", "simbrief_status_label",
         ):
             widget = getattr(self, attr, None)
             if widget is not None:
-                if self.simulator_presence.flight_detected:
-                    widget.grid()
-                else:
-                    widget.grid_remove()
+                _publish_watcher_value(
+                    self, attr + "_visible", widget, flight_detected,
+                    widget.grid if flight_detected else widget.grid_remove,
+                )
         entry_state = "disabled" if self.api_key_revoke_running else "normal"
         for attr in ("api_key_entry", "gallery_url_entry"):
             entry = getattr(self, attr, None)
             if entry is not None:
                 try:
-                    entry.configure(state=entry_state)
+                    _publish_watcher_value(
+                        self, attr + "_state", entry, entry_state,
+                        lambda: entry.configure(state=entry_state),
+                    )
                 except Exception:  # noqa: BLE001
                     logging.debug("Could not refresh connection entry state.", exc_info=True)
 
@@ -14511,7 +15029,12 @@ class WatcherApp:
         self.refresh_connection_controls()
 
     def paste_api_key_from_clipboard(self) -> None:
-        """Paste one API key from the clipboard into the masked Settings field."""
+        """Paste one API key from the clipboard into the masked Settings field.
+
+        Returns:
+            None: Applies a readable key and refreshes connection controls, or
+                reports revocation, unreadable clipboard or absent input.
+        """
         if self.api_key_revoke_running:
             messagebox.showwarning("API key", "Wait for API-key revocation to finish before replacing the key.")
             return
@@ -14524,7 +15047,7 @@ class WatcherApp:
             messagebox.showwarning("API key", "The clipboard does not contain an API key.")
             return
         self.api_key_var.set(value)
-        self.api_key_status_var.set("API key entered but not saved")
+        _publish_watcher_text(self, "api_key_status_var", "API key entered but not saved")
         self.connection_status_var.set("Not tested")
         self.connection_detail_var.set("API key changed. Save and test the connection before starting work.")
         self.refresh_connection_controls()
@@ -15435,6 +15958,9 @@ class WatcherApp:
         self.simulator_presence.stop()
         if not force_shutdown:
             self.linking_manager.close()
+        history_reader = getattr(self, "_import_history_reader", None)
+        if history_reader is not None:
+            history_reader.close()
         self._cancel_event_ui_callbacks()
         self.root.destroy()
 
@@ -15522,7 +16048,11 @@ class WatcherApp:
         watch = 1 if self.worker and self.worker.is_alive() else 0
         importing = 1 if self.manual_worker and self.manual_worker.is_alive() else 0
         ai = 1 if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested else 0
-        failures = self.current_job.counts()["failed"] if self.current_job is not None else 0
+        view = WatcherApp._selected_import_view(self)
+        if view is not None and view.latest is not None:
+            failures = view.latest.counts.failed
+        else:
+            failures = self.current_job.counts()["failed"] if self.current_job is not None else 0
         update = (
             f" | Update {self.update_available_version}"
             if self.update_available_version is not None
@@ -16474,6 +17004,10 @@ class WatcherApp:
             messagebox.showerror("Import recovery", str(exc))
             return
         self.current_job = job
+        self._live_import_view = None
+        self._history_import_view = None
+        self._import_detail_request = None
+        self._import_presentation_after = 0.0
         captured = capture_worker_config(config)
         config_port = self.config_store.mode_port(captured)
         self.manual_worker = ManualUploadThread(
@@ -16483,7 +17017,9 @@ class WatcherApp:
             config.manual_thumbnail_workers,
             config.manual_upload_workers,
             self.events,
-            job=job,
+            # The worker owns all mutations. Explicit GUI actions retain a
+            # separate plan until a verified completion read replaces it.
+            job=copy.deepcopy(job),
             job_store=self.job_store,
             linked_target=linked_target,
             gui_admission=(self.mode_owner, config_port),
@@ -16500,6 +17036,27 @@ class WatcherApp:
         self.record_activity("success", f"Manual import started with {len(paths)} file(s).", "import", job_id=job.id)
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
+
+    def _discard_unstarted_import_preflight(self) -> bool:
+        """Retire an unbound review plan before new source selection.
+
+        Returns:
+            bool: True when the plan can be replaced. Admitted jobs stay in
+                recovery, even while their independent review copy is older.
+        """
+        plan = self.manual_plan
+        worker = getattr(self, "manual_worker", None)
+        if (plan is None or plan.job.started_at > 0
+                or getattr(worker, "import_job_id", None) == plan.job.id):
+            return True
+        try:
+            self.flights.import_bindings.discard_unbound_preflight(
+                self.job_store, plan.job.id,
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showwarning("Import recovery", str(exc))
+            return False
+        return True
 
     def pause_manual_upload(self) -> None:
         """Pause submission of new import work while allowing in-flight requests to finish."""
@@ -16535,7 +17092,17 @@ class WatcherApp:
         if self.manual_worker and self.manual_worker.is_alive():
             messagebox.showwarning("Retry import", "Wait for the current import to stop before retrying failed items.")
             return
+        pending_detail = getattr(self, "_import_detail_request", None)
+        if pending_detail is not None and pending_detail[2] == "selected":
+            return
         if self.current_job is None:
+            messagebox.showwarning("Retry import", "Select a job in Activity first.")
+            return
+        history_view = getattr(self, "_history_import_view", None)
+        if (history_view is not None and history_view.latest is not None
+                and history_view.latest.history.job_id == self.current_job.id
+                and getattr(self, "_activity_tab_selected", False)
+                and self.current_job.id not in self.job_history_tree.selection()):
             messagebox.showwarning("Retry import", "Select a job in Activity first.")
             return
         try:
@@ -16593,7 +17160,11 @@ class WatcherApp:
                 item.transition("failed_retryable", "Explicit user retry requested.")
             paths.append(path)
         if missing:
-            self.job_store.save_job(refreshed)
+            try:
+                self.job_store.save_job(refreshed)
+            except (OSError, ValueError, RuntimeError) as exc:
+                messagebox.showwarning("Import review", str(exc))
+                return
         if uncertain:
             messagebox.showwarning(
                 'Import review',
@@ -16603,6 +17174,8 @@ class WatcherApp:
         if not paths:
             messagebox.showinfo("Retry import", "No failed or recoverable local files are available for retry.")
             self.current_job = refreshed
+            self._live_import_view = None
+            self._import_detail_request = None
             self.refresh_import_item_tree(refreshed)
             self.refresh_job_history()
             return
@@ -16646,6 +17219,7 @@ class WatcherApp:
             self.record_activity("warning", "Recoverable import remains saved for later review.", "import", job_id=job.id)
             return
         self.current_job = job
+        self._import_detail_request = None
         self.manual_plan = ImportPlan(job=job)
         self.manual_paths = [Path(item.path) for item in job.items if Path(item.path).is_file()]
         self.manual_folder = None
@@ -16656,50 +17230,165 @@ class WatcherApp:
         self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
 
     def refresh_job_history(self) -> None:
-        """Reconcile the newest durable import jobs into the history table.
+        """Request the newest durable import rows from the background reader.
 
         Returns:
-            None: The bounded history view retains stable job row identities.
+            None: The event pump applies the newest result if Activity is visible.
         """
         if not hasattr(self, "job_history_tree"):
             return
-        rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
-        jobs = self.job_store.list_jobs()[:WATCHER_JOB_HISTORY_TREE_ROW_LIMIT]
-        for job in jobs:
-            counts = job.counts()
-            created = time.strftime(
-                "%Y-%m-%d %H:%M", time.localtime(job.created_at),
-            )
-            status = (
-                f"uploaded {counts['uploaded']}, "
-                f"duplicate {counts['duplicates']}, "
-                f"failed {counts['failed']}, "
-                f"cancelled {counts['cancelled']}, "
-                f"active {counts['active']}"
-            )
-            rows.append((
-                job.id,
-                (created, job.source_label, job.target_gallery_label, status),
-            ))
-        self._reconcile_tree_rows(self.job_history_tree, rows)
+        if getattr(self, "_import_history_requested", False):
+            # Deliver the in-flight list even under repeated refreshes and
+            # then take one follow-up read for any intervening state changes.
+            self._recheck_import_history = True
+            return
+        self._get_import_history_reader().request_history(
+            WATCHER_JOB_HISTORY_TREE_ROW_LIMIT,
+        )
+        self._import_history_requested = True
 
-    def select_history_job(self, _event: Any = None) -> None:
-        """Select one durable job from Activity for inspection or explicit retry."""
+    def _get_import_history_reader(self) -> ImportHistoryReader:
+        """Return the application's single bounded read-only history worker.
+
+        Returns:
+            ImportHistoryReader: Owner of background history and detail reads.
+        """
+        reader = getattr(self, "_import_history_reader", None)
+        if reader is None:
+            reader = ImportHistoryReader(self.job_store)
+            self._import_history_reader = reader
+        return reader
+
+    def _render_import_history(self) -> bool:
+        """Publish a bounded history listing or just its changed progress rows.
+
+        Returns:
+            bool: True when the visible Activity table consumed a projection.
+        """
+        if not self._import_history_rebuild and not self._import_history_dirty:
+            return False
+        records = (
+            self._import_history_rows if self._import_history_rebuild
+            else self._import_history_dirty
+        )
+        rows = [(row.job_id, row.row_values(row.created_label)) for row in records.values()]
+        if self._import_history_rebuild:
+            self._reconcile_tree_rows(self.job_history_tree, rows)
+        else:
+            self._change_import_rows(self.job_history_tree, rows)
+        self._import_history_rebuild = False
+        self._import_history_dirty.clear()
+        return True
+
+    def select_history_job(self, _event: "tk.Event | None" = None) -> None:
+        """Load one visible history selection for inspection or explicit retry.
+
+        Args:
+            _event (tk.Event | None): Optional event from the history Treeview.
+
+        Returns:
+            None: Schedules an off-Tk detail read fenced to the selected row.
+        """
         if not hasattr(self, "job_history_tree"):
             return
         selection = self.job_history_tree.selection()
-        if not selection:
+        if selection:
+            self._request_import_detail(selection[0], purpose="selected")
+        elif self._import_detail_request is not None and self._import_detail_request[2] == "selected":
+            self._import_detail_request = None
+
+    def _request_import_detail(
+        self, job_id: str, *, purpose: Literal["selected", "finished"],
+    ) -> None:
+        """Request the independent durable model and its bounded presentation.
+
+        Args:
+            job_id (str): Durable job ID owned by the selection or finished batch.
+            purpose (Literal["selected", "finished"]): Whether to change
+                selection or refresh the selected model after completion.
+
+        Returns:
+            None: Retains the ticket alongside the current selection intent.
+        """
+        ticket = self._get_import_history_reader().request_job(
+            job_id, WATCHER_IMPORT_TREE_ROW_LIMIT, new_worker_generation(),
+        )
+        self._import_detail_request = (ticket, job_id, purpose)
+
+    def _receive_import_history(self) -> None:
+        """Apply available bounded history results on Tk without blocking it.
+
+        Returns:
+            None: Accepts the latest list or explicitly selected durable job.
+        """
+        reader = getattr(self, "_import_history_reader", None)
+        if reader is None:
             return
-        job = self.job_store.get_job(selection[0])
-        if job is None:
+        for result in reader.poll_ready():
+            if result.kind == "history":
+                self._import_history_requested = False
+                if getattr(self, "_recheck_import_history", False):
+                    self._recheck_import_history = False
+                    self.refresh_job_history()
+                if result.error is not None:
+                    self.write_log("Import history could not be read.", "warning")
+                    continue
+                rows = {row.job_id: row for row in result.history}
+                live = getattr(self, "_live_import_view", None)
+                if live is not None and live.latest is not None and not live.latest.finished_at:
+                    current_row = live.latest.history
+                    if current_row.job_id in rows:
+                        rows[current_row.job_id] = replace(
+                            current_row, created_label=rows[current_row.job_id].created_label,
+                        )
+                if list(rows.items()) != list(self._import_history_rows.items()):
+                    self._import_history_rows = rows
+                    self._import_history_dirty.clear()
+                    self._import_history_rebuild = True
+            else:
+                self._accept_import_detail(result)
+
+    def _accept_import_detail(self, result: ImportHistoryReadResult) -> None:
+        """Adopt an independently read job only for its current request.
+
+        Args:
+            result (ImportHistoryReadResult): Detail outcome with a frozen
+                projection and, on success, an exclusively transferred model.
+
+        Returns:
+            None: Preserves the existing retry admission and selected row fence.
+        """
+        pending = self._import_detail_request
+        if pending is None or result.ticket != pending[0]:
+            return
+        self._import_detail_request = None
+        _, job_id, purpose = pending
+        if purpose == "selected":
+            selected = self.job_history_tree.selection()
+            if not selected or selected[0] != job_id:
+                return
+        elif self.current_job is None or self.current_job.id != job_id:
+            return
+        job = result.job
+        snapshot = result.snapshot
+        if job is None or snapshot is None or job.id != job_id:
+            self.write_log("Selected import history could not be read.", "warning")
+            if purpose == "selected":
+                self.job_history_tree.selection_remove(job_id)
             return
         self.current_job = job
+        if purpose == "finished":
+            if self.manual_plan is not None and self.manual_plan.job.id == job.id:
+                self.manual_plan = replace(self.manual_plan, job=job)
+            return
         self.manual_plan = ImportPlan(job=job)
-        self.activity_job_summary_var.set(self.describe_job(job))
-        self.refresh_import_item_tree(job)
+        history_view = _ImportViewProjection()
+        history_view.update(snapshot)
+        self._history_import_view = history_view
         self.retry_failed_button.configure(
-            state="normal" if any(item.state in RECOVERABLE_ITEM_STATES or item.state == "failed_permanent" for item in job.items) else "disabled"
+            state="normal" if snapshot.retry_available else "disabled",
         )
+        self._flush_import_presentation(force=True)
 
     def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
         """Display a redacted event and enqueue its bounded history off Tk.
@@ -16712,8 +17401,8 @@ class WatcherApp:
             job_id (str): Optional durable import job identifier.
 
         Returns:
-            None: Updates the footer, retained history, and persistence queue
-                immediately, then coalesces the Activity drawer render.
+            None: Retains and submits every event in order. The latest footer
+                and visible drawer are synchronized through their GUI owners.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         # The queue marker has already selected the structured operation.
@@ -16721,18 +17410,13 @@ class WatcherApp:
             message = message[len("[simconnect]"):].lstrip()
         safe_message = redact_text(message, [secret], redact_paths=False)
         event = ActivityEvent(level=level, message=safe_message, operation=operation, filename=filename, job_id=job_id)
-        one_line_message = " ".join(event.message.split())
-        footer_text = f"{event.operation.title()} · {one_line_message}"
-        self.latest_activity_var.set(footer_text[:LATEST_ACTIVITY_PREVIEW_LENGTH])
-        if self.latest_activity_label is not None:
-            footer_style = {
-                "warning": "Footer.Warning.TLabel",
-                "error": "Footer.Error.TLabel",
-            }.get(event.level.lower(), "Footer.TLabel")
-            self.latest_activity_label.configure(style=footer_style)
+        self._pending_activity_footer = event
+        if getattr(self, "_drain_running", False) is not True:
+            self._flush_activity_footer()
         self.activity_events.append(event)
         limit = max(50, int(getattr(self.config, "activity_history_limit", 500) or 500))
-        self.activity_events = self.activity_events[-limit:]
+        if len(self.activity_events) > limit:
+            del self.activity_events[:-limit]
         try:
             if not self.activity_writer.submit(event):
                 logging.warning("Recent activity history is closing; event remains in the log.")
@@ -16740,13 +17424,45 @@ class WatcherApp:
             logging.error("Could not queue recent activity history.")
         self._schedule_activity_drawer_refresh()
 
+    def _flush_activity_footer(self) -> None:
+        """Publish the newest Activity preview after a batch or window restoration.
+
+        Returns:
+            None: Formats just the newest preview, retaining its event
+                for a window currently hidden to the system tray.
+        """
+        pending = getattr(self, "_pending_activity_footer", None)
+        if pending is None or getattr(self, "window_hidden_to_tray", False) is True:
+            return
+        one_line_message = " ".join(pending.message.split())
+        text = f"{pending.operation.title()} · {one_line_message}"
+        style = {
+            "warning": "Footer.Warning.TLabel",
+            "error": "Footer.Error.TLabel",
+        }.get(pending.level.lower(), "Footer.TLabel")
+        _publish_watcher_text(self, "latest_activity_var", text[:LATEST_ACTIVITY_PREVIEW_LENGTH])
+        label = self.latest_activity_label
+        if label is not None:
+            _publish_watcher_value(
+                self, "latest_activity_style", label, style,
+                lambda: label.configure(style=style),
+            )
+        self._pending_activity_footer = None
+
     def _schedule_activity_drawer_refresh(self) -> None:
         """Coalesce drawer rendering while activity state and persistence stay current.
 
         Returns:
-            None: Schedules one idle render of the latest retained activity.
+            None: Schedules one idle render while Activity is visible or
+                retains a dirty flag for its next visibility change.
         """
         if self.exiting or not hasattr(self, "activity_drawer"):
+            return
+        self._activity_drawer_dirty = True
+        if (
+            getattr(self, "_activity_tab_selected", True) is False
+            or getattr(self, "window_hidden_to_tray", False) is True
+        ):
             return
         if self._activity_render_after_id is not None:
             return
@@ -16773,12 +17489,16 @@ class WatcherApp:
                 idle callback so a stale callback cannot clear a replacement.
 
         Returns:
-            None: Clears the owned callback and refreshes the current filter.
+            None: Clears the owned callback and refreshes the current filter
+                only while Activity remains visible.
         """
         if callback_id != self._activity_render_after_id:
             return
         self._activity_render_after_id = None
-        if not self.exiting:
+        if (
+            not self.exiting and getattr(self, "_activity_tab_selected", True) is not False
+            and getattr(self, "window_hidden_to_tray", False) is not True
+        ):
             self.refresh_activity_drawer()
 
     def _cancel_event_ui_callbacks(self) -> None:
@@ -16801,8 +17521,8 @@ class WatcherApp:
         """Reconcile the recent events shown by the selected Activity filter.
 
         Returns:
-            None: Cancels a pending coalesced render and updates the bounded
-                newest-first rows without replacing retained event identities.
+            None: Cancels a pending coalesced render and updates bounded
+                newest-first rows when the panel is visible.
         """
         callback_id = self._activity_render_after_id
         self._activity_render_after_id = None
@@ -16812,6 +17532,12 @@ class WatcherApp:
             except tk.TclError:
                 pass
         if not hasattr(self, "activity_drawer"):
+            return
+        if (
+            getattr(self, "_activity_tab_selected", True) is False
+            or getattr(self, "window_hidden_to_tray", False) is True
+        ):
+            self._activity_drawer_dirty = True
             return
         self._activity_drawer_flush_count += 1
         selected = self.activity_filter_var.get().strip().lower() or "all"
@@ -16874,6 +17600,7 @@ class WatcherApp:
             rows,
             tuple(event for event, _item_id in displayed_events),
         )
+        self._activity_drawer_dirty = False
 
     def _watch_diagnostic_snapshot(self) -> Dict[str, JsonValue]:
         """Read current Watcher identity, intent, scan and transport evidence.
@@ -16950,7 +17677,11 @@ class WatcherApp:
                 generation and trigger fields, without filesystem reads or
                 network requests.
         """
-        job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
+        view = WatcherApp._selected_import_view(self)
+        if view is not None and view.latest is not None:
+            job_summary = self._describe_import_progress(view.latest)
+        else:
+            job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
             f"{suffix}={'local' if capability.local_previewable else 'server-only'}"
             for suffix, capability in sorted(self.media_capabilities.items())
@@ -17190,8 +17921,8 @@ class WatcherApp:
         """Show compact Watcher state, queue size and last scan artwork.
 
         Returns:
-            None: Updates three icon groups and keeps full context in the hover
-                tooltip without adding visible captions to the header.
+            None: Publishes changed icon, queue, time and tooltip values to
+                the retained header groups.
         """
         status_icon = getattr(self, "_watcher_header_status_icon", None)
         count_var = getattr(self, "watcher_header_count_var", None)
@@ -17251,36 +17982,46 @@ class WatcherApp:
                 if icon is not None:
                     icon_cache[cache_key] = icon
         if icon is not None:
-            status_icon.configure(image=icon)
+            _publish_watcher_value(
+                self, "watch_header_artwork", status_icon, (cache_key, str(icon)),
+                lambda: status_icon.configure(image=icon),
+            )
             self._watcher_header_status_image = icon
         else:
             # The theme owns permanent optional-Pillow support for source-mode
             # repair. Native glyphs retain status meaning in that environment;
             # normal installed/source runs use the supersampled artwork above.
-            status_icon.configure(
-                image="", text="◌" if hollow else "●",
-                foreground=_PALETTE[
-                    "recording" if tone == "ink" else tone
-                ],
+            foreground = _PALETTE["recording" if tone == "ink" else tone]
+            glyph = "◌" if hollow else "●"
+            _publish_watcher_value(
+                self, "watch_header_artwork", status_icon, (glyph, foreground),
+                lambda: status_icon.configure(image="", text=glyph, foreground=foreground),
             )
-        count_var.set(queued)
+        _publish_watcher_text(self, "watcher_header_count_var", queued)
         scanned_at = getattr(self, "_watcher_last_scan_at", None)
         scan_clock = (
             time.strftime("%H:%M", time.localtime(scanned_at))
             if scanned_at is not None else "–:–"
         )
-        time_var.set(scan_clock)
+        _publish_watcher_text(self, "watcher_header_time_var", scan_clock)
         stop_button = getattr(self, "_watcher_header_stop_button", None)
         if stop_button is not None:
-            if worker_active and not preparing:
-                stop_button.configure(state="normal")
-                if not stop_button.winfo_manager():
-                    stop_button.pack(side="left", padx=(8, 0))
-            else:
-                stop_button.pack_forget()
+            show_stop = worker_active and not preparing
+            if show_stop:
+                _publish_watcher_value(
+                    self, "watch_header_stop_enabled", stop_button, True,
+                    lambda: stop_button.configure(state="normal"),
+                )
+            _publish_watcher_value(
+                self, "watch_header_stop_visible", stop_button, show_stop,
+                (lambda: stop_button.pack(side="left", padx=(8, 0)))
+                if show_stop else stop_button.pack_forget,
+            )
         stop_hint = getattr(self, "_watcher_header_stop_hint", None)
         if stop_hint is not None:
-            stop_hint.set(tr(language, "watcher_header_stop"))
+            _publish_watcher_text(
+                self, "_watcher_header_stop_hint", tr(language, "watcher_header_stop"),
+            )
         hint = getattr(self, "_watcher_header_hint", None)
         if hint is not None:
             queue_caption = tr(language, "watcher_header_queue")
@@ -17289,7 +18030,8 @@ class WatcherApp:
                 language, "watcher_header_gallery_unavailable",
             )
             photos_caption = tr(language, "photos_pane_title")
-            hint.set(
+            _publish_watcher_text(
+                self, "_watcher_header_hint",
                 f"{gallery_name or missing_gallery} · {activity}\n"
                 f"{queue_caption}: {queued} {photos_caption}\n"
                 f"{scan_caption}: {scan_clock}"
@@ -17300,7 +18042,8 @@ class WatcherApp:
         Refresh independent watcher, import, AI, connection, and tray indicators.
 
         Returns:
-            None: Synchronizes visible worker captions and status indicators.
+            None: Synchronizes worker captions, indicators and the tray title
+                with the current worker and session state.
         """
         watcher_running = bool(self.worker and self.worker.is_alive())
         if self.worker is not getattr(self, "_watcher_queue_worker", None):
@@ -17314,32 +18057,48 @@ class WatcherApp:
 
         state = self.flights.session_state()
         if state == "working" and not self.flights.independent_operation():
-            self.watcher_activity_var.set("Watch: finishing")
+            watcher_caption = "Watch: finishing"
         elif watcher_running:
-            self.watcher_activity_var.set("Watch: running")
+            watcher_caption = "Watch: running"
         elif state == "pending":
-            self.watcher_activity_var.set("Watch: uploads pending")
+            watcher_caption = "Watch: uploads pending"
         else:
-            self.watcher_activity_var.set("Watch: stopped")
+            watcher_caption = "Watch: stopped"
+        # Lifecycle and recovery handlers also publish these three variables.
+        # Read their current captions so a poll cannot hide a newer transition.
+        if self.watcher_activity_var.get() != watcher_caption:
+            self.watcher_activity_var.set(watcher_caption)
         self.refresh_watcher_header()
+        import_caption = self.import_activity_var.get()
         if preflight_running:
-            self.import_activity_var.set("Import: preflight")
+            next_import_caption = "Import: preflight"
         elif manual_running:
-            self.import_activity_var.set("Import: paused" if self.manual_worker and self.manual_worker.pause_event.is_set() else "Import: running")
-        elif not self.import_activity_var.get().startswith("Import: failed"):
-            self.import_activity_var.set("Import: idle")
-        if ai_running:
-            self.ai_activity_var.set("AI: running")
-        elif self.ai_worker_stop_requested and self.ai_worker and self.ai_worker.is_alive():
-            self.ai_activity_var.set("AI: stopping")
+            next_import_caption = (
+                "Import: paused" if self.manual_worker and self.manual_worker.pause_event.is_set()
+                else "Import: running"
+            )
         else:
-            self.ai_activity_var.set("AI: stopped")
+            next_import_caption = (
+                import_caption if import_caption.startswith("Import: failed") else "Import: idle"
+            )
+        if import_caption != next_import_caption:
+            self.import_activity_var.set(next_import_caption)
+        if ai_running:
+            ai_caption = "AI: running"
+        elif self.ai_worker_stop_requested and self.ai_worker and self.ai_worker.is_alive():
+            ai_caption = "AI: stopping"
+        else:
+            ai_caption = "AI: stopped"
+        if self.ai_activity_var.get() != ai_caption:
+            self.ai_activity_var.set(ai_caption)
 
         active = watcher_running or manual_running or ai_running or preflight_running
         self.update_monitor_state("green" if active else "disabled", "Background activity is running." if active else "No background worker is active.")
         if self.tray_icon is not None:
             try:
-                self.tray_icon.title = self.tray_tooltip_text()
+                title = self.tray_tooltip_text()
+                if self.tray_icon.title != title:
+                    self.tray_icon.title = title
             except Exception:  # noqa: BLE001
                 logging.debug("Could not refresh tray tooltip.", exc_info=True)
 
@@ -17390,7 +18149,8 @@ class WatcherApp:
         Run one cooperative batch of worker events and schedule its continuation.
 
         Returns:
-            None: Preserves FIFO event handling and schedules one later batch.
+            None: Preserves FIFO handling, publishes the latest batch footer
+                and schedules one later batch.
         """
         if self.exiting or self._drain_running:
             return
@@ -17407,6 +18167,11 @@ class WatcherApp:
         try:
             budget_exhausted = self._drain_event_batch()
             if not self.exiting:
+                if hasattr(self, "_import_presentation_after"):
+                    self._receive_import_history()
+                    self._flush_import_presentation()
+                self._flush_activity_footer()
+                WatcherApp._flush_visible_log(self)
                 self.refresh_contextual_watcher_copy()
                 self.refresh_activity_monitor_state()
                 self.refresh_revoke_button_state()
@@ -17424,6 +18189,11 @@ class WatcherApp:
                     WATCHER_EVENT_CONTINUATION_MS
                     if budget_exhausted else WATCHER_EVENT_IDLE_POLL_MS
                 )
+                reader = getattr(self, "_import_history_reader", None)
+                worker = getattr(self, "manual_worker", None)
+                if ((reader is not None and reader.has_work())
+                        or (worker is not None and worker.is_alive())):
+                    delay_ms = min(delay_ms, IMPORT_PRESENTATION_INTERVAL_MS)
                 self._schedule_event_drain(delay_ms)
 
     def _drain_event_batch(self) -> bool:
@@ -17901,6 +18671,7 @@ class WatcherApp:
                         )
                         self.manual_plan = plan
                         self.current_job = plan.job
+                        self._import_detail_request = None
                         self.render_preflight_plan(plan)
                         self.refresh_job_history()
                         self.write_log("Import preflight completed. Review the summary before starting.", "success")
@@ -18108,27 +18879,24 @@ class WatcherApp:
                     self.refresh_connection_controls()
                     messagebox.showerror("Revoke API key failed", message)
                 elif kind == "job_progress":
-                    if self.current_job is not None and (not job_id or self.current_job.id == job_id):
-                        refreshed = self.job_store.get_job(self.current_job.id)
-                        if refreshed is not None:
-                            self.current_job = refreshed
-                        job = self.current_job
-                        counts = job.counts()
-                        terminal = counts["uploaded"] + counts["duplicates"] + counts["failed"] + counts["cancelled"] + counts["skipped"]
-                        total = max(1, len(job.items) + job.skipped)
-                        percent = min(100.0, terminal * 100.0 / total)
-                        self.manual_progress_var.set(percent)
-                        elapsed = max(0.001, time.time() - job.started_at) if job.started_at else 0.0
-                        rate = job.bytes_sent / elapsed if elapsed else 0.0
-                        remaining = max(0, job.bytes_total - job.bytes_sent)
-                        eta = (remaining / rate) if rate > 0 else 0.0
-                        rate_text = f"{self.format_bytes(int(rate))}/s" if rate > 0 else "rate pending"
-                        eta_text = f"ETA {int(eta)}s" if eta > 0 else "ETA pending"
-                        self.manual_progress_text_var.set(f"{terminal}/{total} terminal | {self.format_bytes(job.bytes_sent)} / {self.format_bytes(job.bytes_total)} | {rate_text} | {eta_text}")
-                        self.activity_job_summary_var.set(self.describe_job(job))
-                        self.refresh_import_item_tree(job)
-                        self.refresh_job_history()
-                elif kind == "job_control":
+                    snapshot = payload.get("snapshot")
+                    if isinstance(snapshot, ImportProgressSnapshot) and job_id == snapshot.history.job_id:
+                        self._accept_import_progress(snapshot)
+                    # A saved presentation revision has no connection side
+                    # effects. Refresh shared controls once at the drain boundary.
+                    continue
+                elif kind in ("job_control", "job_completed"):
+                    worker = self.manual_worker
+                    if (worker is None or worker.import_job_id != job_id
+                            or worker.import_generation != payload.get("generation")):
+                        continue
+                    if kind == "job_completed":
+                        self._finish_import_presentation(
+                            job_id, cancelled=bool(payload.get("cancelled", False)),
+                            needs_review=bool(payload.get("needs_review", False)),
+                        )
+                        continue
+                    self._flush_import_presentation(force=True)
                     paused = bool(payload.get("paused", False))
                     self.manual_status_var.set("Import paused" if paused else "Import running")
                     self.import_activity_var.set("Import: paused" if paused else "Import: running")
@@ -18166,24 +18934,6 @@ class WatcherApp:
             if message.startswith("Manual upload started"):
                 self.manual_status_var.set("Import running")
                 self.import_activity_var.set("Import: running")
-            elif message.startswith(("Manual upload finished", "Manual upload stopped")):
-                if self.current_job is not None:
-                    refreshed = self.job_store.get_job(self.current_job.id)
-                    if refreshed is not None:
-                        self.current_job = refreshed
-                    self.refresh_import_item_tree(self.current_job)
-                    self.activity_job_summary_var.set(self.describe_job(self.current_job))
-                failed = self.current_job.counts()["failed"] if self.current_job else 0
-                cancelled = self.current_job.counts()["cancelled"] if self.current_job else 0
-                self.manual_status_var.set("Import finished" if message.startswith("Manual upload finished") else "Import cancelled")
-                self.import_activity_var.set("Import: idle" if not failed else "Import: failed items")
-                self.manual_progress_var.set(100.0 if not failed and not cancelled else self.manual_progress_var.get())
-                self.start_import_button.configure(state="disabled")
-                self.pause_import_button.configure(state="disabled")
-                self.resume_import_button.configure(state="disabled")
-                self.cancel_import_button.configure(state="disabled")
-                self.retry_failed_button.configure(state="normal" if (failed or cancelled) else "disabled")
-                self.refresh_job_history()
             elif message.startswith("Watcher stopped"):
                 self.status_var.set("Stopped")
                 self.watcher_activity_var.set("Watch: stopped")
@@ -18292,7 +19042,8 @@ class WatcherApp:
             detail (str): Short human-readable explanation.
 
         Returns:
-            None: Update the small monitoring light and its text labels.
+            None: Synchronizes changed labels and retains the monitor oval on
+                its current Canvas.
         """
         state = state if state in {"disabled", "green", "red"} else "red"
         self.monitor_state = state
@@ -18303,10 +19054,16 @@ class WatcherApp:
             "red": ("#ef5350", "#b71c1c", "Monitoring error"),
         }
         fill, outline, label = palette[state]
-        self.monitor_state_var.set(label)
-        self.monitor_detail_var.set(detail)
-        self.monitor_light.delete("all")
-        self.monitor_light.create_oval(2, 2, 14, 14, fill=fill, outline=outline, width=1)
+        _publish_watcher_text(self, "monitor_state_var", label)
+        _publish_watcher_text(self, "monitor_detail_var", detail)
+        canvas = self.monitor_light
+        previous = getattr(self, "_watcher_monitor_oval", None)
+        if previous is None or previous[0] is not canvas:
+            item = canvas.create_oval(2, 2, 14, 14, fill=fill, outline=outline, width=1)
+            self._watcher_monitor_oval = (canvas, item, state)
+        elif previous[2] != state:
+            canvas.itemconfigure(previous[1], fill=fill, outline=outline)
+            self._watcher_monitor_oval = (canvas, previous[1], state)
 
     def classify_log_level(self, level: str, message: str) -> str:
         """
@@ -18334,29 +19091,58 @@ class WatcherApp:
 
     def write_log(self, message: str, tag: str = "system") -> None:
         """
-        Append one secret-safe line to the status log.
+        Append one secret-safe record to the durable log and Activity tail.
 
         Args:
             message (str): Message text to append.
             tag (str): Log color tag name.
 
         Returns:
-            None: Append one secret-safe line to the status log.
+            None: Retains a bounded inline copy and publishes it when visible.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         safe_message = redact_text(message, [secret], redact_paths=False)
         logging.info("UI: %s", redact_text(safe_message, [secret], redact_paths=False))
         if not hasattr(self, "log_text"):
             return
-        stamp = time.strftime("%H:%M:%S")
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", "[", ("timestamp",))
-        self.log_text.insert("end", stamp, ("timestamp",))
-        self.log_text.insert("end", "] ", ("timestamp",))
-        self.log_text.insert("end", safe_message, (tag if tag in self.log_text.tag_names() else "system",))
-        self.log_text.insert("end", "\n")
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
+        self._pending_log_lines.append((time.strftime("%H:%M:%S"), safe_message, tag))
+        if not self._drain_running:
+            self._flush_visible_log()
+
+    def _flush_visible_log(self) -> None:
+        """Append the retained diagnostic tail in one visible Tk operation.
+
+        Returns:
+            None: Applies the bounded recent lines in FIFO order on Activity.
+                The rotating log still receives every record immediately.
+        """
+        pending = getattr(self, "_pending_log_lines", None)
+        if (not pending or not getattr(self, "_activity_tab_selected", False)
+                or getattr(self, "window_hidden_to_tray", False)):
+            return
+        text = self.log_text
+        tags = frozenset(text.tag_names())
+        fragments: list[str | tuple[str, ...]] = []
+        line_count = self._displayed_log_lines
+        for stamp, message, tag in pending:
+            fragments.extend((
+                f"[{stamp}] ", ("timestamp",),
+                message + "\n", (tag if tag in tags else "system",),
+            ))
+            line_count += message.count("\n") + 1
+        text.configure(state="normal")
+        try:
+            text.insert("end", *fragments)
+            # The inline tail shares the existing clamped Activity history
+            # limit. Open log file remains the source for earlier lines.
+            overflow = max(0, line_count - self.job_store.history_limit)
+            if overflow:
+                text.delete("1.0", f"1.0 + {overflow} lines")
+            self._displayed_log_lines = line_count - overflow
+            pending.clear()
+            text.see("end")
+        finally:
+            text.configure(state="disabled")
 
     def run(self) -> None:
         """

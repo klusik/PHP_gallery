@@ -10423,6 +10423,27 @@ desktopscrollning blev Canvas det sparade standardvalet för nya profiler och
 behåller inbyggda widgets. Tk-proxymått visar varken fysisk visning eller
 skärmläsarparitet.
 
+Protokollet för~den andra fasen av~WinApps svarstidsmätning använder
+\codeword{watcher-tk-performance} på~GitHub-värdbaserad Windows. Det~sparar
+en~oföränderlig baslinje och~parade körningar för~Watcher, Import, Photos och
+Lightbox med~isolerade syntetiska profiler. Arbetsflödet sparar rådata,
+programvarans svarstid, resursanvändning och~misslyckade mätningar.
+
+Watcher behåller sin indikator och~uppdaterar etiketter och~kontroller
+när deras visade värden ändras. Activity-poster behåller sin ordning.
+En~sats visar den senaste posten i~sidfoten. Activity-tabellen
+synkroniseras med sparade poster när panelen visas.
+Diagnostikpanelen visar de~senaste raderna. Open log file öppnar
+den~roterande loggfilen.
+
+Import visar sparade framsteg i~omgångar och~uppdaterar ändrade rader inom
+visningsgränsen. Activity förbereder jobbhistorik och~detaljer om~valt
+importjobb i~bakgrunden. Aktuella framsteg visas när panelen öppnas.
+
+WinApp Lightbox förbereder förhandsvisningar i~bakgrunden och~visar den
+färdiga vyn med~full omsamplingskvalitet. Verktygsfält och~status kan
+uppdateras medan bilden visas.
+
 Metadata, Tk-idle-återkoppling och stabil
 viewport mäts separat. Den tillåtna filen
 \codeword{issue_399_tk_protocol.json} väljs med

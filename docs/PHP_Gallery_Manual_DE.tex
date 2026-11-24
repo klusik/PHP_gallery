@@ -11113,6 +11113,28 @@ für neue Profile und ältere Profile ohne Einstellungsschlüssel. Ein
 ausdrücklich gespeichertes False behält native Widgets bei. Tk-Proxy-Messungen
 belegen weder physische Bildausgabe noch Screenreader-Parität.
 
+Das~Protokoll der~zweiten Phase für~die WinApp-Reaktionszeit verwendet
+\codeword{watcher-tk-performance} auf~GitHub-gehostetem Windows. Es~erfasst
+eine unveränderliche Baseline und~gepaarte Läufe für~Watcher, Import, Photos
+und~Lightbox mit~isolierten synthetischen Profilen. Der~Workflow speichert
+Rohdaten, Software-Reaktionszeiten, Ressourcennutzung und~Fehlbefunde.
+
+Der~Watcher behält seine Anzeige bei und~aktualisiert Beschriftungen
+und~Bedienelemente bei~geänderten Anzeigewerten. Activity-Einträge
+behalten ihre Reihenfolge. Ein~Stapel zeigt den letzten Eintrag in~der
+Fußleiste. Die~Activity-Tabelle gleicht beim Öffnen die~Einträge ab.
+Der~Diagnosebereich zeigt die~letzten Zeilen. Open log file öffnet
+die~rotierende Protokolldatei.
+
+Import zeigt den~gespeicherten Fortschritt in~Gruppen und~aktualisiert
+geänderte Zeilen innerhalb der~Anzeigegrenze. Activity lädt den~Verlauf
+und~die~Details des~gewählten Imports im Hintergrund. Beim Öffnen eines
+Bereichs erscheint der aktuelle Fortschritt.
+
+WinApp Lightbox bereitet Bildvorschauen im Hintergrund vor. Nach
+Ende der~Eingabe erscheint die~Ansicht in voller Resampling-Qualität.
+Leiste und~Status können sich bei~sichtbarem Bild aktualisieren.
+
 Metadatenaufnahme, Tk-Idle-Rückmeldung
 und stabiler Viewport bleiben getrennte Messungen. Die freigegebene Datei
 \codeword{issue_399_tk_protocol.json} wird über

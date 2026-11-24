@@ -115,10 +115,10 @@ class ActivityWriterTests(unittest.TestCase):
             self.assertEqual('activity-50', rows[-1].message)
 
     def test_writer_batches_on_a_daemon_thread_and_flushes_on_close(self) -> None:
-        """Queue recent UI events without synchronously writing the state file.
+        """Queue an ordered batch and wake the waiting writer only once.
 
         Returns:
-            None: The close flush persists events from a distinct daemon thread.
+            None: The daemon persists the submitted values in order on close.
         """
         with tempfile.TemporaryDirectory() as directory:
             store = JobStateStore(Path(directory) / 'upload_state.json')
@@ -140,8 +140,16 @@ class ActivityWriterTests(unittest.TestCase):
             store.append_events = record_writer
             caller_thread_id = threading.get_ident()
             writer = ActivityWriter(store)
-            for index in range(5):
-                self.assertTrue(writer.submit(self.make_event(index)))
+            # Hold the reentrant condition until all submissions belong to
+            # the same waiting batch, regardless of worker scheduling.
+            with writer._condition, mock.patch.object(
+                writer._condition, 'notify', wraps=writer._condition.notify,
+            ) as notify:
+                for index in range(5):
+                    event = self.make_event(index)
+                    self.assertTrue(writer.submit(event))
+                    event.message = 'changed after submission'
+                notify.assert_called_once_with()
             self.assertTrue(writer.close(_ACTIVITY_TEST_CLOSE_TIMEOUT_SECONDS))
             self.assertFalse(writer.submit(self.make_event(6)))
             self.assertTrue(writer_thread_ids)

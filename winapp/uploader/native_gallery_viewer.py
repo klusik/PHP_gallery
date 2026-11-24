@@ -5813,15 +5813,20 @@ class _NativeGalleryViewer:
         """Create the shared photo overlay and its playlist toolbar actions.
 
         Returns:
-            PhotoLightbox: Active overlay owner for this selected gallery.
+            PhotoLightbox: Active overlay fenced to this viewer's live session.
         """
         if self._lightbox is None:
+            session = self.session
             self._lightbox = PhotoLightbox(
                 self.window,
                 lambda key: self._text(f'linking_media_{key}'),
                 self._move_lightbox,
                 self._close_lightbox,
                 self._main_content,
+                can_publish=lambda: (
+                    not self._closed and self.session is session and session.can_read_media()
+                ),
+                on_photo_resolved=self._on_lightbox_photo_resolved,
             )
             self._lightbox_track_buttons = (
                 self._lightbox.add_action(
@@ -5947,11 +5952,6 @@ class _NativeGalleryViewer:
                     ) else 'linking_media_image_error'
                 )
                 self._lightbox.show_error(self._text(error_key))
-            if self._slideshow_running:
-                if len(self._photos) > 1:
-                    self._schedule_slide()
-                else:
-                    self._stop_slideshow()
             return
         photo = self._photos[self._slide_index]
         if photo.image_id != image_id:
@@ -5968,8 +5968,23 @@ class _NativeGalleryViewer:
             display_image, location=location, encoded=encoded,
         )
         self._queue_adjacent_prefetch(self._slide_index)
-        if self._slideshow_running and self._slideshow_id is None:
+
+    def _on_lightbox_photo_resolved(self, displayed: bool) -> None:
+        """Begin a slide interval after the current photo or error is visible.
+
+        Args:
+            displayed (bool): True when the Lightbox attached the current photo.
+
+        Returns:
+            None: Advances a running slideshow, or stops when its sole
+                photo could not be displayed.
+        """
+        if self._closed or not self._slideshow_running or self._slideshow_id is not None:
+            return
+        if displayed or len(self._photos) > 1:
             self._schedule_slide()
+        else:
+            self._stop_slideshow()
 
     def _detail_position(self, index: int) -> str:
         """Return the visible ordinal across the accumulated album sequence.

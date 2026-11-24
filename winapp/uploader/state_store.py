@@ -19,20 +19,22 @@
 Atomic state persistence and job/activity history for the Windows uploader.
 """
 
+import heapq
 import json
 import logging
-from contextlib import ExitStack, closing, contextmanager
 import math
 import os
 import re
-import stat
 import shutil
+import stat
 import tempfile
 import threading
 import time
 from collections import deque
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 from typing import Any, BinaryIO, Deque, Dict, Iterator, List, NoReturn, Optional
+from uuid import uuid4
 
 if os.name == "nt":
     import msvcrt
@@ -40,9 +42,10 @@ else:
     import fcntl
 
 from .models import (
-    ActivityEvent, ImportJob, ITEM_STATES, LINKED_UPLOAD_UNCERTAIN_REASON,
-    JsonValue,
+    ActivityEvent, ImportJob, ITEM_ACTIVE_STATES, ITEM_STATES,
+    LINKED_UPLOAD_UNCERTAIN_REASON, JsonValue,
 )
+from .import_ui_snapshot import ImportHistorySummary
 from .app_linking import linking_issuer
 from .windows_file_identity import WindowsDirectoryAnchor
 
@@ -789,6 +792,88 @@ def validate_import_job_update(
         raise ValueError("Existing import dispatch history changed.")
 
 
+def _legacy_job_created_at(row: Dict[str, Any]) -> float:
+    """Validate legacy numeric conversions and return its sort timestamp.
+
+    Args:
+        row (Dict[str, Any]): Raw job object from the state document.
+
+    Returns:
+        float: Created timestamp after numeric ImportJob/ImportItem conversion.
+    """
+    # Preserve decoded legacy numeric failures without allocating model objects.
+    max(0, int(row.get("skipped", 0) or 0))
+    max(0, int(row.get("bytes_total", 0) or 0))
+    max(0, int(row.get("bytes_sent", 0) or 0))
+    float(row.get("started_at", 0.0) or 0.0)
+    float(row.get("finished_at", 0.0) or 0.0)
+    raw_items = row.get("items", [])
+    items = raw_items if isinstance(raw_items, list) else []
+    for raw_item in items:
+        if not isinstance(raw_item, dict):
+            continue
+        max(0, int(raw_item.get("size", 0) or 0))
+        max(0, int(raw_item.get("attempt_count", 0) or 0))
+        float(raw_item.get("last_update", time.time()) or time.time())
+    return float(row.get("created_at", time.time()) or time.time())
+
+
+def _project_job_history_summary(
+    row: Dict[str, Any], created_at: float,
+) -> ImportHistorySummary:
+    """Project raw legacy job fields without constructing an ImportJob graph.
+
+    Args:
+        row (Dict[str, Any]): Raw job object selected for the bounded history.
+        created_at (float): Timestamp already used to order the raw row.
+
+    Returns:
+        ImportHistorySummary: Primitive fields for the stable history row.
+    """
+    counts = {
+        "uploaded": 0,
+        "duplicates": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "active": 0,
+    }
+    raw_items = row.get("items", [])
+    items = raw_items if isinstance(raw_items, list) else []
+    for raw_item in items:
+        if not isinstance(raw_item, dict):
+            continue
+        state = str(raw_item.get("state", "discovered") or "discovered")
+        if state not in ITEM_STATES:
+            state = "failed_retryable"
+        if state == "confirmed":
+            counts["uploaded"] += 1
+        elif state == "skipped_duplicate":
+            counts["duplicates"] += 1
+        elif state in ("failed_retryable", "failed_permanent"):
+            counts["failed"] += 1
+        elif state == "cancelled":
+            counts["cancelled"] += 1
+        elif state in ITEM_ACTIVE_STATES:
+            counts["active"] += 1
+    return ImportHistorySummary(
+        job_id=str(row.get("id", "") or uuid4().hex),
+        source_kind=str(row.get("source_kind", "files") or "files"),
+        created_at=created_at,
+        source_label=str(row.get("source_label", "") or ""),
+        target_gallery_label=str(row.get("target_gallery_label", "") or ""),
+        status=(
+            f"uploaded {counts['uploaded']}, "
+            f"duplicate {counts['duplicates']}, "
+            f"failed {counts['failed']}, "
+            f"cancelled {counts['cancelled']}, "
+            f"active {counts['active']}"
+        ),
+        created_label=time.strftime(
+            "%Y-%m-%d %H:%M", time.localtime(created_at),
+        ),
+    )
+
+
 class JobStateStore:
     """
     Durable job and activity history stored in ``upload_state.json``.
@@ -881,6 +966,42 @@ class JobStateStore:
         result = [ImportJob.from_dict(row) for row in jobs.values() if isinstance(row, dict)] if isinstance(jobs, dict) else []
         result.sort(key=lambda job: job.created_at, reverse=True)
         return result
+
+    def list_job_history(self, limit: int) -> List[ImportHistorySummary]:
+        """Return the newest bounded history projection without hydrating all jobs.
+
+        The complete JSON state is read with the same safe ordinary reader as
+        list_jobs. Raw rows are ordered by their ImportJob.from_dict timestamp
+        defaults, while only the requested newest rows are projected.
+
+        Args:
+            limit (int): Maximum number of newest history summaries to return.
+
+        Returns:
+            List[ImportHistorySummary]: Newest-first primitive history rows.
+
+        Raises:
+            ValueError: The requested history limit is negative.
+        """
+        if limit < 0:
+            raise ValueError("Import history limit cannot be negative.")
+        with _STATE_LOCK:
+            jobs = self._load().get("jobs", {})
+        if not isinstance(jobs, dict) or limit == 0:
+            return []
+        ordered = heapq.nlargest(
+            limit,
+            (
+                (_legacy_job_created_at(row), row)
+                for row in jobs.values()
+                if isinstance(row, dict)
+            ),
+            key=lambda entry: entry[0],
+        )
+        return [
+            _project_job_history_summary(row, created_at)
+            for created_at, row in ordered
+        ]
 
     def inspect_jobs_for_target_change(self) -> List[ImportJob]:
         """Read accepted import jobs without normalizing or repairing lost state.
@@ -1148,7 +1269,7 @@ class ActivityWriter:
         self._thread.start()
 
     def submit(self, event: ActivityEvent) -> bool:
-        """Queue one immutable activity snapshot without performing disk I/O.
+        """Queue an independent normalized activity record without disk I/O.
 
         Args:
             event (ActivityEvent): Recent event to append to bounded history.
@@ -1158,12 +1279,18 @@ class ActivityWriter:
         """
         if not isinstance(event, ActivityEvent):
             raise TypeError('Activity writer accepts ActivityEvent records only.')
-        snapshot = ActivityEvent.from_dict(event.to_dict())
+        # The normalizer already copies the scalar event fields. An additional
+        # deep copy would repeat work on the dispatching thread.
+        snapshot = ActivityEvent.from_dict(vars(event))
         with self._condition:
             if self._closing:
                 return False
+            was_empty = not self._pending
             self._pending.append(snapshot)
-            self._condition.notify()
+            # A nonempty queue already has an assigned batch window. Waking
+            # its timed wait for every appended event only adds contention.
+            if was_empty:
+                self._condition.notify()
             return True
 
     def close(self, timeout: float) -> bool:

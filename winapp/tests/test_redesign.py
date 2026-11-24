@@ -4570,11 +4570,16 @@ class SimConnectActivityTests(unittest.TestCase):
         Returns:
             None: Confirms the event, footer, and durable store use the safe text.
         """
-        app = mock.Mock()
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.api_key_var = mock.Mock()
         app.api_key_var.get.return_value = "private-key"
         app.activity_events = []
-        app.config.activity_history_limit = 50
+        app.config = types.SimpleNamespace(activity_history_limit=50)
         app.latest_activity_var = mock.Mock()
+        app.latest_activity_label = None
+        app.activity_writer = types.SimpleNamespace(submit=mock.Mock(return_value=True))
+        app.job_store = mock.Mock()
+        app._schedule_activity_drawer_refresh = mock.Mock()
 
         MAIN.WatcherApp.record_activity(app, "warning", "[simconnect] Failure private-key", "simconnect")
 
@@ -4824,7 +4829,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         Returns:
             None: Both controls show localized game or flight Begin/Finish
                 and Abandon wording while retaining their enabled state and
-                saved key. SimBrief widgets follow flight detection reversibly.
+                saved key. SimBrief widgets change geometry only when flight
+                detection changes.
         """
         from uploader.game_context import GameContext
 
@@ -4862,6 +4868,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             app.linking_manager.linked_address.get.return_value = ""
             # For each presence context, check setup and live capture wording.
             states = ((False, ""), (False, "saved"), (True, ""), (True, "saved"))
+            previous_availability = None
             for (available, key), label in zip(states, labels):
                 with self.subTest(language=language, available=available, key=key):
                     app.simulator_presence.available = available
@@ -4891,13 +4898,17 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                         else:
                             button.grid_remove.assert_called()
                     for widget in simbrief_widgets:
-                        if available:
+                        if available == previous_availability:
+                            widget.grid.assert_not_called()
+                            widget.grid_remove.assert_not_called()
+                        elif available:
                             widget.grid.assert_called_once_with()
                             widget.grid_remove.assert_not_called()
                         else:
                             widget.grid_remove.assert_called_once_with()
                             widget.grid.assert_not_called()
                     self.assertEqual(key, app.config.api_key)
+                    previous_availability = available
 
     def test_finish_flight_is_below_gallery_and_title_can_shrink(self) -> None:
         """Keep the finish action visible independently of gallery title length.
