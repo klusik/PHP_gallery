@@ -427,11 +427,12 @@ separates Begleitinventar. Historische interaktive und
 FTP-Bereitstellungsskripte wurden entfernt. Siehe
 \filepath{docs/PRODUCTION_FILES.md}.
 
-Schrift und~Lizenz der~Begleitanwendung verwenden das~optionale Inventarfeld
-\codeword{companion_resource_files}. Installierte Leser können diese Ergänzung
-ignorieren; die~aktuelle Paketrichtlinie prüft die~exakten erlaubten Pfade.
-Das ursprüngliche Begleitfeld bleibt für~ältere Updater lesbar; beide Felder
-gewähren keine CMS-Ersetzungsrechte. Direkte Updates verwenden ein~vollständiges
+Schrift und~Lizenz von~WinApp stehen im~optionalen Feld
+\codeword{companion_resource_files}. Gettext-Kataloge verwenden das~Feld
+\codeword{companion_locale_files}. Installierte Leser verarbeiten die~Felder,
+die~sie kennen. Die~aktuelle Paketrichtlinie prüft die~exakten Pfade beider
+Listen. Das~Update-Inventar legt fest, welche CMS-Dateien ersetzt werden.
+Direkte Updates verwenden ein~vollständiges
 neueres Paket und~alle ausstehenden Migrationen ohne jede Zwischenversion.
 Dies qualifiziert keine beliebigen historischen Hosting- oder~Datenbankzustände.
 Brechen Sie~einen fehlgeschlagenen Auftrag vor~der Aktivierung ab, bevor Sie~ein
@@ -1963,6 +1964,13 @@ Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt
 \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \section{Windows-Uploader}
+Wählen Sie in~den~\ui{Einstellungen} unter \ui{Sprache} Englisch,
+Tschechisch, Deutsch oder Schwedisch. WinApp speichert die~Auswahl und~bietet
+einen Neustart an. Mit \ui{Später} gilt die~Sprache beim nächsten Start.
+Solange die~Änderung aussteht, ist \ui{WinApp neu starten} in~den~Einstellungen
+verfügbar. Die~Sprache der~Website und~die
+PDF-Sprachfassungen der~Flugberichte lassen sich getrennt einstellen.
+
 \subsection{Dauerhafte Capture-Warteschlange und Wiederherstellung}
 
 Einmal verbinden, Capture starten und am Ende einmal \ui{Finish} wählen.

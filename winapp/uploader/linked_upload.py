@@ -23,6 +23,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
+import ctypes
+
+if os.name == 'nt':
+    import msvcrt
+
+from .flight_delivery import FlightDeliveryError
 from .app_linking import (
     LINKING_GALLERY_ID_MAX, LinkingError, LinkingSession, LinkedGallery,
     LinkedGalleryPage, UPLOAD_SCOPE, scope_base,
@@ -458,8 +464,6 @@ def delete_verified_linked_source(snapshot: _FileSegment) -> None:
             or re.fullmatch(r'[a-f0-9]{64}', snapshot.expected_sha256) is None):
         raise LinkingError('Captured source identity is invalid.')
 
-    import ctypes
-    import msvcrt
 
     # LOAD_LIBRARY_SEARCH_SYSTEM32 prevents an adjacent DLL from shadowing it.
     kernel32 = ctypes.WinDLL(
@@ -878,7 +882,6 @@ class LinkedUploadTarget:
             FlightDeliveryError: Authority or transport could not be verified;
                 the shared owner reconciles an ambiguous upload before retry.
         """
-        from .flight_delivery import FlightDeliveryError
 
         if url or api_key:
             raise FlightDeliveryError('Legacy credentials cannot deliver linked reports.')

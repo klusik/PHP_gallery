@@ -31,8 +31,33 @@ INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 # Win32 DRIVE_FIXED return code from GetDriveTypeW, not policy configuration.
 DRIVE_FIXED = 3
-# Win32 FILE_ATTRIBUTE_REPARSE_POINT bit, including older Python releases.
+# Identify Win32 reparse points in native stat metadata on Windows.
+# Type: int; Units: file-attribute bit; Scope: profile and update path checks.
+# Consumers: assert_local_windows_profile, reject_reparse_path, update markers.
+# Rationale: 0x0400 is the Win32 ABI bit, including older Python releases.
 FILE_ATTRIBUTE_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+
+
+def reject_reparse_path(path: Path) -> None:
+    """Reject links and reparse points from one path through its ancestors.
+
+    Args:
+        path (Path): Candidate update file or directory to inspect.
+
+    Returns:
+        None: Accepts only a path whose existing components are not redirected.
+
+    Raises:
+        ValueError: A symlink or native reparse point occurs in the path chain.
+    """
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink():
+            raise ValueError("Update paths must not contain reparse points")
+        if candidate.exists():
+            info = candidate.lstat()
+            if (getattr(info, "st_file_attributes", 0)
+                    & FILE_ATTRIBUTE_REPARSE_POINT):
+                raise ValueError("Update paths must not contain reparse points")
 
 
 def assert_local_windows_profile(directory: Path) -> None:

@@ -192,11 +192,11 @@ jobs:
         run: |
           $requirements = @(
             Get-Content winapp/requirements.txt |
-              Where-Object { $_ -match '^(Pillow|reportlab|pypdf)' }
+              Where-Object { $_ -match '^(Pillow|reportlab|pypdf|polib)' }
           )
           # Three source-owned entries cover image and report fixture imports.
-          if ($requirements.Count -ne 3) {
-            throw 'Missing declared image/report fixture requirements.'
+          if ($requirements.Count -ne 4) {
+            throw 'Missing declared image, report or locale fixture requirements.'
           }
           python -m pip install @requirements
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

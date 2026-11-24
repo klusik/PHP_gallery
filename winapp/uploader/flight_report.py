@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
+from xml.sax.saxutils import escape
 
 from PIL import Image as PillowImage
 
@@ -69,6 +70,7 @@ from .flight_data import (
     _distance_nm,
 )
 from .flight_report_translations import supported_languages, tr
+from .flight_render import render_report_variants
 from .flight_comparison import (
     ALTITUDE_BAND_FT, ROUTE_BAND_NM, COVERAGE_EPSILON_SECONDS,
     GRAPH_INTERVAL_SECONDS, WeightedValue, grouped_phases, mass_kg,
@@ -573,7 +575,6 @@ def _paragraph(
     Returns:
         Paragraph: Safe paragraph with XML-sensitive characters escaped.
     """
-    from xml.sax.saxutils import escape
 
     return Paragraph(escape(text).replace("\n", "<br/>"), style)
 
@@ -3210,7 +3211,6 @@ def _comparison_cell(parts: list[tuple[str, colors.Color]], language: str) -> Pa
     Returns:
         Paragraph: Renderer-owned colored cell; external text is always escaped.
     """
-    from xml.sax.saxutils import escape
 
     style = ParagraphStyle("comparison-colored-" + language,
         parent=_styles()["small"], fontSize=COMPARISON_CELL_SIZE,
@@ -4075,9 +4075,9 @@ def render_reports(
             )
         )
         destinations[language] = target
-    from uploader.flight_render import render_report_variants
-
-    rendered_reports = render_report_variants(analysis, destinations)
+    rendered_reports = render_report_variants(
+        analysis, destinations, prepare_maps=prepare_report_maps, render=render_report,
+    )
     for language in normalized:
         rendered = rendered_reports[language]
         pdf_sha256 = hashlib.sha256(rendered.read_bytes()).hexdigest()

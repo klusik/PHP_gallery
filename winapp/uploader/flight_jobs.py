@@ -27,6 +27,14 @@ if os.name == "nt":
 else:
     import fcntl
 
+try:
+    import pypdf
+    from pypdf.errors import PyPdfError
+except ImportError:
+    pypdf = None
+
+from uploader.app_linking import UPLOAD_SCOPE, scope_base
+from uploader.localization import gettext_noop
 from uploader.models import ImportJob, JsonValue
 from uploader.flight_simbrief import load_dispatch
 from uploader.windows_file_identity import WindowsDirectoryAnchor
@@ -167,7 +175,7 @@ class FlightPreferences:
             ValueError: Reports are enabled without a selected language.
         """
         if self.reports and not self.languages:
-            raise ValueError("Select a report language or disable reports.")
+            raise ValueError(gettext_noop("Select a report language or disable reports."))
         atomic_write_json(root / "preferences.json", {
             "schema_version": 1,  # Initial explicit storage format.
             "recording": self.recording,
@@ -383,17 +391,14 @@ def report_file_details(pdf: Path) -> ReportFileDetails:
             except ValueError:
                 pass
     pages = None
-    try:
-        from pypdf import PdfReader
-        from pypdf.errors import PyPdfError
-    except ImportError:
+    if pypdf is None:
         # Source-mode repair must retain access to existing PDFs. This permanent
         # fallback belongs to the catalog, not the renderer: unknown page counts
         # are sufficient for opening/uploading unchanged verified report files.
         return ReportFileDetails(pages, created, estimated)
     try:
         with pdf.open("rb") as stream:
-            pages = len(PdfReader(stream, strict=False).pages)
+            pages = len(pypdf.PdfReader(stream, strict=False).pages)
     except (PyPdfError, ValueError, TypeError, RecursionError):
         # Old or damaged PDFs remain visible and openable for recovery. Unknown
         # page counts must not hide a retained document or claim it is valid.
@@ -1031,8 +1036,6 @@ class WatcherContinuation:
                 'invalid_scope', 'Update continuation scope is malformed.',
             )
         if mode == 'linked':
-            from uploader.app_linking import UPLOAD_SCOPE, scope_base
-
             if scope_base(scope) != UPLOAD_SCOPE:
                 raise WatcherContinuationError(
                     'invalid_scope', 'Update continuation scope is malformed.',

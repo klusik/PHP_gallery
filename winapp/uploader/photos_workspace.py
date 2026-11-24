@@ -22,6 +22,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable, TypeAlias
 
+from uploader.localization import gettext
 from .app_linking import (
     LINKING_CREATE_TITLE_MAX_BYTES,
     LINKING_GALLERY_ID_MAX,
@@ -6333,7 +6334,7 @@ class PhotosWorkspace(ttk.Frame):
             values=[str(value) for value in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB],
         )
         selector.pack(side='left')
-        ttk.Label(quota_row, text='GiB', style='Muted.TLabel').pack(side='left', padx=(4, 0))
+        ttk.Label(quota_row, text=gettext('GiB'), style='Muted.TLabel').pack(side='left', padx=(4, 0))
         attach_inline_tooltip(selector, quota_hint, self._storage_surface or self.viewer_pane)
         status = ttk.Label(card, text='', style='Muted.TLabel')
         selector.bind(

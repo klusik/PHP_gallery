@@ -25,6 +25,7 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader import game_context as CONTEXT
 from uploader import game_presence as PRESENCE
+from uploader.flight_report_translations import tr
 from uploader import windows_game_processes as PROCESSES
 
 
@@ -38,7 +39,6 @@ class GameContextTests(unittest.TestCase):
             None: Unknown/game contexts select four-language game vocabulary;
                 native/process flight contexts restore all existing flight text.
         """
-        from uploader.flight_report_translations import tr
 
         observer = PRESENCE.GamePresence(lambda: "", WINAPP_DIR)
         contexts = (

@@ -23,6 +23,10 @@ from unittest import mock
 
 from issue_361_tk_workloads import Recorder, load_watcher
 
+from uploader.models import ActivityEvent, ImportItem, ImportJob
+from uploader.state_store import atomic_write_json, default_upload_state
+from uploader.ui_theme import Button
+
 # Purpose: Bound import rows while covering the three requested dataset sizes.
 # Type: tuple[int, ...]. Units: import items. Scope: one import scenario.
 # Consumers: Issue434ShellWorkload._mount_import and counters.
@@ -245,7 +249,6 @@ class Issue434ShellWorkload:
             None: The isolated production JobStateStore and real import tables
                 contain the selected bounded item extent.
         """
-        from uploader.models import ImportItem, ImportJob
 
         scenario_default = {
             "import-gui": 1000,
@@ -299,8 +302,6 @@ class Issue434ShellWorkload:
         Returns:
             None: The Activity source and durable job history are populated.
         """
-        from uploader.models import ActivityEvent
-        from uploader.state_store import atomic_write_json, default_upload_state
 
         app = self.host
         activity_count = (
@@ -480,7 +481,6 @@ class Issue434ShellWorkload:
         Returns:
             None: Root withdrawal can be measured; native shell tray coverage is marked.
         """
-        from uploader.ui_theme import Button
 
         Button(
             self.root, text="Minimize to background", command=self.root.withdraw,

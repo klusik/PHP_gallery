@@ -3646,12 +3646,12 @@ Production membership is the exact checked-in `app/production-files.json`
 policy, read by `app/release_file_policy.php`. Canonical PHP packaging,
 integrity ownership and updater activation derive from that owner. Schema-1
 packaging combines the base production list with reviewed WinApp companion
-membership and optional `companion_resource_files`. New font/license resources
-use that additive field so installed companion-aware readers can accept the
-inventory before their own validator is replaced. Current readers strictly
-validate the resource allowlist and preserve previously published
-companion-list shapes; neither companion field expands CMS activation
-ownership. The updater list is a validated base subset retaining
+membership. The optional `companion_resource_files` holds the font and license,
+and `companion_locale_files` holds the Czech, German and Swedish gettext
+catalogs. Both are additive so installed readers validate the field shapes
+they recognize before their own validator is replaced. Current readers enforce
+the exact allowlists and preserve previously published companion-list shapes.
+The updater list is a validated base subset retaining
 installation-owned custom CSS and distribution-only artifacts; a GitHub source
 archive may contain development or companion files without activating them.
 Obsolete removal uses prior owned inventory/manifest evidence. See [production

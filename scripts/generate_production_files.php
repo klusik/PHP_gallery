@@ -183,6 +183,7 @@ function production_files_git_index(string $root): array
  *     production_files:list<string>,
  *     companion_files:list<string>,
  *     companion_resource_files:list<string>,
+ *     companion_locale_files:list<string>,
  *     updater_files:list<string>,
  *     source_review_files:list<string>
  * } Refreshed inventory with additive resources readable by installed updaters.
@@ -193,6 +194,7 @@ function production_files_build_inventory(string $root): array
     $production = [];
     $companion = [];
     $companionResources = [];
+    $companionLocales = [];
     $updater = [];
     $sourceReview = [];
     foreach (production_files_git_index($root) as $record) {
@@ -259,7 +261,10 @@ function production_files_build_inventory(string $root): array
                 . $relative);
         }
         // Keep the schema-1 base readable by installed CMS updaters with the older allowlist.
-        if (\Gallery\Core\release_file_policy_is_winapp_resource_path(
+        if (\Gallery\Core\release_file_policy_is_winapp_locale_path($relative)) {
+            // Keep both older companion fields within their installed allowlists.
+            $companionLocales[] = $relative;
+        } elseif (\Gallery\Core\release_file_policy_is_winapp_resource_path(
             $relative,
         )) {
             // Do not extend companion_files beyond installed readers' allowlist.
@@ -279,6 +284,7 @@ function production_files_build_inventory(string $root): array
     sort($production, SORT_STRING);
     sort($companion, SORT_STRING);
     sort($companionResources, SORT_STRING);
+    sort($companionLocales, SORT_STRING);
     sort($updater, SORT_STRING);
     sort($sourceReview, SORT_STRING);
     $production =
@@ -289,6 +295,8 @@ function production_files_build_inventory(string $root): array
         \Gallery\Core\release_file_policy_validate_path_list(
             $companionResources,
         );
+    $companionLocales =
+        \Gallery\Core\release_file_policy_validate_path_list($companionLocales);
     $updater = \Gallery\Core\release_file_policy_validate_path_list($updater);
     $sourceReview =
         \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
@@ -296,6 +304,7 @@ function production_files_build_inventory(string $root): array
         $production,
         $companion,
         $companionResources,
+        $companionLocales,
         $sourceReview,
     );
     sort($all, SORT_STRING);
@@ -307,6 +316,7 @@ function production_files_build_inventory(string $root): array
         'companion_resource_files' => array_values(array_unique(
             $companionResources,
         )),
+        'companion_locale_files' => $companionLocales,
         'updater_files' => array_values(array_unique($updater)),
         'source_review_files' => array_values(array_unique($sourceReview)),
     ];
@@ -408,7 +418,8 @@ try {
     }
     $companionCount =
         count($inventory['companion_files'])
-        + count($inventory['companion_resource_files']);
+        + count($inventory['companion_resource_files'])
+        + count($inventory['companion_locale_files']);
     echo
         'Wrote app/production-files.json ('
             . (count($inventory['production_files']) + $companionCount)

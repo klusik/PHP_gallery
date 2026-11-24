@@ -21,6 +21,8 @@ from typing import Callable, Literal, TypeAlias
 import issue_361_tk_workloads as common
 from PIL import Image, ImageTk
 
+from uploader.gallery_lightbox import PhotoLightbox
+
 CanvasItemId: TypeAlias = int
 CanvasItemTarget: TypeAlias = int | str
 CanvasCoordinate: TypeAlias = int | float
@@ -439,8 +441,7 @@ class MediaWorkload:
         Returns:
             None: Per-instance hooks are restored during workload close.
         """
-        # The source checkout is placed on sys.path by build_gallery before this import.
-        from uploader.gallery_lightbox import PhotoLightbox
+        # The common workload binds the selected checkout before its imports.
 
         original_render = PhotoLightbox._render_image
         original_init = PhotoLightbox.__init__

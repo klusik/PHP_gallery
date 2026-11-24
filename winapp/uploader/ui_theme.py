@@ -17,20 +17,32 @@ from dataclasses import dataclass
 from functools import cache
 from math import cos, radians, sin
 import ctypes
+import io
+
 import _tkinter
 import sys
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
 
+try:
+    from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageTk
+except ImportError:
+    Image = None
+
 if TYPE_CHECKING:
-    from PIL import ImageTk
     from uploader.ui_shell import EmbeddedWindow
 
     ThemeImage: TypeAlias = tk.PhotoImage | ImageTk.PhotoImage
 else:
     ThemeImage: TypeAlias = tk.PhotoImage
 
+
+# Purpose: Bound help tooltip text to comfortable dimensions.
+# Type: int; Units: pixels; Scope: themed inline tooltips.
+# Consumers: attach_inline_tooltip.
+# Rationale: 320 px wraps multiline tooltip content within compact surfaces.
+_HELP_TEXT_WRAP = 320
 
 # Purpose: Set the shared delay before pointer-hover help appears.
 # Type: int; Units: milliseconds; Scope: transient tooltip lifecycle.
@@ -139,11 +151,6 @@ TtkConfigureResult: TypeAlias = (
     dict[str, TtkOptionSpec] | TtkOptionSpec | str | None
 )
 
-# Purpose: Keep help instructions comfortably readable in a compact overlay.
-# Type: int; Units: pixels; Scope: help window minimum content width.
-# Consumers: help overlay geometry.
-# Rationale: 380 px supports concise instructions on standard displays.
-_HELP_MIN_WIDTH = 380
 
 # Purpose: Choose the source size for stretchable glass button assets.
 # Type: tuple[int, int]; Units: pixels; Scope: nine-slice button artwork.
@@ -224,19 +231,7 @@ _LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 # Rationale: 3x provides clean rounded edges at ordinary Windows DPI.
 _ARTWORK_SCALE = 3
 
-# Purpose: Bound help text and window geometry to comfortable dimensions.
-# Type: int; Units: pixels; Scope: help overlay sizing.
-# Consumers: tooltip wrapping and help overlay minimum and initial geometry.
-# Rationale: 320 px wrap, 180 px minimum and 200 px initial height stay compact.
-_HELP_MIN_HEIGHT = 180
-_HELP_TEXT_WRAP = 320
-_HELP_INITIAL_HEIGHT = 200
 
-# Purpose: Define the initial text area before content-driven resizing.
-# Type: tuple[int, int]; Units: text rows and columns; Scope: help overlay.
-# Consumers: help Text widget requested geometry.
-# Rationale: 7 by 46 characters fits concise guidance without excess space.
-_HELP_TEXT_SIZE = (7, 46)
 
 # Purpose: Keep icon-only actions compact while leaving labeled buttons natural.
 # Type: int; Units: character columns; Scope: icon-only ttk button width.
@@ -461,9 +456,7 @@ def create_smooth_icon(
     Returns:
         ThemeImage | None: Tk-owned artwork, or None when Pillow is unavailable.
     """
-    try:
-        from PIL import Image, ImageDraw, ImageOps, ImageTk
-    except ImportError:
+    if Image is None:
         return None
     dpi_scale = _tk_dpi_scale(master)
     width, height = size
@@ -528,7 +521,6 @@ def create_smooth_icon(
                                width=stroke)
         if cover is not None:
             try:
-                import io
                 with Image.open(io.BytesIO(cover)) as source:
                     # The caller sizes the cover first, then adds this frame.
                     # The selected ratio therefore describes the actual pixels.
@@ -1765,9 +1757,7 @@ def _install_range_elements(root: tk.Misc, style: ttk.Style) -> None:
     """
     if 'Library.OnCard.Horizontal.Scale.trough' in style.element_names():
         return
-    try:
-        from PIL import Image, ImageDraw, ImageTk
-    except ImportError:
+    if Image is None:
         # Library owner permanently supports dependency repair without Pillow;
         # native scales retain shared colors and native input in that mode.
         return
@@ -1879,9 +1869,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
     """
     if "Gloss.card" in style.element_names():
         return
-    try:
-        from PIL import Image, ImageDraw, ImageFilter, ImageTk
-    except ImportError:
+    if Image is None:
         # Uploader runtime compatibility owner: Pillow is visual-only, so
         # source mode, --once and native repair stay supported without it.
         return
@@ -2181,9 +2169,7 @@ def _install_switch_elements(root: tk.Tk, style: ttk.Style) -> None:
     """
     if "Switch.indicator" in style.element_names():
         return
-    try:
-        from PIL import Image, ImageDraw, ImageTk
-    except ImportError:
+    if Image is None:
         # Presentation owner: source-mode dependency repair must stay usable
         # without Pillow. Retire only if Pillow becomes mandatory at launch.
         return
@@ -2341,34 +2327,6 @@ def icon_button(parent: tk.Misc, icon: str,
             _attach_tooltip(button, tooltip)
         else:
             attach_inline_tooltip(button, tooltip, tooltip_surface)
-    return button
-
-
-def help_button(parent: tk.Misc, title: str, body: str) -> ttk.Button:
-    """Create a help button that opens a focused, selectable help overlay.
-
-    Args:
-        parent (tk.Misc): Tk widget that owns the new button.
-        title (str): Short heading displayed in the help window.
-        body (str): Plain text instructions that users can select and copy.
-
-    Returns:
-        ttk.Button: A themed question-mark button that opens the overlay.
-    """
-    button: ttk.Button
-
-    def open_help() -> None:
-        """Open the help window and move keyboard focus into its text.
-
-        Returns:
-            None: A transient help window is shown when its owner exists.
-        """
-        if not button.winfo_exists():
-            return
-        _show_help(button, title, body)
-
-    button = icon_button(parent, "help", open_help,
-                         tooltip=f"Help: {title}")
     return button
 
 
@@ -2820,123 +2778,6 @@ def place_dialog(dialog: "tk.Toplevel | EmbeddedWindow", owner: tk.Misc) -> None
     horizontal = f"+{x}" if x >= 0 else f"-{dialog.winfo_screenwidth() - width - x}"
     vertical = f"+{y}" if y >= 0 else f"-{dialog.winfo_screenheight() - height - y}"
     dialog.geometry(f"{width}x{height}{horizontal}{vertical}")
-
-
-def _show_help(owner: tk.Misc, title: str, body: str) -> None:
-    """Display a modal-style help panel with selectable content.
-
-    Args:
-        owner (tk.Misc): Invoking widget owning the embedded help panel.
-        title (str): Concise title shown in the dialog heading and chrome.
-        body (str): Plain text content users may select or copy.
-
-    Returns:
-        None: The help overlay is focused and dismissed by Escape or close.
-    """
-    # Shell behavior depends on this library's DialogSurface. Resolve the shell
-    # only when help opens, keeping theme construction independent of the host.
-    from uploader.ui_shell import EmbeddedWindow
-
-    try:
-        parent = owner.winfo_toplevel()
-        previous_grab = parent.grab_current()
-        previous_focus = parent.focus_get()
-        dialog = EmbeddedWindow(owner)
-    except tk.TclError:
-        return
-
-    def close_help() -> None:
-        """Close help and return grab and focus to their previous owners.
-
-        Returns:
-            None: The dialog is dismissed and prior live owners are restored.
-        """
-        try:
-            if dialog.winfo_exists():
-                dialog.destroy()
-        except tk.TclError:
-            return
-        try:
-            if previous_grab is not None and previous_grab.winfo_exists():
-                previous_grab.grab_set()
-            if previous_focus is not None and previous_focus.winfo_exists():
-                previous_focus.focus_set()
-        except tk.TclError:
-            pass
-
-    dialog.title(title or "Help")
-    dialog.transient(parent)
-    dialog.resizable(True, True)
-    dialog.minsize(_HELP_MIN_WIDTH, _HELP_MIN_HEIGHT)
-    shell = ttk.Frame(dialog, style="Glass.TFrame", padding=22)
-    shell.pack(fill="both", expand=True)
-    ttk.Label(shell, text=title, style="Glass.Title.TLabel").pack(
-        anchor="w", pady=(0, 10))
-    text_rows, text_columns = _HELP_TEXT_SIZE
-    text_box = tk.Text(
-        shell,
-        wrap="word",
-        height=text_rows,
-        width=text_columns,
-        relief="flat",
-        borderwidth=0,
-        padx=2,
-        pady=2,
-        background=_PALETTE["surface"],
-        foreground=_PALETTE["ink"],
-        font=(tkfont.nametofont("TkDefaultFont", root=parent).actual("family"), 10),
-        takefocus=True,
-    )
-    text_box.insert("1.0", body)
-    text_box.pack(fill="both", expand=True, anchor="w")
-    text_box.bind("<Control-a>", lambda _event: _select_help_text(text_box))
-    text_box.bind("<Key>", lambda event: _guard_help_text(event))
-    text_box.bind("<<Paste>>", lambda _event: "break")
-    text_box.bind("<<Cut>>", lambda _event: "break")
-    text_box.bind("<Button-2>", lambda _event: "break")
-    footer = ttk.Frame(shell, style="Card.TFrame")
-    footer.pack(fill="x", pady=(14, 0))
-    close_button = Button(footer, text="Close", command=close_help)
-    close_button.pack(side="right")
-    dialog.bind("<Escape>", lambda _event: close_help())
-    dialog.protocol("WM_DELETE_WINDOW", close_help)
-    dialog.update_idletasks()
-    width = max(_HELP_MIN_WIDTH, dialog.winfo_reqwidth())
-    height = max(_HELP_INITIAL_HEIGHT, dialog.winfo_reqheight())
-    x = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
-    y = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 3)
-    dialog.geometry(f"{width}x{height}+{x}+{y}")
-    dialog.grab_set()
-    text_box.focus_set()
-
-
-def _select_help_text(text_box: tk.Text) -> str:
-    """Select all help text and allow the normal copy shortcut to continue.
-
-    Args:
-        text_box (tk.Text): Read-only text widget containing help content.
-
-    Returns:
-        str: ``break`` to stop the default Control+A binding after selection.
-    """
-    text_box.tag_add("sel", "1.0", "end-1c")
-    return "break"
-
-
-def _guard_help_text(event: tk.Event) -> str | None:
-    """Keep help content read-only while preserving select and copy keys.
-
-    Args:
-        event (tk.Event): Key event sent to the selectable help text widget.
-
-    Returns:
-        str | None: ``break`` prevents edits; ``None`` permits copy and select.
-    """
-    if event.state & 0x4 and event.keysym.lower() in ("a", "c"):
-        return None
-    return "break"
-
-
 
 
 @dataclass(frozen=True)

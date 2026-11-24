@@ -14,6 +14,7 @@ import importlib.machinery
 import importlib.util
 from collections import deque
 from dataclasses import replace
+import gc
 import json
 import queue
 import re
@@ -2514,6 +2515,9 @@ class WatcherFactoryResetTests(unittest.TestCase):
         Returns:
             None: Sets up an idle Watcher beside independent uploader state.
         """
+        # Let earlier Tk fixtures release cyclic callbacks on their owning
+        # thread before a reset worker acquires Windows workspace locks.
+        gc.collect()
         temporary = self.enterContext(tempfile.TemporaryDirectory())
         self.profile_root = Path(temporary)
         self.lease = WorkspaceLease(self.profile_root / 'flights')

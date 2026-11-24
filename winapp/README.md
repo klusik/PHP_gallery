@@ -143,6 +143,33 @@ refresh or reconcile the queue.
 
 ## Interface and local feature settings
 
+Choose **Settings → Language** to set WinApp to English, Czech, German or
+Swedish. WinApp saves the choice immediately and offers to restart. Select
+**Later** to apply it the next time WinApp opens. **Restart WinApp** stays
+available in Settings while a change is pending, including when active work
+delays a restart. Selecting the language currently in use clears that action.
+Accepted imports, report work and other incompatible operations must settle
+before the restart. A running Watcher that is ready to resume uses the
+existing queue checkpoint.
+The app stores it in `ui-language.json` in the local profile. On an existing
+profile with no app selection, WinApp uses the previous flight-interface
+language if available. Website language and the selected flight PDF editions
+have independent settings.
+
+WinApp interface messages use Python gettext with UTF-8 PO catalogs under
+`uploader/resources/locale/`. English messages are the source. Add or update
+the corresponding entries for Czech, German and Swedish whenever interface
+copy changes, keeping named formatting fields intact. Mark text that must stay
+stable at its source with `gettext_noop()` and translate it when it becomes a
+caption. The catalog regression in GitHub Actions verifies source coverage and
+format fields. The production source package lists the three catalogs as
+companion locale files, and the WinApp installer bundles them with the runtime.
+Flight PDF catalogs retain their per-document language.
+
+Activity renders messages in the selected language from stable events. Local
+logs, support reports and persisted operation states retain their source text
+and identifiers. Locale changes apply to captions and descriptions in WinApp.
+
 Finish progress, flight settings, saved reports and uncertain-upload review
 are overlays inside the main window. They fit its current size without a
 separate popup or resize handle. Progress keeps details and its action footer

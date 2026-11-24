@@ -1,0 +1,2227 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po
+# Module Type: WinApp GNU gettext Catalog
+# Purpose: Provide German interface text for WinApp.
+# Responsibilities: Translate WinApp interface messages and retain their named fields.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+msgid ""
+msgstr ""
+"Project-Id-Version: PHP Gallery WinApp\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "\n\nKeep the application running in the tray instead of forcing it closed?"
+msgstr "\n\nSoll die App im Infobereich weiterlaufen? Andernfalls wird sie zwangsweise beendet."
+
+msgid " · progress "
+msgstr " · Fortschritt "
+
+msgid " at {rate}/s, ETA {seconds}s"
+msgstr " mit {rate}/s, noch {seconds} s"
+
+msgid ". The saved API key remains unchanged."
+msgstr ". Der gespeicherte API-Schlüssel bleibt unverändert."
+
+msgid "{app_display_name} {app_version}\nAuthor: Rudolf Klusal\nMIT License\nhttps://github.com/klusik/PHP_gallery"
+msgstr "{app_display_name} {app_version}\nAutor: Rudolf Klusal\nMIT-Lizenz\nhttps://github.com/klusik/PHP_gallery"
+
+msgid "{complete}/{total} terminal | {sent} / {size} | {rate} | {eta}"
+msgstr "{complete}/{total} abgeschlossen | {sent} / {size} | {rate} | {eta}"
+
+msgid "{kind}: {source} | target {gallery} | confirmed {confirmed}, duplicates {duplicates}, failed {failed}, cancelled {cancelled}, active {active} | {progress}"
+msgstr "{kind}: {source} | Zielgalerie {gallery} | bestätigt {confirmed}, Duplikate {duplicates}, fehlgeschlagen {failed}, abgebrochen {cancelled}, aktiv {active} | {progress}"
+
+msgid "{uncertain} upload(s) have an uncertain result. Review the gallery manually; they were not retried."
+msgstr "Uploads mit unklarem Ergebnis: {uncertain}. Prüfen Sie die Galerie manuell. Die Uploads wurden nicht wiederholt."
+
+msgid "▶  Start AI worker"
+msgstr "▶  KI-Analyse starten"
+
+msgid "▶  Start import"
+msgstr "▶  Import starten"
+
+msgid "▶  Start Watcher"
+msgstr "▶  Ordnerüberwachung starten"
+
+msgid "● REC"
+msgstr "● REC"
+
+msgid "✓  Save & Test"
+msgstr "✓  Speichern und testen"
+
+msgid "✓  Save settings"
+msgstr "✓  Einstellungen speichern"
+
+msgid "A gallery request is already in progress."
+msgstr "Eine Galerieanfrage läuft bereits."
+
+msgid "A key is currently stored locally."
+msgstr "Ein Schlüssel ist lokal gespeichert."
+
+msgid "A saved connection is required."
+msgstr "Eine gespeicherte Verbindung ist erforderlich."
+
+msgid "About PHP Gallery"
+msgstr "Über PHP Gallery"
+
+msgid "Acknowledging the saved creation receipt…"
+msgstr "Gespeicherten Beleg zur Galerieerstellung bestätigen…"
+
+msgid "active"
+msgstr "aktiv"
+
+msgid "Activity"
+msgstr "Aktivität"
+
+msgid "Advanced AI settings"
+msgstr "Erweiterte KI-Einstellungen"
+
+msgid "Advanced import and archive settings"
+msgstr "Erweiterte Import- und Archiveinstellungen"
+
+msgid "After confirmed upload. Existing and changed files are kept."
+msgstr "Nach einem bestätigten Upload. Vorhandene und geänderte Dateien bleiben erhalten."
+
+msgid "ai"
+msgstr "KI"
+
+msgid "Ai"
+msgstr "KI"
+
+msgid "AI METADATA"
+msgstr "KI-METADATEN"
+
+msgid "AI metadata worker"
+msgstr "KI-Metadatenanalyse"
+
+msgid "AI metadata worker idle"
+msgstr "KI-Metadatenanalyse im Leerlauf"
+
+msgid "AI metadata worker is running"
+msgstr "KI-Metadatenanalyse läuft"
+
+msgid "AI metadata worker running"
+msgstr "KI-Metadatenanalyse läuft"
+
+msgid "AI metadata worker started."
+msgstr "KI-Metadatenanalyse gestartet."
+
+msgid "AI metadata worker stopped"
+msgstr "KI-Metadatenanalyse gestoppt"
+
+msgid "AI metadata worker stopping"
+msgstr "KI-Metadatenanalyse wird beendet"
+
+msgid "all"
+msgstr "alle"
+
+msgid "All files"
+msgstr "Alle Dateien"
+
+msgid "Allow creating galleries"
+msgstr "Galerieerstellung erlauben"
+
+msgid "Allow gallery uploads"
+msgstr "Uploads in Galerien erlauben"
+
+msgid "Allow listing galleries"
+msgstr "Galerieliste erlauben"
+
+msgid "An older version left unfinished Watcher work. Resume Watcher continues the original session."
+msgstr "Eine frühere Version hat einen Vorgang der Ordnerüberwachung offengelassen. Mit „Überwachung fortsetzen“ nehmen Sie die ursprüngliche Sitzung wieder auf."
+
+msgid "An unfinished import from {value} contains {value2} recoverable item(s). Open it for review and resume/retry?"
+msgstr "Der unvollständige Import vom {value} enthält wiederherstellbare Einträge: {value2}. Zur Prüfung und Fortsetzung öffnen?"
+
+msgid "An update operation is still in progress."
+msgstr "Ein Aktualisierungsvorgang läuft bereits."
+
+msgid "API key"
+msgstr "API-Schlüssel"
+
+msgid "API key changed. Save and test the connection before starting work."
+msgstr "Der API-Schlüssel wurde geändert. Speichern und testen Sie die Verbindung, bevor Sie beginnen."
+
+msgid "API key configured"
+msgstr "API-Schlüssel eingerichtet"
+
+msgid "API key entered but not saved"
+msgstr "API-Schlüssel eingegeben und noch ungespeichert"
+
+msgid "API key not configured"
+msgstr "API-Schlüssel nicht eingerichtet"
+
+msgid "API key revoked and removed from local configuration."
+msgstr "Der API-Schlüssel wurde widerrufen und aus den lokalen Einstellungen entfernt."
+
+msgid "API-key connection…"
+msgstr "Verbindung über API-Schlüssel…"
+
+msgid "API-key revocation failed: {detail}"
+msgstr "Der API-Schlüssel konnte nicht widerrufen werden: {detail}"
+
+msgid "APP & INTEGRATIONS"
+msgstr "APP UND INTEGRATIONEN"
+
+msgid "Application startup"
+msgstr "App-Start"
+
+msgid "Apply the saved per-user Windows startup preference without a UI."
+msgstr "Die gespeicherte Windows-Autostart-Einstellung des Benutzers ohne Oberfläche anwenden."
+
+msgid "Attach simulator location"
+msgstr "Simulatorposition anhängen"
+
+msgid "Authenticated endpoint available: {endpoint}"
+msgstr "Authentifizierter Endpunkt verfügbar: {endpoint}"
+
+msgid "Authentication error"
+msgstr "Authentifizierungsfehler"
+
+msgid "Auto"
+msgstr "Automatisch"
+
+msgid "Backend"
+msgstr "Backend"
+
+msgid "Background activity is running."
+msgstr "Hintergrundvorgänge laufen."
+
+msgid "Background work is still stopping"
+msgstr "Hintergrundvorgänge werden noch beendet"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Cancel download"
+msgstr "Download abbrechen"
+
+msgid "Cancel the active import"
+msgstr "Laufenden Import abbrechen"
+
+msgid "cancelled"
+msgstr "abgebrochen"
+
+msgid "Cancelling after in-flight requests"
+msgstr "Abbruch nach Abschluss laufender Anfragen"
+
+msgid "Check create status"
+msgstr "Erstellungsstatus prüfen"
+
+msgid "Check for updates"
+msgstr "Nach Updates suchen"
+
+msgid "Check for updates or open the available update"
+msgstr "Nach Updates suchen oder das verfügbare Update öffnen"
+
+msgid "Check for updates…"
+msgstr "Nach Updates suchen…"
+
+msgid "Check uncertain upload"
+msgstr "Unklaren Upload prüfen"
+
+msgid "Checking endpoint and API-key authorization without uploading media..."
+msgstr "Endpunkt und API-Schlüsselberechtigung werden geprüft, ohne Medien hochzuladen…"
+
+msgid "Checking for updates..."
+msgstr "Suche nach Updates…"
+
+msgid "Checking gallery creation…"
+msgstr "Galerieerstellung wird geprüft…"
+
+msgid "Checking the approved identity…"
+msgstr "Genehmigtes Konto wird überprüft…"
+
+msgid "Checking the saved gallery connection…"
+msgstr "Gespeicherte Galerieverbindung wird geprüft…"
+
+msgid "Checking the securely saved connection…"
+msgstr "Sicher gespeicherte Verbindung wird geprüft…"
+
+msgid "Checking the uncertain upload once…"
+msgstr "Unklarer Upload wird einmalig geprüft…"
+
+msgid "Choose"
+msgstr "Auswählen"
+
+msgid "Choose a different visibility."
+msgstr "Wählen Sie eine andere Sichtbarkeit."
+
+msgid "Choose a folder"
+msgstr "Ordner auswählen"
+
+msgid "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled."
+msgstr "Wählen Sie einen Ordner und verbinden Sie eine Galerie. Beim Start überspringt die Überwachung vorhandene Dateien. Neue unterstützte Bilder werden hochgeladen, sobald der Kopiervorgang fertig ist. Dateien bleiben auf dem PC, sofern Sie das Löschen nach bestätigtem Upload nicht aktivieren."
+
+msgid "Choose a folder in Watcher or add files in Import."
+msgstr "Wählen Sie einen Ordner in der Ordnerüberwachung oder fügen Sie Dateien im Import hinzu."
+
+msgid "Choose a folder to watch before starting."
+msgstr "Wählen Sie zuerst einen Ordner zur Überwachung."
+
+msgid "Choose a source and complete preflight first."
+msgstr "Wählen Sie zuerst eine Quelle und schließen Sie die Vorprüfung ab."
+
+msgid "Choose a ZIP archive"
+msgstr "ZIP-Archiv auswählen"
+
+msgid "Choose an existing folder first."
+msgstr "Wählen Sie zuerst einen vorhandenen Ordner."
+
+msgid "Choose files to import"
+msgstr "Dateien für den Import auswählen"
+
+msgid "Choose files, a folder, or a ZIP archive"
+msgstr "Wählen Sie Dateien, einen Ordner oder ein ZIP-Archiv"
+
+msgid "Choose folder to import"
+msgstr "Ordner für den Import auswählen"
+
+msgid "Choose folder…"
+msgstr "Ordner auswählen…"
+
+msgid "Choose gallery…"
+msgstr "Galerie auswählen…"
+
+msgid "Choose image files"
+msgstr "Bilddateien auswählen"
+
+msgid "Choose Interrupt in the progress panel to pause uploads."
+msgstr "Wählen Sie im Fortschrittsfenster „Unterbrechen“, um die Uploads anzuhalten."
+
+msgid "Choose permissions for this connection. Optional secure storage requires separate browser consent and permits renewal for up to 30 days, with a seven-day inactivity limit. The saved API key remains available; server grants may remain until revoked."
+msgstr "Wählen Sie die Berechtigungen für diese Verbindung. Die optionale sichere Speicherung erfordert eine eigene Zustimmung im Browser und ermöglicht die Erneuerung bis zu 30 Tage, mit einer Inaktivitätsgrenze von sieben Tagen. Der gespeicherte API-Schlüssel bleibt verfügbar. Serverberechtigungen können bis zum Widerruf bestehen bleiben."
+
+msgid "CHOOSE SOURCE"
+msgstr "QUELLE AUSWÄHLEN"
+
+msgid "Choose watched folder"
+msgstr "Überwachten Ordner auswählen"
+
+msgid "Choose ZIP archive to import"
+msgstr "ZIP-Archiv für den Import auswählen"
+
+msgid "Clear the selected source"
+msgstr "Quellenauswahl leeren"
+
+msgid "Close"
+msgstr "Schließen"
+
+msgid "Close unresolved creation"
+msgstr "Ungeklärte Galerieerstellung schließen"
+
+msgid "Closing after the update operation stops..."
+msgstr "Die App wird geschlossen, sobald der Aktualisierungsvorgang beendet ist…"
+
+msgid "Closing previous Watcher access. Try again after it finishes."
+msgstr "Der bisherige Zugriff der Ordnerüberwachung wird beendet. Versuchen Sie es anschließend erneut."
+
+msgid "Closing previous Watcher access. Try again when it finishes."
+msgstr "Der bisherige Zugriff der Ordnerüberwachung wird beendet. Versuchen Sie es anschließend erneut."
+
+msgid "Complete the app update before resetting Watcher."
+msgstr "Schließen Sie das App-Update ab, bevor Sie die Ordnerüberwachung zurücksetzen."
+
+msgid "Configuration"
+msgstr "Konfiguration"
+
+msgid "Configuration changed; run preflight again. Sources were retained."
+msgstr "Die Einstellungen haben sich geändert. Führen Sie die Vorprüfung erneut aus. Die Quellen wurden beibehalten."
+
+msgid "Configuration error"
+msgstr "Konfigurationsfehler"
+
+msgid "confirmed"
+msgstr "bestätigt"
+
+msgid "Connect a gallery, choose a Watcher folder, then explicitly start capture. Finish drains accepted photographs before completing.\n\nUse File to choose an import source. Review preflight before starting an import. View switches between Photos, Watcher, Import, Activity, AI and Settings.\n\nHelp → Support diagnostics builds a local report you can review, copy or save for support. Review it before sharing; nothing is sent automatically."
+msgstr "Verbinden Sie eine Galerie, wählen Sie einen überwachten Ordner und starten Sie die Erfassung. „Abschließen“ verarbeitet angenommene Fotos vor dem Beenden.\n\nWählen Sie im Menü „Datei“ eine Importquelle. Prüfen Sie das Ergebnis der Vorprüfung, bevor Sie den Import starten. Im Menü „Ansicht“ wechseln Sie zwischen Fotos, Ordnerüberwachung, Import, Aktivität, KI und Einstellungen.\n\nUnter „Hilfe“ → „Supportdiagnose“ erstellen Sie einen lokalen Bericht, den Sie prüfen, kopieren oder speichern können. Prüfen Sie ihn vor der Weitergabe. Die App versendet den Bericht nicht automatisch."
+
+msgid "Connect Watcher"
+msgstr "Ordnerüberwachung verbinden"
+
+msgid "Connected"
+msgstr "Verbunden"
+
+msgid "Connection"
+msgstr "Verbindung"
+
+msgid "Connection / API key..."
+msgstr "Verbindung / API-Schlüssel…"
+
+msgid "Connection failed"
+msgstr "Verbindung fehlgeschlagen"
+
+msgid "Connection saved. Test authentication before starting work."
+msgstr "Verbindung gespeichert. Testen Sie die Authentifizierung, bevor Sie beginnen."
+
+msgid "Connection saved. Testing authentication..."
+msgstr "Verbindung gespeichert. Authentifizierung wird getestet…"
+
+msgid "Connection test failed: {detail}"
+msgstr "Verbindungstest fehlgeschlagen: {detail}"
+
+msgid "connection test is running"
+msgstr "Verbindungstest läuft"
+
+msgid "Connection test succeeded for gallery {gallery}."
+msgstr "Verbindungstest für die Galerie {gallery} erfolgreich."
+
+msgid "Connection warning"
+msgstr "Verbindungswarnung"
+
+msgid "Copy"
+msgstr "Kopieren"
+
+msgid "Copy report"
+msgstr "Bericht kopieren"
+
+msgid "Could not acknowledge the creation receipt."
+msgstr "Der Erstellungsbeleg konnte nicht bestätigt werden."
+
+msgid "Could not connect to the gallery service."
+msgstr "Die Verbindung zum Galeriedienst konnte nicht hergestellt werden."
+
+msgid "Could not create the gallery. Check the connection or try another name. Using the same name resumes its saved request."
+msgstr "Die Galerie konnte nicht erstellt werden. Prüfen Sie die Verbindung oder verwenden Sie einen anderen Namen. Mit demselben Namen wird die gespeicherte Anfrage fortgesetzt."
+
+msgid "Could not establish secure HTTPS to the gallery."
+msgstr "Es konnte keine sichere HTTPS-Verbindung zur Galerie hergestellt werden."
+
+msgid "Could not load galleries."
+msgstr "Die Galerien konnten nicht geladen werden."
+
+msgid "Could not load the current gallery list. Access may have expired or been revoked; refresh after reconnecting."
+msgstr "Die aktuelle Galerieliste konnte nicht geladen werden. Der Zugriff ist möglicherweise abgelaufen oder wurde widerrufen. Verbinden Sie sich erneut und laden Sie die Liste neu."
+
+msgid "Could not open the browser. Try connecting again."
+msgstr "Der Browser konnte nicht geöffnet werden. Versuchen Sie erneut, sich zu verbinden."
+
+msgid "Could not open the gallery in your browser."
+msgstr "Die Galerie konnte nicht im Browser geöffnet werden."
+
+msgid "Could not prepare the Watcher connection. Try again."
+msgstr "Die Verbindung für die Ordnerüberwachung konnte nicht vorbereitet werden. Versuchen Sie es erneut."
+
+msgid "Could not reach the saved gallery renewal service. Try again when it is available."
+msgstr "Der Dienst zur Erneuerung der gespeicherten Galerieverbindung ist nicht erreichbar. Versuchen Sie es erneut, sobald er verfügbar ist."
+
+msgid "Could not read the original creation request."
+msgstr "Die ursprüngliche Anfrage zur Galerieerstellung konnte nicht gelesen werden."
+
+msgid "Could not resolve the gallery address (DNS)."
+msgstr "Die Galerieadresse konnte per DNS nicht aufgelöst werden."
+
+msgid "Could not save report: "
+msgstr "Bericht konnte nicht gespeichert werden: "
+
+msgid "Could not save the interface language."
+msgstr "Die Sprache der Oberfläche konnte nicht gespeichert werden."
+
+msgid "Could not start a secure linking attempt."
+msgstr "Die sichere Verknüpfung konnte nicht gestartet werden."
+
+msgid "Could not start gallery creation."
+msgstr "Die Galerieerstellung konnte nicht gestartet werden."
+
+msgid "Could not start gallery verification."
+msgstr "Die Galerieprüfung konnte nicht gestartet werden."
+
+msgid "Could not start local removal."
+msgstr "Das lokale Entfernen konnte nicht gestartet werden."
+
+msgid "Could not start secure unlink cleanup."
+msgstr "Die sichere Bereinigung der Verknüpfung konnte nicht gestartet werden."
+
+msgid "Could not start the gallery detail request."
+msgstr "Die Galerieinformationen konnten nicht angefragt werden."
+
+msgid "Could not start the gallery request."
+msgstr "Die Galerieanfrage konnte nicht gestartet werden."
+
+msgid "Could not start the linked Watcher. Check the Watcher settings and try again."
+msgstr "Die verknüpfte Ordnerüberwachung konnte nicht gestartet werden. Prüfen Sie ihre Einstellungen und versuchen Sie es erneut."
+
+msgid "Could not start the secure reconnect."
+msgstr "Die sichere Wiederverbindung konnte nicht gestartet werden."
+
+msgid "Could not start the upload observation."
+msgstr "Die Upload-Prüfung konnte nicht gestartet werden."
+
+msgid "Could not start the visibility request; read details again."
+msgstr "Die Sichtbarkeitsänderung konnte nicht angefragt werden. Lesen Sie die Details erneut."
+
+msgid "Could not verify the created gallery."
+msgstr "Die erstellte Galerie konnte nicht verifiziert werden."
+
+msgid "Could not verify the gallery or prepare Watcher access. Check the connection and try again."
+msgstr "Die Galerie konnte nicht verifiziert oder der Zugriff für die Ordnerüberwachung nicht vorbereitet werden. Prüfen Sie die Verbindung und versuchen Sie es erneut."
+
+msgid "Could not verify the saved link. Try again."
+msgstr "Die gespeicherte Verknüpfung konnte nicht verifiziert werden. Versuchen Sie es erneut."
+
+msgid "Could not verify the uncertain upload. It remains unresolved."
+msgstr "Der unklare Upload konnte nicht verifiziert werden. Sein Ergebnis bleibt offen."
+
+msgid "Create gallery"
+msgstr "Galerie erstellen"
+
+msgid "Create inside {gallery}? Choose No to create at the root."
+msgstr "Innerhalb von {gallery} erstellen? Wählen Sie „Nein“, um die Galerie auf der obersten Ebene zu erstellen."
+
+msgid "Created"
+msgstr "Erstellt"
+
+msgid "Created "
+msgstr "Erstellt: "
+
+msgid "Creation acknowledged. You may create another gallery."
+msgstr "Die Erstellung wurde bestätigt. Sie können eine weitere Galerie erstellen."
+
+msgid "Creation is unconfirmed. Do not create it again. Reconnect to the same account and check status. Explicitly Resume original creation, or review the gallery and storage and use Close unresolved creation."
+msgstr "Die Erstellung ist unbestätigt. Legen Sie die Galerie nicht erneut an. Verbinden Sie dasselbe Konto und prüfen Sie den Status. Setzen Sie die ursprüngliche Erstellung fort oder prüfen Sie Galerie und Speicher und schließen Sie den ungeklärten Vorgang."
+
+msgid "Current import"
+msgstr "Aktueller Import"
+
+msgid "Cut"
+msgstr "Ausschneiden"
+
+msgid "Default 0.18. Lower sees more objects but may add noise."
+msgstr "Standardwert 0,18. Niedrigere Werte erkennen mehr Objekte, können aber zu mehr Fehlalarmen führen."
+
+msgid "Default 60. Larger values keep the server quieter."
+msgstr "Standardwert 60. Höhere Werte verringern die Serverlast."
+
+msgid "Default 600. Heartbeats extend the lease while analysis runs."
+msgstr "Standardwert 600. Während der Analyse verlängern regelmäßige Lebenszeichen die Reservierung des Auftrags."
+
+msgid "Delete uploaded photos from this PC"
+msgstr "Hochgeladene Fotos von diesem PC löschen"
+
+msgid "Dependency repair"
+msgstr "Abhängigkeiten reparieren"
+
+msgid "Dependency repair failed"
+msgstr "Reparatur der Abhängigkeiten fehlgeschlagen"
+
+msgid "Detail"
+msgstr "Details"
+
+msgid "Detector threshold"
+msgstr "Erkennungsschwelle"
+
+msgid "discovered"
+msgstr "gefunden"
+
+msgid "Dismiss"
+msgstr "Schließen"
+
+msgid "Dismiss result"
+msgstr "Ergebnis ausblenden"
+
+msgid "Displayed report copied to clipboard."
+msgstr "Der angezeigte Bericht wurde in die Zwischenablage kopiert."
+
+msgid "Displayed report saved locally. Nothing was sent."
+msgstr "Der angezeigte Bericht wurde lokal gespeichert. Es wurde nichts gesendet."
+
+msgid "DLL files"
+msgstr "DLL-Dateien"
+
+msgid "Downloading installer: {done:,} / {total:,} bytes"
+msgstr "Installationsprogramm wird heruntergeladen: {done:,} / {total:,} Byte"
+
+msgid "Downloading installer..."
+msgstr "Installationsprogramm wird heruntergeladen…"
+
+msgid "Earlier duplicate results need a new preflight. Original sources were retained."
+msgstr "Frühere Duplikatbefunde erfordern eine neue Vorprüfung. Die ursprünglichen Quellen wurden beibehalten."
+
+msgid "Edit"
+msgstr "Bearbeiten"
+
+msgid "Enable AI metadata worker on this PC"
+msgstr "KI-Metadatenanalyse auf diesem PC aktivieren"
+
+msgid "Enable the AI metadata worker before starting it."
+msgstr "Aktivieren Sie die KI-Metadatenanalyse vor dem Start."
+
+msgid "Enter a valid gallery address first."
+msgstr "Geben Sie zuerst eine gültige Galerieadresse ein."
+
+msgid "Enter a valid HTTP or HTTPS Gallery URL/endpoint."
+msgstr "Geben Sie eine gültige HTTP- oder HTTPS-Adresse der Galerie oder ihres API-Endpunkts ein."
+
+msgid "Enter a valid HTTP(S) Gallery URL or upload endpoint."
+msgstr "Geben Sie eine gültige HTTP(S)-Adresse der Galerie oder des Upload-Endpunkts ein."
+
+msgid "Enter a valid number within the allowed range."
+msgstr "Geben Sie eine gültige Zahl im zulässigen Bereich ein."
+
+msgid "Enter an API key before testing the connection."
+msgstr "Geben Sie vor dem Verbindungstest einen API-Schlüssel ein."
+
+msgid "Enter the address of your gallery."
+msgstr "Geben Sie die Adresse Ihrer Galerie ein."
+
+msgid "Enter the original file size in bytes. No local file is opened. A match only reports observed bytes and does not confirm an upload."
+msgstr "Geben Sie die ursprüngliche Dateigröße in Byte ein. Es wird keine lokale Datei geöffnet. Eine Übereinstimmung sagt nur etwas über die beobachtete Anzahl von Bytes aus und bestätigt keinen Upload."
+
+msgid "error"
+msgstr "Fehler"
+
+msgid "Estimated accepted bytes: {size}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {rejected}"
+msgstr "Geschätzter Umfang angenommener Dateien: {size}  |  Nicht unterstützte übersprungen: {unsupported}  |  Unsichere ZIP-Einträge abgewiesen: {rejected}"
+
+msgid "ETA {seconds}s"
+msgstr "Noch {seconds} s"
+
+msgid "ETA pending"
+msgstr "Restzeit wird ermittelt"
+
+msgid "Event"
+msgstr "Ereignis"
+
+msgid "Examples: llava:latest or llama3.2-vision:latest."
+msgstr "Beispiele sind llava:latest oder llama3.2-vision:latest."
+
+msgid "Exit"
+msgstr "Beenden"
+
+msgid "Experimental Canvas gallery renderer"
+msgstr "Experimentelle Canvas-Darstellung der Galerie"
+
+msgid "External analyzer command"
+msgstr "Befehl für externes Analyseprogramm"
+
+msgid "External command"
+msgstr "Externer Befehl"
+
+msgid "failed"
+msgstr "fehlgeschlagen"
+
+msgid "failed_permanent"
+msgstr "endgültig fehlgeschlagen"
+
+msgid "failed_retryable"
+msgstr "fehlgeschlagen, wiederholbar"
+
+msgid "File"
+msgstr "Datei"
+
+msgid "File stable for"
+msgstr "Datei unverändert für"
+
+msgid "Files"
+msgstr "Dateien"
+
+msgid "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings."
+msgstr "Dateien, die beim Start schon vorhanden waren, werden übersprungen. Eine neue Datei wird erst verarbeitet, wenn Größe und Änderungszeit stabil sind. Unterordner werden nur bei entsprechender Einstellung überwacht."
+
+msgid "Files: {manual_path_count} selected"
+msgstr "Ausgewählte Dateien: {manual_path_count}"
+
+msgid "Finish or explicitly resolve current work before replacing its gallery connection."
+msgstr "Schließen Sie laufende Vorgänge ab oder klären Sie sie ausdrücklich, bevor Sie die Galerieverbindung ersetzen."
+
+msgid "Finish or resolve existing upload work and verify the original creation receipt before changing target."
+msgstr "Schließen Sie ausstehende Uploads ab oder klären Sie sie und prüfen Sie den ursprünglichen Erstellungsbeleg, bevor Sie das Ziel ändern."
+
+msgid "Finish the active update before changing this setting."
+msgstr "Schließen Sie das laufende Update ab, bevor Sie diese Einstellung ändern."
+
+msgid "Finish the current Watcher session before starting an import."
+msgstr "Schließen Sie die aktuelle Sitzung der Ordnerüberwachung ab, bevor Sie den Import starten."
+
+msgid "Finish was not started because queue recovery failed. Review the retained session and retry explicitly."
+msgstr "Das Abschließen wurde nicht gestartet, weil die Warteschlange nicht wiederhergestellt werden konnte. Prüfen Sie die aufbewahrte Sitzung und starten Sie den Vorgang erneut."
+
+msgid "Finishing current uploads and saving Watcher state…"
+msgstr "Laufende Uploads und Speicherung der Ordnerüberwachung werden abgeschlossen…"
+
+msgid "Finishing current work"
+msgstr "Laufende Vorgänge werden abgeschlossen"
+
+msgid "Finishing setup…"
+msgstr "Einrichtung wird abgeschlossen…"
+
+msgid "Finishing the current upload before updating…"
+msgstr "Laufender Upload wird vor dem Update abgeschlossen…"
+
+msgid "First use may download model files locally."
+msgstr "Bei der ersten Nutzung können Modelldateien heruntergeladen werden."
+
+msgid "Flight workspace unavailable."
+msgstr "Der Arbeitsbereich für Flüge ist nicht verfügbar."
+
+msgid "Folder"
+msgstr "Ordner"
+
+msgid "Folder does not exist or cannot be accessed."
+msgstr "Der Ordner ist nicht vorhanden oder nicht zugänglich."
+
+msgid "Folder: "
+msgstr "Ordner: "
+
+msgid "Forget saved link"
+msgstr "Gespeicherte Verknüpfung entfernen"
+
+msgid "Gallery #{number}: {title} · Revision {revision}. Saved visibility: {visibility}; access: {access}; listing: {listing}. Inherited access is not shown."
+msgstr "Galerie Nr. {number}: {title} · Revision {revision}. Gespeicherte Sichtbarkeit: {visibility}. Zugriff: {access}. Auflistung: {listing}. Vererbter Zugriff wird nicht angezeigt."
+
+msgid "Gallery access is unavailable or another connection operation is running. Try again."
+msgstr "Der Galeriezugriff ist nicht verfügbar oder ein anderer Verbindungsvorgang läuft. Versuchen Sie es erneut."
+
+msgid "Gallery API key revoked."
+msgstr "Der API-Schlüssel der Galerie wurde widerrufen."
+
+msgid "GALLERY CONNECTION"
+msgstr "GALERIEVERBINDUNG"
+
+msgid "Gallery connection and API key"
+msgstr "Galerieverbindung und API-Schlüssel"
+
+msgid "Gallery connection changed. Run import preflight again."
+msgstr "Die Galerieverbindung hat sich geändert. Führen Sie die Importvorprüfung erneut aus."
+
+msgid "Gallery connections…"
+msgstr "Galerieverbindungen…"
+
+msgid "Gallery detail is unsupported or unavailable. Existing connections and saved API-key upload remain unchanged."
+msgstr "Galeriedetails werden nicht unterstützt oder sind nicht verfügbar. Bestehende Verbindungen und Uploads mit gespeichertem API-Schlüssel bleiben unverändert."
+
+msgid "Gallery link expired."
+msgstr "Die Galerieverknüpfung ist abgelaufen."
+
+msgid "Gallery linking cancelled."
+msgstr "Die Galerieverknüpfung wurde abgebrochen."
+
+msgid "Gallery title:"
+msgstr "Galerietitel:"
+
+msgid "Gallery unlinked."
+msgstr "Die Galerieverknüpfung wurde getrennt."
+
+msgid "Gallery URL"
+msgstr "Galerie-URL"
+
+msgid "Gallery URL and API key are required before retrying."
+msgstr "Geben Sie vor dem erneuten Versuch die Galerie-URL und den API-Schlüssel ein."
+
+msgid "Gallery URL and API key are required before starting an import."
+msgstr "Geben Sie vor dem Import die Galerie-URL und den API-Schlüssel ein."
+
+msgid "Gallery URL and API key are required before starting the AI worker."
+msgstr "Geben Sie vor dem Start der KI-Analyse die Galerie-URL und den API-Schlüssel ein."
+
+msgid "Gallery URL and API key are required before starting the watcher."
+msgstr "Geben Sie vor dem Start der Ordnerüberwachung die Galerie-URL und den API-Schlüssel ein."
+
+msgid "GiB"
+msgstr "GiB"
+
+msgid "Go"
+msgstr "Öffnen"
+
+msgid "hashing"
+msgstr "Hash wird berechnet"
+
+msgid "Help"
+msgstr "Hilfe"
+
+msgid "Help: {title}"
+msgstr "Hilfe: {title}"
+
+msgid "Home"
+msgstr "Benutzerordner"
+
+msgid "Ignored at startup: -"
+msgstr "Beim Start übersprungen: –"
+
+msgid "Ignored at startup: {value}"
+msgstr "Beim Start übersprungen: {value}"
+
+msgid "Ignored at startup: checking existing files…"
+msgstr "Beim Start übersprungen: vorhandene Dateien werden geprüft…"
+
+msgid "Ignored at startup: not scanned yet"
+msgstr "Beim Start übersprungen: noch nicht geprüft"
+
+msgid "Image files"
+msgstr "Bilddateien"
+
+msgid "import"
+msgstr "Import"
+
+msgid "Import"
+msgstr "Import"
+
+msgid "Import cancelled"
+msgstr "Import abgebrochen"
+
+msgid "Import files…"
+msgstr "Dateien importieren…"
+
+msgid "Import finished"
+msgstr "Import abgeschlossen"
+
+msgid "Import folder…"
+msgstr "Ordner importieren…"
+
+msgid "Import idle"
+msgstr "Import im Leerlauf"
+
+msgid "Import needs review"
+msgstr "Import muss geprüft werden"
+
+msgid "Import options and item details"
+msgstr "Importoptionen und Dateidetails"
+
+msgid "Import paused"
+msgstr "Import angehalten"
+
+msgid "Import preflight completed and is awaiting explicit Start import."
+msgstr "Die Vorprüfung ist abgeschlossen. Der Import wartet auf den ausdrücklichen Start."
+
+msgid "Import preflight failed: {detail}"
+msgstr "Importvorprüfung fehlgeschlagen: {detail}"
+
+msgid "import preflight is running"
+msgstr "Importvorprüfung läuft"
+
+msgid "Import recovery"
+msgstr "Import wiederherstellen"
+
+msgid "Import review"
+msgstr "Importprüfung"
+
+msgid "Import running"
+msgstr "Import läuft"
+
+msgid "Import ZIP archive…"
+msgstr "ZIP-Archiv importieren…"
+
+msgid "Include subfolders"
+msgstr "Unterordner einbeziehen"
+
+msgid "info"
+msgstr "Info"
+
+msgid "Inspecting {current}/{total}: {filename}"
+msgstr "Prüfe {current}/{total}: {filename}"
+
+msgid "Inspecting source, hashing files, checking media capabilities, and comparing remote inventory..."
+msgstr "Die Quelle wird geprüft. Die App berechnet Datei-Hashes, prüft Medienformate und vergleicht sie mit dem Galeriebestand…"
+
+msgid "Install local AI module"
+msgstr "Lokales KI-Modul installieren"
+
+msgid "Installed Windows app only. This switch saves immediately."
+msgstr "Nur für die installierte Windows-App. Diese Einstellung wird sofort gespeichert."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app."
+msgstr "Installationsprogramm verifiziert.\nDas Update schließt die App, installiert die neue Version und startet sie erneut."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app.\nWindows may request administrator approval."
+msgstr "Installationsprogramm verifiziert.\nDas Update schließt die App, installiert die neue Version und startet sie erneut.\nWindows kann Administratorberechtigungen anfordern."
+
+msgid "Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact."
+msgstr "Installationsprogramm verifiziert. „Installationsprogramm öffnen“ startet die manuelle Installation. Die App aus dem Quellcode und ihr Ordner bleiben geöffnet und unverändert."
+
+msgid "Installer verified. Open installer starts manual installation; this source application remains open."
+msgstr "Installationsprogramm verifiziert. „Installationsprogramm öffnen“ startet die manuelle Installation. Die App aus dem Quellcode bleibt geöffnet."
+
+msgid "Installing…"
+msgstr "Installation läuft…"
+
+msgid "Invalid settings"
+msgstr "Ungültige Einstellungen"
+
+msgid "Job history"
+msgstr "Auftragsverlauf"
+
+msgid "Keep working in the system tray when the window closes"
+msgstr "Nach dem Schließen des Fensters im Infobereich weiterarbeiten"
+
+msgid "Keeps Flight Simulator in sync with real-world UTC while the watcher runs. Off by default. Your choice is remembered."
+msgstr "Gleicht die Zeit im Flight Simulator während der Ordnerüberwachung mit der tatsächlichen UTC-Zeit ab. Standardmäßig aus. Ihre Auswahl wird gespeichert."
+
+msgid "Language"
+msgstr "Sprache"
+
+msgid "Last scan: "
+msgstr "Letzte Prüfung: "
+
+msgid "Last scan: -"
+msgstr "Letzte Prüfung: –"
+
+msgid "Last scan: preparing"
+msgstr "Letzte Prüfung: Vorbereitung"
+
+msgid "Last successful scan: "
+msgstr "Letzte erfolgreiche Prüfung: "
+
+msgid "Later"
+msgstr "Später"
+
+msgid "LATEST"
+msgstr "ZULETZT"
+
+msgid "Lease seconds per job"
+msgstr "Auftragsreservierung in Sekunden"
+
+msgid "Link the gallery to load its gallery list."
+msgstr "Verknüpfen Sie die Galerie, um ihre Galerieliste zu laden."
+
+msgid "Linked gallery upload does not grant AI access. Switch explicitly to the saved API-key connection to use this worker."
+msgstr "Upload über die Galerieverknüpfung gewährt keinen KI-Zugriff. Wechseln Sie für die KI-Analyse ausdrücklich zur gespeicherten API-Schlüsselverbindung."
+
+msgid "Linked upload mode cannot be verified."
+msgstr "Der verknüpfte Uploadmodus kann nicht verifiziert werden."
+
+msgid "Linked upload mode is unconfirmed. Reconnect and verify the saved mode before attempting any upload."
+msgstr "Der verknüpfte Uploadmodus ist unbestätigt. Stellen Sie die Verbindung erneut her und prüfen Sie den gespeicherten Modus vor dem Upload."
+
+msgid "Linked upload permission changed; reconnect and verify the saved mode before uploading."
+msgstr "Die Berechtigung für verknüpfte Uploads hat sich geändert. Verbinden Sie sich erneut und prüfen Sie vor dem Upload den gespeicherten Modus."
+
+msgid "Linked upload selection is temporarily unavailable. The current connection remains selected."
+msgstr "Die Auswahl der verknüpften Uploadgalerie ist vorübergehend nicht verfügbar. Die aktuelle Verbindung bleibt ausgewählt."
+
+msgid "Linked upload target: "
+msgstr "Verknüpfte Uploadgalerie: "
+
+msgid "Linked: "
+msgstr "Verknüpft: "
+
+msgid "linking"
+msgstr "Verknüpfung"
+
+msgid "Linking"
+msgstr "Verknüpfung"
+
+msgid "Linking could not be verified; an older server may not support it. Saved API-key upload remains available. A server grant may exist; review gallery links."
+msgstr "Die Verknüpfung konnte nicht verifiziert werden. Ein älterer Server unterstützt sie möglicherweise nicht. Uploads mit gespeichertem API-Schlüssel bleiben verfügbar. Eine Serverberechtigung kann bereits bestehen. Prüfen Sie die Galerieverknüpfungen."
+
+msgid "Listing truncated; enter a full path to select other items."
+msgstr "Die Liste ist gekürzt. Geben Sie zur Auswahl anderer Einträge den vollständigen Pfad ein."
+
+msgid "Live diagnostics log"
+msgstr "Live-Diagnoseprotokoll"
+
+msgid "Loading galleries…"
+msgstr "Galerien werden geladen…"
+
+msgid "Loading the current gallery page…"
+msgstr "Aktuelle Seite der Galerieliste wird geladen…"
+
+msgid "Loading…"
+msgstr "Laden…"
+
+msgid "local"
+msgstr "lokal"
+
+msgid "Local AI module"
+msgstr "Lokales KI-Modul"
+
+msgid "local decoder available"
+msgstr "lokaler Decoder verfügbar"
+
+msgid "Local HEIC/DNG capability: "
+msgstr "Lokale HEIC/DNG-Unterstützung: "
+
+msgid "Local Ollama URL"
+msgstr "URL der lokalen Ollama-Instanz"
+
+msgid "Local thumbnail processes"
+msgstr "Lokale Prozesse für Vorschaubilder"
+
+msgid "Manage gallery links"
+msgstr "Galerieverknüpfungen verwalten"
+
+msgid "Manage link…"
+msgstr "Verknüpfung verwalten…"
+
+msgid "Manual import cancellation requested."
+msgstr "Abbruch des manuellen Imports angefordert."
+
+msgid "manual import is running"
+msgstr "manueller Import läuft"
+
+msgid "Manual import started with {count} file(s)."
+msgstr "Manueller Import gestartet. Dateien: {count}."
+
+msgid "Media"
+msgstr "Medien"
+
+msgid "Model or analyzer name"
+msgstr "Modell- oder Analysatorname"
+
+msgid "Model version"
+msgstr "Modellversion"
+
+msgid "No"
+msgstr "Nein"
+
+msgid "No active import"
+msgstr "Kein aktiver Import"
+
+msgid "No API key is configured."
+msgstr "Es ist kein API-Schlüssel eingerichtet."
+
+msgid "No API key is currently stored."
+msgstr "Es ist kein API-Schlüssel gespeichert."
+
+msgid "No background worker is active."
+msgstr "Es laufen keine Hintergrundvorgänge."
+
+msgid "No failed or recoverable local files are available for retry."
+msgstr "Es gibt keine fehlgeschlagenen oder wiederherstellbaren lokalen Dateien für einen erneuten Versuch."
+
+msgid "No folder selected"
+msgstr "Kein Ordner ausgewählt"
+
+msgid "No import job selected"
+msgstr "Kein Importauftrag ausgewählt"
+
+msgid "No newer Windows uploader installer is available."
+msgstr "Es ist kein neueres Windows-Installationsprogramm verfügbar."
+
+msgid "No unresolved creation is available for this account. Check the creation status before continuing."
+msgstr "Für dieses Konto liegt keine ungeklärte Galerieerstellung vor. Prüfen Sie den Status, bevor Sie fortfahren."
+
+msgid "Not configured"
+msgstr "Nicht konfiguriert"
+
+msgid "Not tested"
+msgstr "Nicht getestet"
+
+msgid "Object labels"
+msgstr "Objektbezeichnungen"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Ollama vision model"
+msgstr "Ollama-Bildmodell"
+
+msgid "Open"
+msgstr "Öffnen"
+
+msgid "Open activity"
+msgstr "Aktivität öffnen"
+
+msgid "Open app folder"
+msgstr "App-Ordner öffnen"
+
+msgid "Open full activity history"
+msgstr "Vollständigen Aktivitätsverlauf öffnen"
+
+msgid "Open Import"
+msgstr "Import öffnen"
+
+msgid "Open installer"
+msgstr "Installationsprogramm öffnen"
+
+msgid "Open log file"
+msgstr "Protokolldatei öffnen"
+
+msgid "Open log folder"
+msgstr "Protokollordner öffnen"
+
+msgid "Open Manage link to change the approved access."
+msgstr "Öffnen Sie „Verknüpfung verwalten“, um die genehmigten Berechtigungen zu ändern."
+
+msgid "Open protected credential editor"
+msgstr "Geschützten Anmeldeeditor öffnen"
+
+msgid "Open update"
+msgstr "Update öffnen"
+
+msgid "Open watched folder"
+msgstr "Überwachten Ordner öffnen"
+
+msgid "Optional fallback when you intentionally run Ollama."
+msgstr "Optionale Ausweichmöglichkeit, wenn Sie Ollama bewusst ausführen."
+
+msgid "Optional, server-assigned image analysis."
+msgstr "Optionale Bildanalyse mit Aufträgen vom Server."
+
+msgid "Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer."
+msgstr "Optional. Verwenden Sie {image_path}, {filename} und {job_id}. Die JSON-Ausgabe des externen Analyseprogramms wird vor der Verwendung geprüft. Lassen Sie das Feld leer, wenn Sie kein eigenes lokales Analyseprogramm verwenden."
+
+msgid "Original ZIP is kept for manual verification."
+msgstr "Das ursprüngliche ZIP-Archiv bleibt zur manuellen Prüfung erhalten."
+
+msgid "Paste"
+msgstr "Einfügen"
+
+msgid "Paste API key"
+msgstr "API-Schlüssel einfügen"
+
+msgid "Paste the gallery-scoped API key before saving."
+msgstr "Fügen Sie vor dem Speichern den API-Schlüssel für diese Galerie ein."
+
+msgid "Path to a config JSON file."
+msgstr "Pfad zu einer JSON-Konfigurationsdatei."
+
+msgid "Pause import after active requests finish"
+msgstr "Import nach laufenden Anfragen anhalten"
+
+msgid "Pause/resume current import"
+msgstr "Aktuellen Import anhalten oder fortsetzen"
+
+msgid "PDF unavailable; refresh the list."
+msgstr "Das PDF ist nicht verfügbar. Aktualisieren Sie die Liste."
+
+msgid "Photos"
+msgstr "Fotos"
+
+msgid "PHP Gallery connection"
+msgstr "PHP-Gallery-Verbindung"
+
+msgid "PHP Gallery Uploader update"
+msgstr "Update für PHP Gallery Uploader"
+
+msgid "PHP Gallery Uploader updates"
+msgstr "Updates für PHP Gallery Uploader"
+
+msgid "pip failed without output"
+msgstr "pip ist ohne Ausgabe fehlgeschlagen"
+
+msgid "Poll seconds when idle"
+msgstr "Abfrageintervall im Leerlauf (s)"
+
+msgid "Preflight cancelled"
+msgstr "Vorprüfung abgebrochen"
+
+msgid "Preflight failed"
+msgstr "Vorprüfung fehlgeschlagen"
+
+msgid "Preflight failed: "
+msgstr "Vorprüfung fehlgeschlagen: "
+
+msgid "Preflight is still running. Review the result before starting the import."
+msgstr "Die Vorprüfung läuft noch. Prüfen Sie das Ergebnis vor dem Start des Imports."
+
+msgid "Preflight needs to be run again"
+msgstr "Vorprüfung muss erneut ausgeführt werden"
+
+msgid "Preflight running"
+msgstr "Vorprüfung läuft"
+
+msgid "Preparing installation: stopping new work and waiting for active operations..."
+msgstr "Installation wird vorbereitet. Neue Aufträge werden angehalten und laufende Vorgänge abgeschlossen…"
+
+msgid "Preparing installation…"
+msgstr "Installation wird vorbereitet…"
+
+msgid "Preparing setup…"
+msgstr "Installationsprogramm wird vorbereitet…"
+
+msgid "Preparing the Watcher connection…"
+msgstr "Verbindung der Ordnerüberwachung wird vorbereitet…"
+
+msgid "Previous Watcher access is still being closed. Wait for confirmation, then resume Watcher."
+msgstr "Der bisherige Zugriff der Ordnerüberwachung wird noch beendet. Warten Sie auf die Bestätigung und setzen Sie die Überwachung dann fort."
+
+msgid "private"
+msgstr "privat"
+
+msgid "public"
+msgstr "öffentlich"
+
+msgid "queued"
+msgstr "in Warteschlange"
+
+msgid "rate pending"
+msgstr "Geschwindigkeit wird ermittelt"
+
+msgid "Read gallery details"
+msgstr "Galeriedetails lesen"
+
+msgid "Read selected details"
+msgstr "Ausgewählte Details lesen"
+
+msgid "Reading the original creation request…"
+msgstr "Ursprüngliche Erstellungsanfrage wird gelesen…"
+
+msgid "Reading the selected gallery details…"
+msgstr "Details der ausgewählten Galerie werden gelesen…"
+
+msgid "Ready for review"
+msgstr "Bereit zur Prüfung"
+
+msgid "Ready for uploads"
+msgstr "Bereit für Uploads"
+
+msgid "Ready when you are"
+msgstr "Bereit"
+
+msgid "Recent events"
+msgstr "Letzte Ereignisse"
+
+msgid "Reconnect and verify the created gallery first."
+msgstr "Verbinden Sie sich zuerst erneut und prüfen Sie die erstellte Galerie."
+
+msgid "Reconnect saved link"
+msgstr "Gespeicherte Verknüpfung wiederherstellen"
+
+msgid "Reconnect the selected linked gallery."
+msgstr "Stellen Sie den Zugriff auf die ausgewählte verknüpfte Galerie erneut her."
+
+msgid "Reconnect to upload"
+msgstr "Für Upload erneut verbinden"
+
+msgid "Recover unfinished import"
+msgstr "Unvollständigen Import wiederherstellen"
+
+msgid "Recoverable import remains saved for later review."
+msgstr "Der wiederherstellbare Import bleibt zur späteren Prüfung gespeichert."
+
+msgid "Recovered import: "
+msgstr "Wiederhergestellter Import: "
+
+msgid "Refresh report"
+msgstr "Bericht aktualisieren"
+
+msgid "Refresh upload queue"
+msgstr "Upload-Warteschlange aktualisieren"
+
+msgid "Rejected archive entries: "
+msgstr "Abgewiesene Archiveinträge: "
+
+msgid "Remember securely"
+msgstr "Sicher speichern"
+
+msgid "Remote inventory reconnect seconds"
+msgstr "Wartezeit bis zur erneuten Verbindung für den Serverbestand (s)"
+
+msgid "Remote preflight unavailable"
+msgstr "Serverseitige Vorprüfung nicht verfügbar"
+
+msgid "Remove the saved local credential? The current session remains active. This does not revoke the server grant. Manage gallery links to review or revoke it."
+msgstr "Gespeicherte lokale Anmeldedaten entfernen? Die aktuelle Sitzung bleibt aktiv. Die Serverberechtigung wird dadurch nicht widerrufen. In der Verwaltung der Galerieverknüpfungen können Sie sie prüfen oder widerrufen."
+
+msgid "Removing the saved connection…"
+msgstr "Gespeicherte Verbindung wird entfernt…"
+
+msgid "Removing the saved local link…"
+msgstr "Lokal gespeicherte Verknüpfung wird entfernt…"
+
+msgid "Repair dependencies"
+msgstr "Abhängigkeiten reparieren"
+
+msgid "Replace file"
+msgstr "Datei ersetzen"
+
+msgid "Replace the existing file?"
+msgstr "Vorhandene Datei ersetzen?"
+
+msgid "Report collection failed: "
+msgstr "Bericht konnte nicht erstellt werden: "
+
+msgid "Report ready · {report_count:,} characters · collected locally"
+msgstr "Bericht bereit · {report_count:,} Zeichen · lokal erstellt"
+
+msgid "Required dependencies are available for this Python runtime."
+msgstr "Die erforderlichen Abhängigkeiten sind in dieser Python-Umgebung verfügbar."
+
+msgid "Reset pending. Waiting for Watcher work to stop. You can exit and reopen WinApp to retry an interrupted reset."
+msgstr "Das Zurücksetzen wartet darauf, dass die Ordnerüberwachung ihre Arbeit beendet. Nach einer Unterbrechung können Sie WinApp schließen und erneut öffnen."
+
+msgid "Resetting Watcher…"
+msgstr "Ordnerüberwachung wird zurückgesetzt…"
+
+msgid "Restart now"
+msgstr "Jetzt neu starten"
+
+msgid "Restart required"
+msgstr "Neustart erforderlich"
+
+msgid "Restart to apply the selected language."
+msgstr "Starten Sie WinApp neu, um die ausgewählte Sprache zu übernehmen."
+
+msgid "Restart WinApp"
+msgstr "WinApp neu starten"
+
+msgid "Restoring the approved Watcher connection…"
+msgstr "Genehmigte Verbindung für die Ordnerüberwachung wird wiederhergestellt…"
+
+msgid "Restoring Watcher defaults…"
+msgstr "Standardeinstellungen der Ordnerüberwachung werden wiederhergestellt…"
+
+msgid "Result"
+msgstr "Ergebnis"
+
+msgid "Result / error"
+msgstr "Ergebnis / Fehler"
+
+msgid "Resume original creation"
+msgstr "Ursprüngliche Erstellung fortsetzen"
+
+msgid "Resume the paused import"
+msgstr "Angehaltenen Import fortsetzen"
+
+msgid "Retry failed"
+msgstr "Fehlgeschlagene Vorgänge wiederholen"
+
+msgid "Retry import"
+msgstr "Import erneut versuchen"
+
+msgid "Reveal"
+msgstr "Anzeigen"
+
+msgid "Reveal or mask API key"
+msgstr "API-Schlüssel anzeigen oder ausblenden"
+
+msgid "Review"
+msgstr "Prüfung"
+
+msgid "REVIEW"
+msgstr "ZUR PRÜFUNG"
+
+msgid "Review this report before sharing. Credentials, local paths and URL query values are filtered. Files and photographs are not attached. Nothing is sent automatically."
+msgstr "Prüfen Sie den Bericht, bevor Sie ihn weitergeben. Zugangsdaten, lokale Pfade und Werte von URL-Parametern werden herausgefiltert. Dateien und Fotos sind nicht angehängt. Es wird nichts automatisch gesendet."
+
+msgid "Revocation failed"
+msgstr "Widerruf fehlgeschlagen"
+
+msgid "Revoke API key"
+msgstr "API-Schlüssel widerrufen"
+
+msgid "Revoke API key failed"
+msgstr "API-Schlüssel konnte nicht widerrufen werden"
+
+msgid "Revoke API key..."
+msgstr "API-Schlüssel widerrufen…"
+
+msgid "Revoke key…"
+msgstr "Schlüssel widerrufen…"
+
+msgid "Revoke saved API key..."
+msgstr "Gespeicherten API-Schlüssel widerrufen…"
+
+msgid "Root"
+msgstr "Stammordner"
+
+msgid "Run one scan using saved configuration and exit."
+msgstr "Ordner mit den gespeicherten Einstellungen einmal scannen und Programm beenden."
+
+msgid "Running"
+msgstr "Läuft"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Save or restore connection fields before revoking the saved key."
+msgstr "Speichern Sie die Verbindungsdaten oder setzen Sie sie zurück, bevor Sie den gespeicherten Schlüssel widerrufen."
+
+msgid "Save or test the gallery connection in Settings."
+msgstr "Speichern oder testen Sie die Galerieverbindung in den Einstellungen."
+
+msgid "Save report…"
+msgstr "Bericht speichern…"
+
+msgid "Save support report"
+msgstr "Supportbericht speichern"
+
+msgid "Save watcher settings"
+msgstr "Einstellungen der Ordnerüberwachung speichern"
+
+msgid "Saved API-key connection selected."
+msgstr "Gespeicherte Verbindung mit API-Schlüssel ausgewählt."
+
+msgid "saved flight PDF upload is running"
+msgstr "Ein gespeichertes Flug-PDF wird hochgeladen"
+
+msgid "Saved gallery access expired. Approve the link again."
+msgstr "Der gespeicherte Galeriezugriff ist abgelaufen. Genehmigen Sie die Verknüpfung erneut."
+
+msgid "Saved local credential removed; the current session and server grant may still exist."
+msgstr "Gespeicherte Zugangsdaten wurden lokal gelöscht. Die aktuelle Sitzung und die Serverfreigabe können weiterhin gültig sein."
+
+msgid "Saving the Watcher session before closing…"
+msgstr "Die Sitzung der Ordnerüberwachung wird vor dem Schließen gespeichert…"
+
+msgid "Scan folder every"
+msgstr "Ordner durchsuchen alle"
+
+msgid "seconds"
+msgstr "Sekunden"
+
+msgid "Select"
+msgstr "Auswählen"
+
+msgid "Select a job in Activity first."
+msgstr "Wählen Sie zuerst einen Vorgang unter Aktivität aus."
+
+msgid "Select a source to build an import summary. Nothing uploads until you press Start import."
+msgstr "Wählen Sie eine Quelle für die Importübersicht aus. Der Upload beginnt erst, wenn Sie „Import starten“ wählen."
+
+msgid "Select all"
+msgstr "Alle auswählen"
+
+msgid "Select an existing folder."
+msgstr "Wählen Sie einen vorhandenen Ordner aus."
+
+msgid "Select an item or enter a path."
+msgstr "Wählen Sie einen Eintrag oder geben Sie einen Pfad ein."
+
+msgid "Select existing files."
+msgstr "Wählen Sie vorhandene Dateien aus."
+
+msgid "Select file"
+msgstr "Datei auswählen"
+
+msgid "Select folder"
+msgstr "Ordner auswählen"
+
+msgid "Select SimConnect.dll"
+msgstr "SimConnect.dll auswählen"
+
+msgid "Semantic prompt"
+msgstr "Prompt zur Inhaltserkennung"
+
+msgid "Server creates thumbnails"
+msgstr "Server erstellt Vorschaubilder"
+
+msgid "Server creates thumbnails."
+msgstr "Der Server erstellt die Vorschaubilder."
+
+msgid "Server revocation confirmed; local key cleanup needs review."
+msgstr "Der Server hat den Widerruf bestätigt. Prüfen Sie, ob der lokale Schlüssel gelöscht wurde."
+
+msgid "server upload only on this PC"
+msgstr "auf diesem PC nur auf den Server hochladen"
+
+msgid "server_only"
+msgstr "nur Server"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
+msgstr "Die Einstellungen wurden gespeichert, aber der Windows-Autostart konnte nicht aktualisiert werden. Speichern Sie die Einstellungen erneut.\n\n"
+
+msgid "Settings…"
+msgstr "Einstellungen…"
+
+msgid "Show"
+msgstr "Anzeigen"
+
+msgid "simconnect"
+msgstr "SimConnect"
+
+msgid "Simconnect"
+msgstr "SimConnect"
+
+msgid "SimConnect DLL"
+msgstr "SimConnect DLL"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "skipped"
+msgstr "übersprungen"
+
+msgid "skipped_duplicate"
+msgstr "als Duplikat übersprungen"
+
+msgid "skipped_unsupported"
+msgstr "nicht unterstützte Datei übersprungen"
+
+msgid "Source"
+msgstr "Quelle"
+
+msgid "Source deletion: Original files and ZIP archives are kept for manual verification."
+msgstr "Löschen der Quelle: Originaldateien und ZIP-Archive bleiben zur manuellen Prüfung erhalten."
+
+msgid "staged"
+msgstr "zum Hochladen vorbereitet"
+
+msgid "Staging cleanup age hours"
+msgstr "Arbeitskopien löschen nach (Std.)"
+
+msgid "Start AI metadata worker"
+msgstr "Metadatenverarbeitung per KI starten"
+
+msgid "Start the installed app in the tray after Windows logon."
+msgstr "Installierte App bei der Windows-Anmeldung im Infobereich starten."
+
+msgid "Start watching"
+msgstr "Überwachung starten"
+
+msgid "Start with Windows (minimized to tray)"
+msgstr "Mit Windows starten (im Infobereich)"
+
+msgid "Starting Watcher…"
+msgstr "Ordnerüberwachung wird gestartet…"
+
+msgid "State"
+msgstr "Status"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Stop AI metadata worker"
+msgstr "Metadatenverarbeitung per KI anhalten"
+
+msgid "Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts."
+msgstr "Halten Sie die Ordnerüberwachung an, bevor Sie den Ordner oder die Upload-Regeln ändern. Die Änderungen gelten beim nächsten Start der Überwachung."
+
+msgid "Stop Watcher and permanently forget its upload gallery, watched folder, queued work, and restart history? Watcher preferences will return to their defaults.\n\nYou will keep your screenshots, local reports, logs, and other tabs' settings. An upload already sent may still reach the gallery."
+msgstr "Ordnerüberwachung anhalten und Upload-Galerie, überwachten Ordner, Warteschlange und Wiederanlaufverlauf dauerhaft löschen? Die Einstellungen der Ordnerüberwachung werden auf die Standardwerte zurückgesetzt.\n\nIhre Screenshots, lokalen Berichte, Protokolle und Einstellungen anderer Bereiche bleiben erhalten. Ein bereits gesendeter Upload kann die Galerie noch erreichen."
+
+msgid "Stop Watcher before changing its folder."
+msgstr "Halten Sie die Ordnerüberwachung an, bevor Sie den Ordner ändern."
+
+msgid "Stop watching"
+msgstr "Überwachung anhalten"
+
+msgid "Stopped"
+msgstr "Gestoppt"
+
+msgid "Stopping Watcher for factory reset…"
+msgstr "Ordnerüberwachung wird zum Zurücksetzen angehalten…"
+
+msgid "succeeded"
+msgstr "erfolgreich"
+
+msgid "success"
+msgstr "Erfolg"
+
+msgid "Support diagnostics"
+msgstr "Supportdiagnose"
+
+msgid "Support diagnostics…"
+msgstr "Supportdiagnose…"
+
+msgid "Supported files found: {found}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}"
+msgstr "Unterstützte Dateien gefunden: {found}  |  Bereit zum Hochladen: {ready}  |  Mögliche Duplikate: {duplicates}"
+
+msgid "Sync UTC time"
+msgstr "UTC-Zeit synchronisieren"
+
+msgid "system"
+msgstr "System"
+
+msgid "System"
+msgstr "System"
+
+msgid "Target"
+msgstr "Ziel"
+
+msgid "Target gallery: "
+msgstr "Zielgalerie: "
+
+msgid "Target gallery: unknown"
+msgstr "Zielgalerie: unbekannt"
+
+msgid "Target: {gallery}"
+msgstr "Ziel: {gallery}"
+
+msgid "Testing"
+msgstr "Test läuft"
+
+msgid "Text files"
+msgstr "Textdateien"
+
+msgid "The active Watcher could not be safely checkpointed. Its queue is retained; wait for recovery, then stop or retry."
+msgstr "Der Zustand der laufenden Ordnerüberwachung konnte nicht sicher gespeichert werden. Die Warteschlange bleibt erhalten. Warten Sie auf die Wiederherstellung und halten Sie dann die Überwachung an oder versuchen Sie es erneut."
+
+msgid "The active Watcher could not be safely prepared for restart. Keep the app open and finish or stop Watcher first."
+msgstr "Die laufende Ordnerüberwachung konnte nicht sicher auf den Neustart vorbereitet werden. Lassen Sie die App geöffnet und beenden oder stoppen Sie zuerst die Überwachung."
+
+msgid "The application cannot safely commit a linked upload mode."
+msgstr "Die App kann die Upload-Einstellung für die verknüpfte Galerie nicht sicher speichern."
+
+msgid "The approved Photos connection could not be saved safely."
+msgstr "Die genehmigte Verbindung für Fotos konnte nicht sicher gespeichert werden."
+
+msgid "The clipboard does not contain an API key."
+msgstr "Die Zwischenablage enthält keinen API-Schlüssel."
+
+msgid "The clipboard does not contain text."
+msgstr "Die Zwischenablage enthält keinen Text."
+
+msgid "The created gallery is unavailable or its access could not be verified."
+msgstr "Die erstellte Galerie ist nicht verfügbar oder der Zugriff konnte nicht geprüft werden."
+
+msgid "The created gallery verification is no longer current."
+msgstr "Die Prüfung der erstellten Galerie ist nicht mehr aktuell."
+
+msgid "The creation receipt could not be acknowledged safely."
+msgstr "Der Beleg für die Erstellung konnte dem Server nicht sicher bestätigt werden."
+
+msgid "The creation receipt was saved; reconnect and check its status."
+msgstr "Der Beleg für die Erstellung wurde gespeichert. Stellen Sie die Verbindung erneut her und prüfen Sie den Status."
+
+msgid "The destination folder does not exist."
+msgstr "Der Zielordner existiert nicht."
+
+msgid "The gallery assigns one job at a time; this PC returns internal search metadata."
+msgstr "Die Galerie weist jeweils einen Auftrag zu. Dieser PC liefert Metadaten für die interne Suche zurück."
+
+msgid "The gallery did not approve this link."
+msgstr "Die Galerie hat die Verknüpfung nicht genehmigt."
+
+msgid "The gallery request timed out."
+msgstr "Zeitlimit für die Galerieanfrage überschritten."
+
+msgid "The gallery selection changed during verification. The previous upload target remains unchanged."
+msgstr "Die Galerieauswahl hat sich während der Prüfung geändert. Das bisherige Upload-Ziel bleibt bestehen."
+
+msgid "The installed application could not be verified. Open the downloaded installer manually to install this application."
+msgstr "Die installierte App konnte nicht überprüft werden. Öffnen Sie das heruntergeladene Installationsprogramm manuell, um die App zu installieren."
+
+msgid "The language was saved. Restart WinApp now to apply it?"
+msgstr "Die Sprache wurde gespeichert. WinApp jetzt neu starten, um sie anzuwenden?"
+
+msgid "The linking response could not be accepted."
+msgstr "Die Antwort auf die Verknüpfung konnte nicht verarbeitet werden."
+
+msgid "The original creation remains unresolved."
+msgstr "Die ursprüngliche Erstellung ist weiterhin ungeklärt."
+
+msgid "The original gallery is temporarily unavailable. Retrying safely…"
+msgstr "Die ursprüngliche Galerie ist vorübergehend nicht verfügbar. Erneuter sicherer Versuch läuft…"
+
+msgid "The original key is closed. A gallery or files may already exist or old work may still be finishing. Verify it has stopped and inspect the gallery and storage before creating another."
+msgstr "Der ursprüngliche Vorgangsschlüssel ist geschlossen. Eine Galerie oder Dateien können bereits existieren, und der alte Vorgang kann noch laufen. Prüfen Sie vor einer Neuerstellung, ob der Vorgang beendet ist, und sehen Sie in der Galerie und im Speicher nach."
+
+msgid "The previous preflight is stopping. Clear the selection again after it finishes."
+msgstr "Die vorherige Vorprüfung wird angehalten. Heben Sie die Auswahl nach Abschluss erneut auf."
+
+msgid "The previous preflight is stopping. Start preflight again when it has finished."
+msgstr "Die vorherige Vorprüfung wird angehalten. Starten Sie die Vorprüfung erneut, sobald der Vorgang abgeschlossen ist."
+
+msgid "The saved secure reconnect could not be removed. The gallery remains connected."
+msgstr "Die gespeicherten Daten für die sichere Wiederverbindung konnten nicht entfernt werden. Die Galerie bleibt verbunden."
+
+msgid "The securely saved gallery connection is unavailable."
+msgstr "Die sicher gespeicherte Galerieverbindung ist nicht verfügbar."
+
+msgid "The selected gallery changed during approval."
+msgstr "Die ausgewählte Galerie hat sich während der Genehmigung geändert."
+
+msgid "The selected gallery connection changed."
+msgstr "Die ausgewählte Galerieverbindung hat sich geändert."
+
+msgid "The selected gallery could not be verified. The previous upload target is unchanged."
+msgstr "Die ausgewählte Galerie konnte nicht geprüft werden. Das bisherige Upload-Ziel bleibt bestehen."
+
+msgid "The selected upload gallery needs a new link."
+msgstr "Die ausgewählte Upload-Galerie muss neu verknüpft werden."
+
+msgid "The setting was saved. Restart the application for the experimental Canvas gallery renderer to take effect."
+msgstr "Die Einstellung wurde gespeichert. Starten Sie die App neu, um die experimentelle Darstellung der Galerie mit Canvas zu aktivieren."
+
+msgid "The upload observation is no longer current."
+msgstr "Der ermittelte Upload-Status ist nicht mehr aktuell."
+
+msgid "The Watcher connection could not be saved. Try again."
+msgstr "Die Verbindung für die Ordnerüberwachung konnte nicht gespeichert werden. Versuchen Sie es erneut."
+
+msgid "These permissions include private and unpublished galleries."
+msgstr "Diese Berechtigungen gelten auch für private und unveröffentlichte Galerien."
+
+msgid "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. Using those backends can later download large model files. Continue?"
+msgstr "Dadurch werden große optionale Python-Pakete wie PyTorch und Transformers in der aktuellen Python-Umgebung installiert. Bei späterer Nutzung können große Modelldateien heruntergeladen werden. Fortfahren?"
+
+msgid "This job has no queued or recoverable files to upload."
+msgstr "Dieser Vorgang enthält keine Dateien in der Warteschlange und keine Dateien, deren Upload fortgesetzt werden kann."
+
+msgid "This link does not include the gallery list."
+msgstr "Diese Verknüpfung umfasst keinen Zugriff auf die Galerieliste."
+
+msgid "This PC creates derivatives with server fallback."
+msgstr "Dieser PC erzeugt abgeleitete Bilder. Bei Bedarf übernimmt der Server."
+
+msgid "This PC creates thumbnails when supported"
+msgstr "Dieser PC erstellt Vorschaubilder, falls möglich"
+
+msgid "This tests the saved API key. Select the API-key connection explicitly before running this test."
+msgstr "Damit wird der gespeicherte API-Schlüssel geprüft. Wählen Sie vor dem Test ausdrücklich die Verbindung mit API-Schlüssel."
+
+msgid "Thumbnail mode: {mode}"
+msgstr "Vorschaubildmodus: {mode}"
+
+msgid "Time"
+msgstr "Zeit"
+
+msgid "Tkinter is not available in this Python installation."
+msgstr "Tkinter ist in dieser Python-Installation nicht verfügbar."
+
+msgid "Tools"
+msgstr "Werkzeuge"
+
+msgid "Transformers caption model"
+msgstr "Transformers-Modell für Bildbeschreibungen"
+
+msgid "Transformers object detector"
+msgstr "Objekterkennung mit Transformers"
+
+msgid "Tries"
+msgstr "Versuche"
+
+msgid "Type"
+msgstr "Typ"
+
+msgid "unknown"
+msgstr "unbekannt"
+
+msgid "Unlinked locally. Check Manage link to confirm server revocation."
+msgstr "Lokale Verknüpfung getrennt. Prüfen Sie unter „Verknüpfung verwalten“, ob der Server den Widerruf bestätigt hat."
+
+msgid "Unlinked locally. Check Manage link to revoke access."
+msgstr "Lokale Verknüpfung getrennt. Widerrufen Sie den Zugriff unter „Verknüpfung verwalten“."
+
+msgid "Unlinking gallery…"
+msgstr "Galerieverknüpfung wird getrennt…"
+
+msgid "unpublished"
+msgstr "unveröffentlicht"
+
+msgid "Unsafe report directory."
+msgstr "Der Berichtsordner ist unsicher."
+
+msgid "Unsupported: {types}"
+msgstr "Nicht unterstützt: {types}"
+
+msgid "Up"
+msgstr "Nach oben"
+
+msgid "Update"
+msgstr "Aktualisieren"
+
+msgid "Update {update_available_version} available"
+msgstr "Update {update_available_version} verfügbar"
+
+msgid "Update {version}"
+msgstr "Update {version}"
+
+msgid "Update canceled before installation."
+msgstr "Update wurde vor der Installation abgebrochen."
+
+msgid "Update postponed: current work could not be safely checkpointed. The application remains open; see diagnostics."
+msgstr "Update verschoben, weil der aktuelle Arbeitsstand nicht sicher gespeichert werden konnte. Die App bleibt geöffnet. Details stehen in der Diagnose."
+
+msgid "Update stopped: {detail}"
+msgstr "Update angehalten: {detail}"
+
+msgid "Upload gallery: "
+msgstr "Upload-Galerie: "
+
+msgid "Upload gallery: not set"
+msgstr "Upload-Galerie: nicht festgelegt"
+
+msgid "Upload mode was activated, but the display did not refresh. Reopen the connection view to verify the target."
+msgstr "Der Upload-Modus wurde aktiviert, aber die Anzeige wurde nicht aktualisiert. Öffnen Sie die Verbindungsansicht erneut, um das Ziel zu prüfen."
+
+msgid "Upload threads"
+msgstr "Upload-Threads"
+
+msgid "Upload via API key"
+msgstr "Mit API-Schlüssel hochladen"
+
+msgid "uploaded {uploaded}, duplicate {duplicates}, failed {failed}, cancelled {cancelled}, active {active}"
+msgstr "hochgeladen {uploaded}, Duplikate {duplicates}, fehlgeschlagen {failed}, abgebrochen {cancelled}, aktiv {active}"
+
+msgid "Uploaded photos will be deleted from this PC."
+msgstr "Hochgeladene Fotos werden von diesem PC gelöscht."
+
+msgid "uploading"
+msgstr "wird hochgeladen"
+
+msgid "Use a gallery-scoped API key from Admin. Your password is not entered into this app."
+msgstr "Verwenden Sie einen in der Verwaltung erstellten API-Schlüssel für eine bestimmte Galerie. Geben Sie Ihr Passwort in dieser App nicht ein."
+
+msgid "Use experimental virtualized Canvas rendering for photo galleries. Requires application restart."
+msgstr "Experimentelle virtualisierte Canvas-Darstellung für Fotogalerien verwenden. Die App muss neu gestartet werden."
+
+msgid "Use saved API key"
+msgstr "Gespeicherten API-Schlüssel verwenden"
+
+msgid "Using PHP Gallery"
+msgstr "PHP Gallery verwenden"
+
+msgid "UTC sync"
+msgstr "UTC-Synchronisierung"
+
+msgid "UTC sync stopped"
+msgstr "UTC-Synchronisierung angehalten"
+
+msgid "UTC synchronization"
+msgstr "UTC-Synchronisierung"
+
+msgid "validating"
+msgstr "wird geprüft"
+
+msgid "Verifying installation…"
+msgstr "Installation wird geprüft…"
+
+msgid "Verifying installer size and SHA-256..."
+msgstr "Größe und SHA-256 des Installationsprogramms werden geprüft…"
+
+msgid "Verifying the administrator and selected gallery…"
+msgstr "Administrator und ausgewählte Galerie werden geprüft…"
+
+msgid "Verifying the created gallery before selection…"
+msgstr "Die erstellte Galerie wird vor der Auswahl geprüft…"
+
+msgid "Version {version} is available (current: {current}). Update downloads and verifies Setup for manual installation; this source folder remains intact."
+msgstr "Version {version} ist verfügbar (aktuell: {current}). Das Update lädt das Installationsprogramm zur manuellen Installation herunter und prüft es. Dieser Quellordner bleibt erhalten."
+
+msgid "Version {version} is available (installed: {current}). Update downloads and verifies Setup, closes this app and restarts it after installation. Windows may request administrator approval."
+msgstr "Version {version} ist verfügbar (installiert: {current}). Das Update lädt das Installationsprogramm herunter, prüft es, schließt diese App und startet sie nach der Installation wieder. Windows kann eine Bestätigung durch einen Administrator verlangen."
+
+msgid "View"
+msgstr "Ansicht"
+
+msgid "Wait for API-key revocation to finish before changing connection credentials."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie die Zugangsdaten der Verbindung ändern."
+
+msgid "Wait for API-key revocation to finish before changing credentials."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie die Zugangsdaten ändern."
+
+msgid "Wait for API-key revocation to finish before changing this setting."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie diese Einstellung ändern."
+
+msgid "Wait for API-key revocation to finish before replacing the key."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie den Schlüssel ersetzen."
+
+msgid "Wait for API-key revocation to finish before retrying an import."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie den Import wiederholen."
+
+msgid "Wait for API-key revocation to finish before starting import preflight."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie die Import-Vorprüfung starten."
+
+msgid "Wait for API-key revocation to finish before starting manual import."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie den manuellen Import starten."
+
+msgid "Wait for API-key revocation to finish before starting the AI metadata worker."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie die Metadatenverarbeitung per KI starten."
+
+msgid "Wait for API-key revocation to finish before testing the connection."
+msgstr "Warten Sie, bis der Widerruf des API-Schlüssels abgeschlossen ist, bevor Sie die Verbindung testen."
+
+msgid "Wait for the current gallery request to finish."
+msgstr "Warten Sie, bis die aktuelle Galerieanfrage abgeschlossen ist."
+
+msgid "Wait for the current import to stop before retrying failed items."
+msgstr "Warten Sie, bis der aktuelle Import angehalten wurde, bevor Sie fehlgeschlagene Elemente erneut versuchen."
+
+msgid "Wait for the current operation to finish."
+msgstr "Warten Sie, bis der aktuelle Vorgang abgeschlossen ist."
+
+msgid "Wait for the previous gallery verification to finish."
+msgstr "Warten Sie, bis die vorherige Galerieprüfung abgeschlossen ist."
+
+msgid "Wait for the remaining work to finish before restarting."
+msgstr "Warten Sie vor dem Neustart, bis die verbleibenden Vorgänge abgeschlossen sind."
+
+msgid "Wait for the update operation to finish before restarting."
+msgstr "Warten Sie vor dem Neustart, bis das Update abgeschlossen ist."
+
+msgid "Waiting for uploader to close…"
+msgstr "Warten auf das Ende des Uploads…"
+
+msgid "warning"
+msgstr "Warnung"
+
+msgid "warnings"
+msgstr "Warnungen"
+
+msgid "Warnings: {details}"
+msgstr "Warnungen: {details}"
+
+msgid "Watch folder"
+msgstr "Ordner überwachen"
+
+msgid "WATCH FOLDER"
+msgstr "ÜBERWACHTER ORDNER"
+
+msgid "watch-folder uploader is running"
+msgstr "Upload aus dem überwachten Ordner läuft"
+
+msgid "watcher"
+msgstr "Ordnerüberwachung"
+
+msgid "Watcher"
+msgstr "Ordnerüberwachung"
+
+msgid "Watcher access could not be closed. Retry."
+msgstr "Zugriff der Ordnerüberwachung konnte nicht beendet werden. Versuchen Sie es erneut."
+
+msgid "Watcher access could not be closed. Review the saved session."
+msgstr "Zugriff der Ordnerüberwachung konnte nicht beendet werden. Prüfen Sie die gespeicherte Sitzung."
+
+msgid "Watcher behavior"
+msgstr "Verhalten der Ordnerüberwachung"
+
+msgid "Watcher factory reset"
+msgstr "Ordnerüberwachung zurücksetzen"
+
+msgid "Watcher factory reset…"
+msgstr "Ordnerüberwachung zurücksetzen…"
+
+msgid "Watcher gallery selected."
+msgstr "Galerie für die Ordnerüberwachung ausgewählt."
+
+msgid "Watcher help"
+msgstr "Hilfe zur Ordnerüberwachung"
+
+msgid "Watcher is still running"
+msgstr "Ordnerüberwachung läuft noch"
+
+msgid "WATCHER PREFERENCES"
+msgstr "EINSTELLUNGEN DER ORDNERÜBERWACHUNG"
+
+msgid "Watcher remains open"
+msgstr "Ordnerüberwachung bleibt geöffnet"
+
+msgid "Watcher reset complete. Choose a connection and folder to start."
+msgstr "Ordnerüberwachung zurückgesetzt. Wählen Sie zum Starten eine Verbindung und einen Ordner."
+
+msgid "Watcher reset could not be saved. Retry factory reset."
+msgstr "Das Zurücksetzen der Ordnerüberwachung konnte nicht gespeichert werden. Versuchen Sie es erneut."
+
+msgid "Watcher reset could not finish. Retry factory reset or see Support diagnostics."
+msgstr "Die Ordnerüberwachung konnte nicht vollständig zurückgesetzt werden. Versuchen Sie es erneut oder öffnen Sie die Supportdiagnose."
+
+msgid "Watcher reset required"
+msgstr "Ordnerüberwachung muss zurückgesetzt werden"
+
+msgid "Watcher settings"
+msgstr "Einstellungen der Ordnerüberwachung"
+
+msgid "Watcher settings…"
+msgstr "Einstellungen der Ordnerüberwachung…"
+
+msgid "Watcher state"
+msgstr "Status der Ordnerüberwachung"
+
+msgid "Watcher stopped"
+msgstr "Ordnerüberwachung gestoppt"
+
+msgid "Windows restart required. Restart Windows before opening the uploader."
+msgstr "Windows-Neustart erforderlich. Starten Sie Windows neu, bevor Sie das Upload-Programm öffnen."
+
+msgid "Windows startup"
+msgstr "Windows-Autostart"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "Your gallery on autopilot"
+msgstr "Ihre Galerie auf Autopilot"
+
+msgid "Zero-shot object labels such as person, bridge, guitar, house."
+msgstr "Objekterkennung ohne Trainingsbeispiele, etwa Person, Brücke, Gitarre oder Haus."
+
+msgid "ZIP"
+msgstr "ZIP"
+
+msgid "ZIP archives"
+msgstr "ZIP-Archive"
+
+msgid "ZIP max compression ratio"
+msgstr "Max. Kompressionsverhältnis für ZIP"
+
+msgid "ZIP max entries"
+msgstr "Max. Einträge in ZIP"
+
+msgid "ZIP max single file GiB"
+msgstr "Max. Größe einer Datei in ZIP (GiB)"
+
+msgid "ZIP max total uncompressed GiB"
+msgstr "Max. entpackte Gesamtgröße von ZIP (GiB)"
+
+msgid "ZIP: "
+msgstr "ZIP: "
+
+msgid "Custom SimConnect.dll"
+msgstr "Eigene SimConnect.dll"
+
+msgid "API key configured and saved"
+msgstr "API-Schlüssel eingerichtet und gespeichert"
+
+msgid "API key or gallery URL changed, not saved"
+msgstr "API-Schlüssel oder Galerie-URL geändert, noch nicht gespeichert"
+
+msgid "Finishing accepted work. Open Flight progress for the current stage; the key is retained until required work is confirmed."
+msgstr "Angenommene Vorgänge werden abgeschlossen. Den aktuellen Schritt sehen Sie im Flugfortschritt. Der Schlüssel bleibt bis zur Bestätigung der erforderlichen Vorgänge gespeichert."
+
+msgid "Revoke will stop and finish: {operations}."
+msgstr "Beim Widerruf werden folgende Vorgänge angehalten und abgeschlossen: {operations}."
+
+msgid "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
+msgstr "Der Widerruf ist wegen ungespeicherter Verbindungsdaten nicht verfügbar. Speichern Sie zuerst die Änderungen oder stellen Sie die gespeicherte Verbindung wieder her."
+
+msgid "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
+msgstr "Der API-Schlüssel kann jetzt dauerhaft widerrufen werden. Nach Bestätigung durch den Server wird er aus der lokalen Konfiguration entfernt."
+
+msgid "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
+msgstr "Fügen Sie vor dem Test oder Upload einen in der PHP-Gallery-Verwaltung erstellten API-Schlüssel für eine bestimmte Galerie ein."
+
+msgid "PHP Gallery uploader{update} | watch {watch} | import {importing} | AI {ai} | failures {failures}"
+msgstr "PHP Gallery{update} | Überw. {watch} | Import {importing} | KI {ai} | Fehler {failures}"
+
+msgid "UTC sync connected: {simulator}"
+msgstr "UTC-Synchronisierung verbunden: {simulator}"
+
+msgid "Waiting for the simulator for UTC sync"
+msgstr "UTC-Synchronisierung wartet auf den Simulator"
+
+msgid "UTC sync is unavailable for this simulator"
+msgstr "UTC-Synchronisierung ist für diesen Simulator nicht verfügbar"
+
+msgid "UTC sync paused by the simulator state"
+msgstr "UTC-Synchronisierung wegen des Simulatorzustands pausiert"
+
+msgid "UTC time synchronized"
+msgstr "UTC-Zeit synchronisiert"
+
+msgid "UTC correction could not be verified. Retrying…"
+msgstr "Die UTC-Korrektur konnte nicht geprüft werden. Neuer Versuch läuft…"
+
+msgid "Waiting for the simulator UTC time"
+msgstr "Warten auf die UTC-Zeit des Simulators"
+
+msgid "UTC time aligned"
+msgstr "UTC-Zeit stimmt überein"
+
+msgid "Could not close the UTC connection"
+msgstr "Verbindung zur UTC-Synchronisierung konnte nicht getrennt werden"
+
+msgid "AI metadata worker is processing a job"
+msgstr "KI verarbeitet Metadaten"
+
+msgid "Manage link"
+msgstr "Verknüpfung verwalten"
+
+msgid "Choose gallery"
+msgstr "Galerie auswählen"
+
+msgid "Standard access"
+msgstr "Standardzugriff"
+
+msgid "Password protected"
+msgstr "Passwortgeschützt"
+
+msgid "Listed"
+msgstr "Gelistet"
+
+msgid "Unlisted"
+msgstr "Nicht gelistet"
+
+msgid "The gallery returned HTTP {status} with an HTML response."
+msgstr "Die Galerie hat HTTP {status} mit einer HTML-Antwort zurückgegeben."
+
+msgid "The gallery returned HTTP {status}."
+msgstr "Die Galerie hat HTTP {status} zurückgegeben."
+
+msgid "PHP Gallery uploader"
+msgstr "PHP Gallery Upload"
+
+msgid "Linked upload recovery requires manual review; database absence does not prove failure."
+msgstr "Die Wiederherstellung des Uploads in die verknüpfte Galerie muss manuell geprüft werden. Ein fehlender Datenbankeintrag belegt keinen Fehlschlag."
+
+msgid "Gallery authorization could not be verified; AI heartbeat stopped."
+msgstr "Die Galerieberechtigung konnte nicht geprüft werden. Die regelmäßige Bestätigung des KI-Auftrags wurde angehalten."
+
+msgid "Gallery authorization could not be verified; AI worker stopped."
+msgstr "Die Galerieberechtigung konnte nicht geprüft werden. Die Metadatenverarbeitung per KI wurde angehalten."
+
+msgid "AI metadata worker is disabled in configuration."
+msgstr "Die Metadatenverarbeitung per KI ist in den Einstellungen deaktiviert."
+
+msgid "AI metadata worker needs Gallery URL and API key."
+msgstr "Die Metadatenverarbeitung per KI benötigt die Galerie-URL und einen API-Schlüssel."
+
+msgid "AI metadata worker stopped."
+msgstr "Die Metadatenverarbeitung per KI wurde angehalten."
+
+msgid "AI metadata worker received an invalid job payload."
+msgstr "Der empfangene KI-Auftrag enthält ungültige Daten."
+
+msgid "Force-finished queue is retained and cannot be refreshed."
+msgstr "Die zwangsweise beendete Warteschlange bleibt gespeichert und kann nicht aktualisiert werden."
+
+msgid "Queue refresh merged with the pending request."
+msgstr "Die Aktualisierung der Warteschlange wurde mit der ausstehenden Anfrage zusammengelegt."
+
+msgid "Queue refresh requested; FIFO and retry deadlines retained."
+msgstr "Die Warteschlangenaktualisierung wurde angefordert. FIFO-Reihenfolge und Wiederholungsfristen bleiben erhalten."
+
+msgid "Watcher session was explicitly force-finished; pending sources remain retained."
+msgstr "Die Sitzung der Ordnerüberwachung wurde zwangsweise beendet. Die ausstehenden Quelldateien bleiben erhalten."
+
+msgid "Queue persistence needs recovery; sources retained."
+msgstr "Die gespeicherte Warteschlange muss wiederhergestellt werden. Die Quelldateien bleiben erhalten."
+
+msgid "Watcher stopped; pending photographs are retained."
+msgstr "Die Ordnerüberwachung wurde angehalten. Ausstehende Fotos bleiben erhalten."
+
+msgid "Confirmed upload retained; optional cleanup failed."
+msgstr "Der bestätigte Upload bleibt erhalten. Die optionale Bereinigung ist fehlgeschlagen."
+
+msgid "Manual import paused. In-flight requests may still finish."
+msgstr "Der manuelle Import ist pausiert. Laufende Anfragen können noch abgeschlossen werden."
+
+msgid "Manual import resumed."
+msgstr "Manueller Import fortgesetzt."
+
+msgid "Import staging sources retained; safe automatic deletion requires server-bound operation receipts."
+msgstr "Die Quelldateien des Imports bleiben erhalten. Sicheres automatisches Löschen erfordert servergebundene Vorgangsbelege."
+
+msgid "Legacy upload cannot verify the destination for ZIP cleanup; the source ZIP is retained."
+msgstr "Der ältere Upload-Modus kann das Ziel für die ZIP-Bereinigung nicht prüfen. Das Quell-ZIP bleibt erhalten."
+
+msgid "Linked import requires a durable item recovery record."
+msgstr "Der Import in eine verknüpfte Galerie benötigt einen dauerhaften Wiederherstellungseintrag."
+
+msgid "No manual upload files were selected."
+msgstr "Es wurden keine Dateien zum manuellen Hochladen ausgewählt."
+
+msgid "Linked inventory preload incomplete; individual files will be rechecked."
+msgstr "Der Dateibestand der verknüpften Galerie wurde nicht vollständig geladen. Die einzelnen Dateien werden erneut geprüft."
+
+msgid "Local thumbnails are unavailable; falling back to server-side thumbnail generation."
+msgstr "Lokale Vorschaubilder sind nicht verfügbar. Der Server erstellt die Vorschaubilder."
+
+msgid "Linked recovery marker could not be refreshed."
+msgstr "Der Wiederherstellungsvermerk für die verknüpfte Galerie konnte nicht aktualisiert werden."
+
+msgid "Linked gallery recovery state is unavailable."
+msgstr "Der Wiederherstellungsstatus der verknüpften Galerie ist nicht verfügbar."
+
+msgid "Idle"
+msgstr "Leerlauf"
+
+msgid "Detected"
+msgstr "Erkannt"
+
+msgid "Waiting for the file to settle"
+msgstr "Warten, bis die Datei unverändert bleibt"
+
+msgid "Preparing"
+msgstr "Wird vorbereitet"
+
+msgid "Checking the gallery inventory"
+msgstr "Dateibestand der Galerie wird geprüft"
+
+msgid "Waiting to retry"
+msgstr "Warten auf erneuten Versuch"
+
+msgid "Gallery access required"
+msgstr "Galeriezugriff erforderlich"
+
+msgid "Upload outcome uncertain"
+msgstr "Upload-Ergebnis unklar"
+
+msgid "Blocked"
+msgstr "Blockiert"
+
+msgid "Confirmed"
+msgstr "Bestätigt"
+
+msgid "Unknown state"
+msgstr "Unbekannter Status"
+
+msgid "Watching {folder}"
+msgstr "Überwachter Ordner: {folder}"
+
+msgid "Already in the gallery: {filename}"
+msgstr "Bereits in der Galerie: {filename}"
+
+msgid "Manual import started. Files: {count}"
+msgstr "Manueller Import gestartet. Dateien: {count}"
+
+msgid "Manual import finished."
+msgstr "Manueller Import abgeschlossen."
+
+msgid "Manual import stopped."
+msgstr "Manueller Import angehalten."
+
+msgid "Uploaded file: {filename}"
+msgstr "Hochgeladene Datei: {filename}"
+
+msgid "Upload in progress"
+msgstr "Upload läuft"
+
+msgid "Enter a valid scan interval and file stability time."
+msgstr "Geben Sie ein gültiges Scanintervall und eine gültige Stabilitätsdauer für Dateien ein."
+
+msgid "Timing, worker, archive-safety, and AI numeric settings must contain valid numbers."
+msgstr "Zeitangaben, Prozess- und Threadzahlen, Archivgrenzen und numerische KI-Einstellungen müssen gültige Zahlen enthalten."
+
+msgid "Gallery URL must use HTTP or HTTPS and contain a valid host."
+msgstr "Die Galerie-URL muss HTTP oder HTTPS verwenden und einen gültigen Hostnamen enthalten."
+
+msgid "Wait for the Watcher restart checkpoint to finish."
+msgstr "Warten Sie, bis die Ordnerüberwachung ihren Zustand für den Neustart sicher gespeichert hat."
+
+msgid "Finish the current Watcher capture before changing its gallery."
+msgstr "Beenden Sie die laufende Sitzung der Ordnerüberwachung, bevor Sie ihre Galerie ändern."
+
+msgid "Wait for the current Watcher, import or flight work to stop."
+msgstr "Warten Sie, bis die aktuelle Ordnerüberwachung, der Import oder die Flugaufzeichnung beendet ist."
+
+msgid "Upload settings could not be verified. Restart WinApp and try again."
+msgstr "Die Upload-Einstellungen konnten nicht geprüft werden. Starten Sie WinApp neu und versuchen Sie es erneut."
+
+msgid "Continue the current uploads in Watcher before changing the upload gallery."
+msgstr "Setzen Sie die laufenden Uploads in der Ordnerüberwachung fort, bevor Sie die Upload-Galerie ändern."
+
+msgid "Review unfinished imports in Activity before changing the upload target."
+msgstr "Prüfen Sie unvollständige Importe unter Aktivität, bevor Sie das Upload-Ziel ändern."
+
+msgid "Local upload history exceeds the safe size limit. Review Activity."
+msgstr "Der lokale Upload-Verlauf überschreitet das sichere Größenlimit. Prüfen Sie die Aktivität."
+
+msgid "Local upload history could not be verified. Review Activity."
+msgstr "Der lokale Upload-Verlauf konnte nicht geprüft werden. Prüfen Sie die Aktivität."
+
+msgid "{confirmed} confirmed / {skipped} skipped"
+msgstr "{confirmed} bestätigt / {skipped} übersprungen"
+
+msgid "See Support diagnostics for details."
+msgstr "Details finden Sie in der Supportdiagnose."
+
+msgid "Select a report language or disable reports."
+msgstr "Wählen Sie eine Sprache für den Bericht aus oder deaktivieren Sie die Berichte."
+
+msgid "unknown Python executable"
+msgstr "unbekannte Python-Programmdatei"
+
+msgid "tray available"
+msgstr "Infobereich verfügbar"
+
+msgid "tray unavailable"
+msgstr "Infobereich nicht verfügbar"
+
+msgid "Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
+msgstr "Lokale Vorschaubilder sind verfügbar. Python {version}: {executable}. Pillow: {pillow_version}, {tray_status}."
+
+msgid "Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
+msgstr "Diese Python-Umgebung kann keine lokalen Vorschaubilder erstellen: {executable}. Python {version}, {tray_status}."
+
+msgid "Required dependencies are bundled with this application."
+msgstr "Die erforderlichen Pakete sind in der App enthalten."
+
+msgid "Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader."
+msgstr "Die mitgelieferten Pakete sind nicht verfügbar. Installieren Sie WinApp erneut."
+
+msgid "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, or run the Python source version to use Transformers."
+msgstr "Die eigenständige Installation kann keine Python-Pakete installieren. Verwenden Sie Ollama oder ein externes Analyseprogramm. Nutzen Sie für Transformers die Python-Quellversion."
+
+msgid "Bundled dependencies"
+msgstr "Mitgelieferte Pakete"

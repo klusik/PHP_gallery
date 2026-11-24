@@ -40,6 +40,31 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+import logging
+from logging.handlers import RotatingFileHandler
+
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    Image = None
+
+from uploader import ui_theme
+from uploader.game_context import GameContext
+from uploader.gallery_lightbox import PhotoLightbox
+from uploader.app_linking import UPLOAD_SCOPE, linking_issuer
+from uploader.mode_coordinator import (
+    ModeCoordinator,
+    ModeCoordinatorError,
+    ModeConfigPort,
+    ModeVaultPort,
+)
+from uploader.upload_mode import (
+    ModeRecord,
+    encode_mode_record,
+    profile_path_digest,
+    UploadModeError,
+    resolve_mode,
+)
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS, migrate_config_payload
 from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.app_linking import LinkedGalleryPage
@@ -928,10 +953,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Crop bounds and untouched normalized source are verified.
         """
-        try:
-            from PIL import Image, ImageDraw
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         width, height = TEST_BLACK_BAR_IMAGE_SIZE
@@ -970,10 +992,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Both fit states retain the original Pillow image dimensions.
         """
-        try:
-            from PIL import Image, ImageDraw
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         width, height = TEST_BLACK_BAR_IMAGE_SIZE
@@ -1010,9 +1029,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
             None: The previous window state and controls are restored before
                 one default-quality image render.
         """
-        try:
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Tk is required for the lightbox control owner.")
 
         lightbox = object.__new__(PhotoLightbox)
@@ -1082,10 +1099,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: The fitted box excludes all four synthetic mattes.
         """
-        try:
-            from PIL import Image, ImageDraw
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         width, height = TEST_COMBINED_MATTE_SIZE
@@ -1104,10 +1118,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Only the clear top and bottom matte bands are removed.
         """
-        try:
-            from PIL import Image, ImageDraw
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         source = Image.new("RGB", (220, 100), "black")
@@ -1124,10 +1135,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Natural dark scene edges do not qualify as mattes.
         """
-        try:
-            from PIL import Image, ImageDraw
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         source = Image.new("RGB", (210, 90), "#07090b")
@@ -1144,10 +1152,7 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Both mattes are removed while the flat scene remains intact.
         """
-        try:
-            from PIL import Image
-            from uploader.gallery_lightbox import PhotoLightbox
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is an optional visual enhancement.")
 
         width, height = TEST_FLAT_DARK_MATTE_SIZE
@@ -1166,7 +1171,6 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: The themed label is placed beside the trigger in-window.
         """
-        from uploader import ui_theme
 
         widget = mock.Mock()
         widget.winfo_exists.return_value = True
@@ -1253,7 +1257,6 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
             None: A missed Leave cannot retain a tooltip, and surface dismissal
                 cancels delayed help before a content transition.
         """
-        from uploader import ui_theme
 
         widget = mock.Mock()
         widget.winfo_pointerxy.return_value = (35, 45)
@@ -1319,7 +1322,6 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Scoped style and existing tooltip host reach the button owner.
         """
-        from uploader import ui_theme
 
         parent = mock.Mock()
         surface = mock.Mock()
@@ -1354,7 +1356,6 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Common Tk fonts share the selected family; fixed-width stays.
         """
-        from uploader import ui_theme
 
         root = mock.Mock()
         fonts = {name: mock.Mock() for name in (
@@ -1402,7 +1403,6 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         Returns:
             None: Shared help binding delegates to the inline themed surface.
         """
-        from uploader import ui_theme
 
         widget = mock.Mock()
         surface = mock.Mock()
@@ -1428,7 +1428,6 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             None: An empty profile admits the exact linked target and saves
                 the watch folder. Restart needs a fresh live link.
         """
-        from uploader.app_linking import LinkingSession, UPLOAD_SCOPE
 
         with tempfile.TemporaryDirectory(prefix='phpgallery-mac-mode-') as directory:
             profile = Path(directory).resolve()
@@ -2292,9 +2291,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: A fake vault and real ConfigStore retain exact key and anchor.
         """
-        from uploader.app_linking import UPLOAD_SCOPE
-        from uploader.mode_coordinator import ModeCoordinator, ModeCoordinatorError
-        from uploader.upload_mode import ModeRecord, encode_mode_record, profile_path_digest
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'
@@ -2359,10 +2355,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: Verifies anchor CAS, token refresh and ordinary-save retention.
         """
-        from uploader.app_linking import UPLOAD_SCOPE
-        from uploader.upload_mode import (
-            ModeRecord, encode_mode_record, profile_path_digest,
-        )
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'
@@ -2509,7 +2501,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: Legacy absence is allowed; invalid v2 bindings are refused.
         """
-        from uploader.upload_mode import UploadModeError, profile_path_digest, resolve_mode
 
         aliases = (r'C:\gallery\.\config.json', r'C:\gallery\..\config.json',
                    r'\\server\share\config.json')
@@ -2667,9 +2658,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: An unmigrated config uses the existing API-key worker once.
         """
-        from uploader.mode_coordinator import (
-            ModeConfigPort, ModeCoordinator, ModeCoordinatorError, ModeVaultPort,
-        )
 
         with tempfile.TemporaryDirectory() as directory:
             store = MAIN.ConfigStore(Path(directory) / 'config.json')
@@ -2910,8 +2898,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: Matching linked config and vault are observed but never scanned.
         """
-        from uploader.app_linking import UPLOAD_SCOPE
-        from uploader.upload_mode import ModeRecord, encode_mode_record, profile_path_digest
 
         with tempfile.TemporaryDirectory() as directory:
             store = MAIN.ConfigStore(Path(directory) / 'config.json')
@@ -2938,7 +2924,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: Both cases admit the API-key scan with a synthetic vault.
         """
-        from uploader.upload_mode import ModeRecord, encode_mode_record, profile_path_digest
 
         for bound in (False, True):
             with self.subTest(bound=bound), tempfile.TemporaryDirectory() as directory:
@@ -2970,7 +2955,6 @@ class ConfigStateTests(unittest.TestCase):
         Returns:
             None: Failure returns nonzero and coordinator can observe again.
         """
-        from uploader.mode_coordinator import ModeCoordinator
 
         with tempfile.TemporaryDirectory() as directory:
             store = MAIN.ConfigStore(Path(directory) / 'config.json')
@@ -3420,7 +3404,6 @@ class URLAndUploadStateTests(unittest.TestCase):
         Returns:
             None: Config reload and multipart upload preserve the same API key.
         """
-        from uploader.app_linking import linking_issuer
 
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
@@ -3908,9 +3891,12 @@ class IsolationAndCallbackTests(unittest.TestCase):
         self.assertTrue(confirmed)
         self.assertTrue(session.has_hash(digest))
 
-    def test_logging_uses_bounded_rotation(self):
-        import logging
-        from logging.handlers import RotatingFileHandler
+    def test_logging_uses_bounded_rotation(self) -> None:
+        """Check that diagnostics rotate within their owner limits.
+
+        Returns:
+            None: Inspects the actual rotating log handler configuration.
+        """
 
         with tempfile.TemporaryDirectory() as tmp:
             root_logger = logging.getLogger()
@@ -4868,7 +4854,6 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 saved key. SimBrief widgets change geometry only when flight
                 detection changes.
         """
-        from uploader.game_context import GameContext
 
         expected = {
             "en": (

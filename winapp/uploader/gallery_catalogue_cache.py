@@ -28,6 +28,7 @@ import threading
 from .app_linking import (
     LINKING_GALLERY_ID_MAX, LINKING_GALLERY_TITLE_MAX_CHARS, LinkedGallery,
 )
+from .macos_mode import assert_local_macos_profile
 from .models import JsonValue
 from .windows_file_identity import (
     LOAD_LIBRARY_SEARCH_SYSTEM32, assert_local_windows_profile,
@@ -501,7 +502,6 @@ class GalleryCatalogueCache:
             assert_local_windows_profile(self._directory)
             return
         if sys.platform == 'darwin':
-            from .macos_mode import assert_local_macos_profile
             assert_local_macos_profile(self._directory)
         for path in (self._directory, *self._directory.parents):
             information = path.lstat()

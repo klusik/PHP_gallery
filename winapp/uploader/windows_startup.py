@@ -16,6 +16,11 @@ import os
 from pathlib import Path
 import sys
 
+try:
+    import winreg
+except ImportError:
+    winreg = None
+
 from .windows_file_identity import WindowsDirectoryAnchor
 
 
@@ -74,7 +79,6 @@ def synchronize_startup(enabled: bool) -> None:
     """
     if not startup_supported():
         return
-    import winreg
 
     command = '"' + str(Path(sys.executable).resolve()) + '" --startup'
     if enabled and len(command) > RUN_COMMAND_MAX_CHARACTERS:

@@ -1710,6 +1710,29 @@ def linking_issuer(value: str) -> str:
     return issuer if _issuer_valid(issuer) else ''
 
 
+# Purpose: Bound a refresh credential by the server's inactivity policy.
+# Type: int. Units: seconds. Scope: one current refresh generation.
+# Consumers: store_approved_refresh, _validated_rotation.
+# Rationale: 604800 matches the server inactivity policy for either family.
+OFFLINE_REFRESH_MAX_SECONDS = 604800
+
+
+def _valid_token(value: object, prefix: str) -> bool:
+    """Check a canonical 256-bit credential with its exact token prefix.
+
+    Args:
+        value (uploader.models.JsonValue | object): Untrusted decoded JSON
+            value or another runtime value; only a canonical token string is
+            accepted.
+        prefix (str): Required protocol prefix for this credential kind.
+
+    Returns:
+        bool: True only for the required prefix and canonical random payload.
+    """
+    return (isinstance(value, str) and value.startswith(prefix)
+            and _canonical_256bit(value[len(prefix):]))
+
+
 def _canonical_256bit(value: str) -> bool:
     """Validate one canonical unpadded 32-byte base64url value.
 
@@ -3640,9 +3663,8 @@ class LinkingAttempt:
                 or time.monotonic() >= started + lifetime):
             raise LinkingError('Linking response was not accepted.')
         if offline:
-            # Share the dedicated refresh policy/format owner without a module
-            # import cycle: credential_store itself depends on this module.
-            from .offline_linking import OFFLINE_REFRESH_MAX_SECONDS, _valid_token
+            # The exchange and rotation share the same token format and
+            # inactivity limit owned by the linking protocol.
             if (not _valid_token(refresh, 'pglr_')
                     or type(refresh_lifetime) is not int
                     or not 0 < refresh_lifetime <= OFFLINE_REFRESH_MAX_SECONDS

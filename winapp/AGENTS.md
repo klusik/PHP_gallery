@@ -6,7 +6,10 @@ packaging changes also require [.github rules](../.github/AGENTS.md) and
 [scripts rules](../scripts/AGENTS.md); fixtures require
 [tests rules](../tests/AGENTS.md).
 
-Never use Python `from __future__ import annotations`. Write factual docstrings
+Never use Python `from __future__ import annotations` or function-local
+imports. Put optional or platform-specific imports in module-level guards.
+Resolve dependency cycles by moving ownership to an independent module.
+Write factual docstrings
 and native types with every new/changed named function, method or class;
 describe
 all parameters, concrete structures and return variants. Preserve comments and

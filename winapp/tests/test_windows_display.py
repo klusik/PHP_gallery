@@ -25,6 +25,14 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+try:
+    import tkinter as tk
+    from tkinter import ttk
+    from PIL import Image, ImageChops, ImageGrab, ImageTk
+except ImportError as render_dependency_error:
+    RENDER_DEPENDENCY_ERROR = str(render_dependency_error)
+    tk = None
+
 from uploader import process_memory, windows_display
 
 
@@ -164,12 +172,8 @@ class WindowsCanvasRenderingTests(unittest.TestCase):
             None: A visible desktop restores the original viewport pixels, or
                 an unavailable desktop is reported as an explicit skip.
         """
-        try:
-            import tkinter as tk
-            from tkinter import ttk
-            from PIL import Image, ImageChops, ImageGrab, ImageTk
-        except ImportError as exc:
-            self.skipTest(f'Render dependencies unavailable: {exc}')
+        if tk is None:
+            self.skipTest(f'Render dependencies unavailable: {RENDER_DEPENDENCY_ERROR}')
 
         try:
             root = tk.Tk()

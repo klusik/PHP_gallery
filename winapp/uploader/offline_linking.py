@@ -25,11 +25,18 @@ from pathlib import Path
 from threading import Event
 from urllib.parse import urlencode
 
+import json
+import os
+import secrets
+import stat
+
+from .server_discovery import _unique_object
 from .app_linking import (
     CLIENT_ID,
     GALLERIES_SCOPE,
     IDENTITY_SCOPE,
     LINKING_USERNAME_MAX_CHARS,
+    OFFLINE_REFRESH_MAX_SECONDS,
     READ_OFFLINE_SCOPE,
     READ_UPLOAD_OFFLINE_SCOPE,
     CREATE_OFFLINE_SCOPE,
@@ -46,9 +53,9 @@ from .app_linking import (
     ROLLING_GALLERY_SEARCH_SCOPES, ROLLING_PRESENTATION_SCOPES,
     TOKEN_PREFIX,
     UPLOAD_SCOPE,
-    _canonical_256bit,
     _issuer_valid,
     _request_json,
+    _valid_token,
     LinkingError, LinkingReconnectRequired, LinkingRefreshRejected, LinkingSession,
     discover_linking_capabilities,
 )
@@ -58,12 +65,6 @@ from .credential_store import CREDENTIAL_ACCOUNT_ID_MAX, NativeCredentialStore
 # Type: int. Units: seconds. Scope: one newly rotated access bearer.
 # Consumers: _validated_rotation. Rationale: 900 matches server issuance.
 OFFLINE_ACCESS_MAX_SECONDS = 900
-
-# Purpose: Bound a refresh credential by the server's inactivity policy.
-# Type: int. Units: seconds. Scope: one current refresh generation.
-# Consumers: store_approved_refresh, _validated_rotation.
-# Rationale: 604800 matches the server inactivity policy for either family.
-OFFLINE_REFRESH_MAX_SECONDS = 604800
 
 _REFRESH_PREFIX = 'pglr_'
 _RECORD_MAGIC = b'PGOR\x01'
@@ -135,22 +136,6 @@ def _binding_valid(issuer: str, account_id: int, scope: str) -> bool:
         )
         and type(account_id) is int and 0 < account_id <= CREDENTIAL_ACCOUNT_ID_MAX
     )
-
-
-def _valid_token(value: object, prefix: str) -> bool:
-    """Check a canonical 256-bit credential with its exact token prefix.
-
-    Args:
-        value (uploader.models.JsonValue | object): Untrusted decoded JSON
-            value or another runtime value; only a canonical token string is
-            accepted.
-        prefix (str): Required protocol prefix for this credential kind.
-
-    Returns:
-        bool: True only for the required prefix and canonical random payload.
-    """
-    return (isinstance(value, str) and value.startswith(prefix)
-            and _canonical_256bit(value[len(prefix):]))
 
 
 def _pack_refresh(scope: str, refresh: str) -> bytes:
@@ -402,10 +387,6 @@ def save_offline_binding(
     Raises:
         OfflineLinkingError: The binding or local persistence is invalid.
     """
-    import json
-    import os
-    import secrets
-    import stat
 
     if not _binding_valid(binding.issuer, binding.account_id, binding.scope):
         raise OfflineLinkingError('Offline binding is invalid.')
@@ -479,8 +460,6 @@ def load_offline_binding(path: Path, expected_issuer: str) -> OfflineBinding | N
     Raises:
         OfflineLinkingError: The hint, path or storage state is invalid.
     """
-    import json
-    from .server_discovery import _unique_object
 
     if (not isinstance(expected_issuer, str)
             or not _issuer_valid(expected_issuer, allow_local_http=True)):

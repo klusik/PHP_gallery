@@ -38,6 +38,7 @@ import urllib.parse
 import urllib.request
 
 from .models import JsonValue
+from .windows_file_identity import reject_reparse_path
 
 REPOSITORY = "klusik/PHP_gallery"
 API_URL = "https://api.github.com/repos/" + REPOSITORY + "/releases"
@@ -964,8 +965,17 @@ _DOWNLOAD_MARKER = "ownership.json"
 
 
 def _safe_download_path(path: Path) -> Path:
-    """Reject every reparse ancestor before resolving a storage path."""
-    from uploader.update_helper import reject_reparse_path
+    """Reject every reparse ancestor before resolving a storage path.
+
+    Args:
+        path (Path): Proposed file or directory in updater storage.
+
+    Returns:
+        Path: Resolved candidate after the ancestry checks pass.
+
+    Raises:
+        UpdateError: The proposed path traverses redirected storage.
+    """
     path = path.absolute()
     for candidate in (path, *path.parents):
         if candidate.is_symlink():

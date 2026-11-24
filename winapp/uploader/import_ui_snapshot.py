@@ -17,7 +17,27 @@ from pathlib import Path
 from typing import NewType
 from uuid import UUID, uuid4
 
+from .localization import gettext, gettext_noop
 from .models import ImportItem, ImportJob
+
+_ITEM_LABELS: dict[str, str] = {
+    "discovered": gettext_noop("discovered"),
+    "validating": gettext_noop("validating"),
+    "staged": gettext_noop("staged"),
+    "hashing": gettext_noop("hashing"),
+    "queued": gettext_noop("queued"),
+    "uploading": gettext_noop("uploading"),
+    "confirmed": gettext_noop("confirmed"),
+    "skipped_duplicate": gettext_noop("skipped_duplicate"),
+    "skipped_unsupported": gettext_noop("skipped_unsupported"),
+    "failed_retryable": gettext_noop("failed_retryable"),
+    "failed_permanent": gettext_noop("failed_permanent"),
+    "cancelled": gettext_noop("cancelled"),
+    "local": gettext_noop("local"),
+    "server_only": gettext_noop("server_only"),
+    "failed": gettext_noop("failed"),
+    "unknown": gettext_noop("unknown"),
+}
 
 ImportWorkerGeneration = NewType("ImportWorkerGeneration", UUID)
 
@@ -70,9 +90,9 @@ class ImportItemView:
         return (
             self.filename,
             size_label,
-            self.local_decode,
-            self.state,
-            self.reason,
+            gettext(_ITEM_LABELS.get(self.local_decode, self.local_decode)),
+            gettext(_ITEM_LABELS.get(self.state, self.state)),
+            gettext(self.reason),
         )
 
     def activity_values(self) -> tuple[str | int | float, ...]:
@@ -83,9 +103,9 @@ class ImportItemView:
         """
         return (
             self.filename,
-            self.state,
+            gettext(_ITEM_LABELS.get(self.state, self.state)),
             self.attempt_count,
-            self.activity_detail,
+            gettext(self.activity_detail),
         )
 
 
@@ -115,10 +135,12 @@ class ImportProgressCounts:
         Returns:
             str: Counts in the current history table's established order.
         """
-        return (
-            f"uploaded {self.uploaded}, duplicate {self.duplicates}, "
-            f"failed {self.failed}, cancelled {self.cancelled}, "
-            f"active {self.active}"
+        return gettext(
+            "uploaded {uploaded}, duplicate {duplicates}, failed {failed}, "
+            "cancelled {cancelled}, active {active}"
+        ).format(
+            uploaded=self.uploaded, duplicates=self.duplicates,
+            failed=self.failed, cancelled=self.cancelled, active=self.active,
         )
 
 

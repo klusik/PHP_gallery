@@ -11,6 +11,7 @@
 """Optional current-process RAM observation without third-party dependencies."""
 
 import ctypes
+from ctypes import wintypes
 import os
 import subprocess
 import sys
@@ -46,7 +47,6 @@ def current_process_ram_bytes() -> int | None:
         return None
     if os.name != 'nt':
         return None
-    from ctypes import wintypes
 
     class ProcessMemoryCounters(ctypes.Structure):
         """Match the Windows PROCESS_MEMORY_COUNTERS native ABI."""

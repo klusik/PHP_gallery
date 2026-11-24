@@ -20,7 +20,7 @@ require_once dirname(__DIR__) . '/audit_lib.php';
 /**
  * Populate shared immutable Python reports in one bounded AST worker invocation.
  * @param list<string> $sources Source texts already admitted by inventory discovery.
- * @return array<string,array{snapshots:list<array<string,mixed>>,import_findings:list<array{line:int,rule:string}>}> Source identities mapped to AST reports.
+ * @return array<string,array{snapshots:list<array{identity:string,fingerprint:string,record:array{kind:string,language:string,name:string,line:int,params:list<array{name:string,type:string}>,return_type:string,doc:string,type_issues:list<string>},uncertain:bool}>,import_findings:list<array{line:int,rule:string}>}> Source identities mapped to AST reports.
  */
 function python_source_reports(array $sources): array
 {
@@ -63,6 +63,14 @@ function python_source_reports(array $sources): array
             60,
         );
         $reports = json_decode($process['stdout'], true);
+        if (!$process['timed_out'] && $process['exit_code'] !== 0) {
+            $failure = json_decode($process['stderr'], true);
+            $identity = is_array($failure) ? ($failure['source'] ?? null) : null;
+            $line = is_array($failure) ? ($failure['line'] ?? null) : null;
+            if (is_string($identity) && isset($missing[$identity]) && is_int($line)) {
+                throw new \RuntimeException("Python AST invalid source $identity:$line");
+            }
+        }
         if (
             $process['timed_out']
             || $process['exit_code'] !== 0
@@ -93,7 +101,10 @@ function python_source_reports(array $sources): array
                     || !isset($finding['line'], $finding['rule'])
                     || !is_int($finding['line'])
                     || $finding['line'] < 1
-                    || $finding['rule'] !== 'python.future_annotations'
+                    || !in_array($finding['rule'], [
+                        'python.future_annotations',
+                        'python.function_local_import',
+                    ], true)
                 ) {
                     throw new \RuntimeException(
                         'Python AST import report invalid; coverage unknown.',
@@ -125,7 +136,7 @@ function python_source_cache(array $sources): array
 /**
  * Read file-level import policy evidence from the shared immutable AST cache.
  * @param string $source Python/PYW source already admitted by inventory discovery.
- * @return list<array{line:int,rule:string}> Forbidden annotation imports with source coordinates.
+ * @return list<array{line:int,rule:string}> Absolute policy sites and locations.
  */
 function python_import_findings(string $source): array
 {

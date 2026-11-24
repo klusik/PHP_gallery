@@ -38,6 +38,7 @@ from uploader.flight_jobs import (
     allocate_report_revision,
     report_file_details,
 )
+from uploader.flight_simbrief import DispatchPlan
 from uploader.models import ImportItem, ImportJob
 from uploader.state_store import JobStateStore
 
@@ -711,7 +712,6 @@ class FlightJobsTests(unittest.TestCase):
             None: Flight number/ICAO naming preserves leading zeroes, while
                 updated plans never rename or overwrite previous editions.
         """
-        from uploader.flight_simbrief import DispatchPlan
 
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

@@ -25,6 +25,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+from uploader.watch_queue import observe_watch_source
 from uploader.watch_queue import WatchQueueStore
 
 
@@ -67,7 +68,6 @@ class WatcherInspectionIntegrationTests(unittest.TestCase):
             journal_path = root / 'session' / 'watch-drain.json'
             journal = WatchQueueStore(journal_path, 'a' * 64, folder, False)
             journal.initialize([])
-            from uploader.watch_queue import observe_watch_source
             for index in range(81):
                 path = folder / f'{index:03}.jpg'
                 path.write_bytes(f'image-{index}'.encode('ascii'))

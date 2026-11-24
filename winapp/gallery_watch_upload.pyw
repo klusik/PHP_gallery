@@ -193,11 +193,15 @@ if __name__ == "__main__":
 import logging
 from logging.handlers import RotatingFileHandler
 
+from uploader import update_helper
 from uploader.config import (
+    APP_PROFILE_NAME,
     CONFIG_SCHEMA_VERSION,
     DEFAULTS as REDESIGN_CONFIG_DEFAULTS,
     migrate_config_payload,
     resolve_canvas_gallery_renderer_enabled,
+    load_ui_language,
+    save_ui_language,
 )
 from uploader.config_snapshot import ConfigSnapshot, ConfigSnapshotError, ConfigSnapshotStore
 from uploader.credential_store import WindowsUploadModeStore
@@ -273,6 +277,10 @@ from uploader.watcher_profile import (
     discard_capture_queues, discard_once_queues,
 )
 from uploader.flight_report_translations import recovery_text, tr
+from uploader.localization import (
+    DEFAULT_LANGUAGE, LANGUAGE_NAMES, configure_language, current_language,
+    gettext, gettext_noop,
+)
 from uploader.photos_workspace import (
     PHOTOS_INFO_PANE_WIDTH, PHOTOS_TREE_WIDTH, PhotosWorkspace,
 )
@@ -331,9 +339,12 @@ except ImportError:  # pragma: no cover
 
 if tk is not None:
     from uploader import ui_file_picker as filedialog
+    from uploader.app_linking_ui import LinkingManager
+    from uploader.flight_ui import FlightUI
     from uploader.ui_shell import (
         EmbeddedWindow,
         active_panel,
+        help_button,
         initialize_shell,
         messagebox,
     )
@@ -347,10 +358,10 @@ if tk is not None:
         attach_inline_tooltip,
         configure_theme,
         create_smooth_icon,
-        help_button,
         icon_button,
         paint_backdrop,
     )
+    from uploader.update_ui import UpdateController
 
 try:
     from PIL import Image, ImageDraw, ImageOps, ImageStat
@@ -368,8 +379,8 @@ except ImportError:  # pragma: no cover
     pystray = None
 
 
-APP_NAME = "PHPGalleryUploader"
-APP_DISPLAY_NAME = "PHP Gallery uploader"
+APP_NAME = APP_PROFILE_NAME
+APP_DISPLAY_NAME = gettext_noop("PHP Gallery uploader")
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
@@ -3213,8 +3224,10 @@ class RemoteInventorySession:
                 if self.linked_target is not None:
                     if deep_check:
                         self.emit(
-                            "warning", "Linked upload recovery requires manual "
-                            "review; database absence does not prove failure.",
+                            "warning", gettext_noop(
+                                "Linked upload recovery requires manual "
+                                "review; database absence does not prove failure."
+                            ),
                         )
                         return False
                     if self.before_request is not None:
@@ -3581,11 +3594,11 @@ def selected_image_filetypes() -> List[Tuple[str, str]]:
         List[Tuple[str, str]]: Tkinter-compatible file type filters.
     """
     return [
-        ("Image files", "*.jpg *.jpeg *.png *.gif *.webp *.heic *.heif *.dng"),
+        (gettext("Image files"), "*.jpg *.jpeg *.png *.gif *.webp *.heic *.heif *.dng"),
         ("JPEG", "*.jpg *.jpeg"),
         ("PNG", "*.png"),
         ("WebP", "*.webp"),
-        ("All files", "*.*"),
+        (gettext("All files"), "*.*"),
     ]
 
 
@@ -3617,7 +3630,7 @@ def local_thumbnail_supported() -> bool:
     return Image is not None and ImageOps is not None
 
 
-def thumbnail_runtime_status() -> str:
+def thumbnail_runtime_status(*, for_display: bool = False) -> str:
     """
     Build a clear status line for the Python runtime used by this process.
 
@@ -3625,16 +3638,31 @@ def thumbnail_runtime_status() -> str:
     The app must report the exact executable currently running the GUI because
     optional helper packages have to be installed into this same interpreter.
 
+    Args:
+        for_display (bool): Translate the Settings/AI caption when true.
+
     Returns:
-        str: Human-readable runtime and Pillow availability status.
+        str: Runtime and Pillow availability in stable diagnostic or UI text.
     """
-    executable = sys.executable or "unknown Python executable"
+    translate = gettext if for_display else gettext_noop
+    executable = sys.executable or translate(gettext_noop("unknown Python executable"))
     version = sys.version.split()[0]
-    tray_status = "tray available" if pystray is not None else "tray unavailable"
+    tray_status = translate(
+        gettext_noop("tray available") if pystray is not None else gettext_noop("tray unavailable"),
+    )
     if local_thumbnail_supported():
         pillow_version = getattr(Image, "__version__", "installed")
-        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
-    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
+        return translate(gettext_noop(
+            "Client-side thumbnails available. Python {version}: {executable}. "
+            "Pillow: {pillow_version}; {tray_status}."
+        )).format(
+            version=version, executable=executable,
+            pillow_version=pillow_version, tray_status=tray_status,
+        )
+    return translate(gettext_noop(
+        "Client-side thumbnails unavailable for this Python runtime: "
+        "{executable}. Python {version}; {tray_status}."
+    )).format(executable=executable, version=version, tray_status=tray_status)
 
 
 def clamp_int(value: int, minimum: int, maximum: int) -> int:
@@ -3723,7 +3751,7 @@ def worker_choice_values(maximum: int) -> List[str]:
     Returns:
         List[str]: List containing Auto plus numeric worker counts.
     """
-    values = ["Auto"]
+    values = [gettext("Auto")]
     for value in [1, 2, 4, 6, 8, 12, 16, 24, 32]:
         if value <= maximum:
             values.append(str(value))
@@ -3741,7 +3769,7 @@ def parse_worker_choice(value: str) -> int:
         int: Zero for Auto, otherwise a positive integer.
     """
     text = str(value).strip()
-    if not text or text.lower() == "auto":
+    if not text or text.casefold() in ("auto", gettext("Auto").casefold()):
         return 0
     return int(text)
 
@@ -3773,8 +3801,66 @@ def format_worker_choice(value: int) -> str:
         str: Combobox text.
     """
     if int(value) <= 0:
-        return "Auto"
+        return gettext("Auto")
     return str(int(value))
+
+
+def ai_backend_labels() -> dict[str, str]:
+    """Describe the selectable AI providers and modes in the current locale.
+
+    Returns:
+        dict[str, str]: Stable backend codes mapped to display labels.
+    """
+    return {
+        "auto": gettext("Auto"),
+        "pillow": "Pillow",
+        "transformers": "Transformers",
+        "ollama": "Ollama",
+        "external": gettext("External command"),
+    }
+
+
+def activity_filter_labels() -> dict[str, str]:
+    """Describe each Activity filter without changing stored event keys.
+
+    Returns:
+        dict[str, str]: Stable filter codes mapped to their visible captions.
+    """
+    return {
+        "all": gettext("all"),
+        "active": gettext("active"),
+        "succeeded": gettext("succeeded"),
+        "skipped": gettext("skipped"),
+        "failed": gettext("failed"),
+        "warnings": gettext("warnings"),
+    }
+
+
+def activity_label(code: str, *, title: bool = False) -> str:
+    """Resolve display captions for stable Activity categories and severities.
+
+    Args:
+        code (str): Persisted level or operation, such as error or watcher.
+        title (bool): Use the uppercased category caption in the footer.
+
+    Returns:
+        str: Localized Activity caption, with unknown operation codes intact.
+    """
+    captions = {
+        "info": gettext_noop("info"), "system": gettext_noop("system"),
+        "warning": gettext_noop("warning"), "error": gettext_noop("error"),
+        "success": gettext_noop("success"),
+        "watcher": gettext_noop("watcher"), "import": gettext_noop("import"),
+        "simconnect": gettext_noop("simconnect"), "ai": gettext_noop("ai"),
+        "linking": gettext_noop("linking"),
+    }
+    if title:
+        captions = {
+            "system": gettext_noop("System"), "watcher": gettext_noop("Watcher"),
+            "import": gettext_noop("Import"), "simconnect": gettext_noop("Simconnect"),
+            "ai": gettext_noop("Ai"), "linking": gettext_noop("Linking"),
+        }
+    return gettext(captions.get(code, code.title() if title else code))
 
 
 def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
@@ -3791,14 +3877,14 @@ def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
     if getattr(sys, "frozen", False):
         available = Image is not None and pystray is not None
         return available, (
-            "Required dependencies are bundled with this application."
-            if available else "Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader."
+            gettext_noop("Required dependencies are bundled with this application.")
+            if available else gettext_noop("Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader.")
         )
     command = [sys.executable, "-m", "pip", "install", "--user"]
     if REQUIREMENTS_PATH.is_file():
         command.extend(["-r", str(REQUIREMENTS_PATH)])
     else:
-        command.extend(["Pillow>=10.0", "pystray>=0.19.5"])
+        command.extend(["Pillow>=10.0", "pystray>=0.19.5", "polib>=1.2,<2"])
 
     try:
         completed = subprocess.run(
@@ -3839,8 +3925,10 @@ def install_semantic_ai_dependencies_for_current_runtime() -> Tuple[bool, str]:
     """
     if getattr(sys, "frozen", False):
         return False, (
-            "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, "
-            "or run the Python source version to use Transformers."
+            gettext_noop(
+                "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, "
+                "or run the Python source version to use Transformers."
+            )
         )
     command = [
         sys.executable,
@@ -4112,7 +4200,7 @@ class PeriodicAIHeartbeat(threading.Thread):
                 if self.terminal_event is not None:
                     self.terminal_event.set()
                 self.stop_event.set()
-                self.emit('warning', 'Gallery authorization could not be verified; AI heartbeat stopped.')
+                self.emit('warning', gettext_noop('Gallery authorization could not be verified; AI heartbeat stopped.'))
             except Exception as exc:  # noqa: BLE001
                 self.emit("warning", f"AI worker heartbeat failed for job {self.job_id}: {exc}")
 
@@ -5004,7 +5092,7 @@ class AIAnalysisWorkerThread(threading.Thread):
             self._run_owned()
         except (ModeCoordinatorError, GalleryKeyRedirectError):
             self._terminal_refused.set()
-            self.emit('error', 'Gallery authorization could not be verified; AI worker stopped.')
+            self.emit('error', gettext_noop('Gallery authorization could not be verified; AI worker stopped.'))
         finally:
             if self._gui_work is not None:
                 self._gui_work.close()
@@ -5019,10 +5107,10 @@ class AIAnalysisWorkerThread(threading.Thread):
         upload_url = normalize_upload_url(self.config.gallery_url)
         api_key = self.config.api_key.strip()
         if not self.config.ai_worker_enabled:
-            self.emit("info", "AI metadata worker is disabled in configuration.")
+            self.emit("info", gettext_noop("AI metadata worker is disabled in configuration."))
             return
         if not upload_url or not api_key:
-            self.emit("error", "AI metadata worker needs Gallery URL and API key.")
+            self.emit("error", gettext_noop("AI metadata worker needs Gallery URL and API key."))
             return
 
         poll_seconds = max(AI_WORKER_MIN_POLL_SECONDS, float(self.config.ai_worker_poll_seconds or DEFAULT_AI_WORKER_POLL_SECONDS))
@@ -5060,7 +5148,7 @@ class AIAnalysisWorkerThread(threading.Thread):
                 self.emit("warning", f"AI metadata worker poll failed: {exc}")
                 self.stop_event.wait(poll_seconds)
 
-        self.emit("info", "AI metadata worker stopped.")
+        self.emit("info", gettext_noop("AI metadata worker stopped."))
 
     def process_job(self, upload_url: str, api_key: str, job: Dict[str, Any], lease_seconds: int) -> None:
         """
@@ -5080,7 +5168,7 @@ class AIAnalysisWorkerThread(threading.Thread):
         image = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
         filename = str(image.get("filename") or f"job-{job_id}.img")
         if job_id <= 0 or not claim_token:
-            self.emit("warning", "AI metadata worker received an invalid job payload.")
+            self.emit("warning", gettext_noop("AI metadata worker received an invalid job payload."))
             return
 
         heartbeat = PeriodicAIHeartbeat(
@@ -5705,14 +5793,14 @@ class WatcherThread(threading.Thread):
                 Finish or reopens a force-finished queue.
         """
         if self._queue is not None and self._queue.force_finished:
-            self.emit('warning', 'Force-finished queue is retained and cannot be refreshed.')
+            self.emit('warning', gettext_noop('Force-finished queue is retained and cannot be refreshed.'))
             return
         with self._admission_lock:
             if self._refresh_pending:
-                self.emit('info', 'Queue refresh merged with the pending request.')
+                self.emit('info', gettext_noop('Queue refresh merged with the pending request.'))
                 return
             self._refresh_pending = True
-        self.emit('info', 'Queue refresh requested; FIFO and retry deadlines retained.')
+        self.emit('info', gettext_noop('Queue refresh requested; FIFO and retry deadlines retained.'))
         if self.is_alive() and self._queue is not None:
             self._ensure_capture_producer(self._queue.folder)
         self._producer_wake.set()
@@ -6199,7 +6287,7 @@ class WatcherThread(threading.Thread):
             self.stop_event.set()
             self._diagnostic_phase = 'force_finished'
             self.emit_queue_snapshot()
-            self.emit('warning', 'Watcher session was explicitly force-finished; pending sources remain retained.')
+            self.emit('warning', gettext_noop('Watcher session was explicitly force-finished; pending sources remain retained.'))
             return
         pipeline = self._pipeline_lease
         if pipeline is not None and self._queue is not None:
@@ -6335,7 +6423,7 @@ class WatcherThread(threading.Thread):
                     raise
                 except (OSError, ValueError, RuntimeError):
                     if not self._producer_error:
-                        self.emit('error', 'Queue persistence needs recovery; sources retained.')
+                        self.emit('error', gettext_noop('Queue persistence needs recovery; sources retained.'))
                     self._producer_error = 'Queue persistence needs recovery; sources retained.'
                 try:
                     if (self.drain_event.is_set() and not self._producer_error
@@ -6360,7 +6448,7 @@ class WatcherThread(threading.Thread):
         self.persist_drain()
         self._diagnostic_phase = 'completed' if self._queue.data['completed'] else 'stopped'
         self.emit_queue_snapshot()
-        self.emit('info', 'Watcher stopped; pending photographs are retained.')
+        self.emit('info', gettext_noop('Watcher stopped; pending photographs are retained.'))
 
     def scan_once(self, folder: Path, upload_url: str) -> None:
         """Reconcile direct callers, then advance heads until the first unresolved item.
@@ -6593,7 +6681,7 @@ class WatcherThread(threading.Thread):
         except Exception as failure:  # noqa: BLE001
             if acknowledged:
                 # Optional cleanup/logging cannot undo a confirmed disposition.
-                self.emit('warning', 'Confirmed upload retained; optional cleanup failed.')
+                self.emit('warning', gettext_noop('Confirmed upload retained; optional cleanup failed.'))
             else:
                 self._handle_watch_failure(item, failure, 'upload' if
                                            self._watch_dispatch_started else 'preparation')
@@ -7098,7 +7186,7 @@ class ManualUploadThread(threading.Thread):
             None: Signals the pause and queues the worker's lifecycle transition.
         """
         self.pause_event.set()
-        self.emit("info", "Manual import paused. In-flight requests may still finish.")
+        self.emit("info", gettext_noop("Manual import paused. In-flight requests may still finish."))
         self.emit_structured(
             "job_control", {"generation": self.import_generation, "paused": True},
         )
@@ -7110,7 +7198,7 @@ class ManualUploadThread(threading.Thread):
             None: Signals the resume and queues the worker's lifecycle transition.
         """
         self.pause_event.clear()
-        self.emit("info", "Manual import resumed.")
+        self.emit("info", gettext_noop("Manual import resumed."))
         self.emit_structured(
             "job_control", {"generation": self.import_generation, "paused": False},
         )
@@ -7266,15 +7354,19 @@ class ManualUploadThread(threading.Thread):
         if self.job.staging_dir:
             self.emit(
                 "warning",
-                "Import staging sources retained; safe automatic deletion "
-                "requires server-bound operation receipts.",
+                gettext_noop(
+                    "Import staging sources retained; safe automatic deletion "
+                    "requires server-bound operation receipts."
+                ),
             )
         if (self.linked_target is None and self.job.delete_source_zip_after_success
                 and self.job.source_zip):
             self.emit(
                 "warning",
-                "Legacy upload cannot verify the destination for ZIP cleanup; "
-                "the source ZIP is retained.",
+                gettext_noop(
+                    "Legacy upload cannot verify the destination for ZIP cleanup; "
+                    "the source ZIP is retained."
+                ),
             )
 
 
@@ -7361,13 +7453,13 @@ class ManualUploadThread(threading.Thread):
         if (self.linked_target is not None and (
                 self.job is None or self.job_store is None
                 or any(self.item_for_path(path) is None for path in self.paths))):
-            self.emit('error', 'Linked import requires a durable item recovery record.')
+            self.emit('error', gettext_noop('Linked import requires a durable item recovery record.'))
             return
         if self.linked_state is not None and self.linked_state.has_unresolved_upload():
             self.emit('error', LINKED_UPLOAD_UNCERTAIN_REASON)
             return
         if not self.paths:
-            self.emit("warning", "No manual upload files were selected.")
+            self.emit("warning", gettext_noop("No manual upload files were selected."))
             if self.job is not None:
                 self.finalize_job()
             return
@@ -7586,7 +7678,7 @@ class ManualUploadThread(threading.Thread):
                     if not self.remote_inventory.refresh(
                         upload_url, self.config.api_key.strip(), chunk, force=True,
                     ):
-                        self.emit('warning', 'Linked inventory preload incomplete; individual files will be rechecked.')
+                        self.emit('warning', gettext_noop('Linked inventory preload incomplete; individual files will be rechecked.'))
                         break
             else:
                 self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), candidates, force=True)
@@ -7703,7 +7795,7 @@ class ManualUploadThread(threading.Thread):
                 parallel threads.
         """
         if not local_thumbnail_supported():
-            self.emit("warning", "Local thumbnails are unavailable; falling back to server-side thumbnail generation.")
+            self.emit("warning", gettext_noop("Local thumbnails are unavailable; falling back to server-side thumbnail generation."))
             self.run_with_server_thumbnails(upload_url)
             return
 
@@ -8066,7 +8158,7 @@ class ManualUploadThread(threading.Thread):
                                 path, str(candidate.get('sha256', '')),
                             )
                         except (OSError, ValueError):
-                            self.emit('error', 'Linked recovery marker could not be refreshed.')
+                            self.emit('error', gettext_noop('Linked recovery marker could not be refreshed.'))
                     self.update_item(path, 'failed_permanent', LINKED_UPLOAD_UNCERTAIN_REASON)
                     self.emit('error', LINKED_UPLOAD_UNCERTAIN_REASON)
                 else:
@@ -8267,7 +8359,7 @@ class ImportPreflightThread(threading.Thread):
                             if self.linked_target is not None else None)
         except (OSError, ValueError):
             self.emit('preflight_failed', {
-                'message': 'Linked gallery recovery state is unavailable.',
+                'message': gettext_noop('Linked gallery recovery state is unavailable.'),
                 'job_id': job.id,
             })
             return
@@ -8659,6 +8751,108 @@ def _publish_watcher_text(host: "WatcherApp", slot: str, value: str) -> None:
     _publish_watcher_value(host, slot, variable, value, lambda: variable.set(value))
 
 
+def utc_status_caption(status: str) -> str:
+    """Present simulator clock state without changing its native diagnostics.
+
+    Args:
+        status (str): Stable UTC synchronization status or an empty caption.
+
+    Returns:
+        str: Localized clock state, optionally with the connected simulator name.
+    """
+    if status.startswith("UTC sync connected: "):
+        return gettext("UTC sync connected: {simulator}").format(
+            simulator=status.removeprefix("UTC sync connected: "),
+        )
+    if status.startswith(("UTC sync awaiting simulator:", "awaiting simulator")):
+        return gettext("Waiting for the simulator for UTC sync")
+    if status.startswith("UTC sync unsupported"):
+        return gettext("UTC sync is unavailable for this simulator")
+    if status.startswith(("UTC sync suspended:", "UTC readback deferred:")):
+        return gettext("UTC sync paused by the simulator state")
+    if status.startswith("UTC correction verified;"):
+        return gettext("UTC time synchronized")
+    if status.startswith("UTC correction unverified "):
+        return gettext("UTC correction could not be verified. Retrying…")
+    captions = {
+        "UTC sync stopped": gettext("UTC sync stopped"),
+        "awaiting fresh simulator UTC": gettext("Waiting for the simulator UTC time"),
+        "UTC aligned; monitoring every 10 s": gettext("UTC time aligned"),
+        "UTC connection cleanup failed": gettext("Could not close the UTC connection"),
+    }
+    return captions.get(status, status)
+
+
+def watch_queue_state_caption(state: str) -> str:
+    """Describe the head of the FIFO in the current UI language.
+
+    Args:
+        state (str): Stable queue state published by the current worker.
+
+    Returns:
+        str: Display caption, with a generic value for an unrecognized state.
+    """
+    return {
+        "idle": gettext("Idle"),
+        "observed": gettext("Detected"),
+        "stabilizing": gettext("Waiting for the file to settle"),
+        "preparing": gettext("Preparing"),
+        "inventory": gettext("Checking the gallery inventory"),
+        "dispatching": gettext("uploading"),
+        "retry_wait": gettext("Waiting to retry"),
+        "auth_required": gettext("Gallery access required"),
+        "uncertain": gettext("Upload outcome uncertain"),
+        "blocked": gettext("Blocked"),
+        "acknowledged": gettext("Confirmed"),
+        "skipped": gettext("skipped"),
+    }.get(state, gettext("Unknown state"))
+
+
+def operational_activity_caption(event: ActivityEvent) -> str:
+    """Describe familiar worker activity without rewriting its diagnostic data.
+
+    Args:
+        event (ActivityEvent): Redacted event from the live or retained history.
+
+    Returns:
+        str: Localized operator summary, or the original detail for an
+            unrecognized external or historical diagnostic.
+    """
+    message = event.message
+    if event.operation == "simconnect" and message.startswith("[time] "):
+        return utc_status_caption(message.removeprefix("[time] "))
+    if event.operation in ("watcher", "import"):
+        if message.lstrip().startswith("Watching "):
+            return gettext("Watching {folder}").format(
+                folder=message.lstrip().removeprefix("Watching "),
+            )
+        if message.startswith("Skipped already present on gallery: "):
+            return gettext("Already in the gallery: {filename}").format(
+                filename=message.removeprefix("Skipped already present on gallery: "),
+            )
+        if message.startswith("Manual upload started: "):
+            return gettext("Manual import started. Files: {count}").format(
+                count=message.removeprefix("Manual upload started: ").removesuffix(" file(s)."),
+            )
+        if message.startswith("Manual upload finished: "):
+            return gettext("Manual import finished.")
+        if message.startswith("Manual upload stopped: "):
+            return gettext("Manual import stopped.")
+        if message.startswith("Uploaded "):
+            return gettext("Uploaded file: {filename}").format(
+                filename=message.removeprefix("Uploaded ").split(": ", 1)[0],
+            )
+        if message.startswith("Uploading "):
+            return gettext("Upload in progress")
+    if event.operation == "ai" and message.startswith("AI metadata worker claimed job "):
+        return gettext("AI metadata worker is processing a job")
+    first_line, newline, detail = message.partition("\n")
+    for key in ("simbrief_loading", "simbrief_loaded", "simbrief_staged_loaded"):
+        if first_line == tr(DEFAULT_LANGUAGE, key):
+            return tr(current_language(), key) + newline + detail
+    return message
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -8688,13 +8882,15 @@ class WatcherApp:
             RuntimeError: Raised when Tkinter is not available.
 
         Returns:
-            None: Creates the window, settings and idle worker coordinators,
-                then starts the read-only game-presence observer.
+            None: Loads the interface language, creates the window and idle
+                coordinators, then starts the read-only game-presence observer.
         """
+        self._saved_ui_language = load_ui_language(CONFIG_DIR)
+        configure_language(self._saved_ui_language)
         if tk is None or ttk is None or filedialog is None or messagebox is None:
-            raise RuntimeError("Tkinter is not available in this Python installation.")
-
-        from uploader.app_linking_ui import LinkingManager
+            raise RuntimeError(
+                gettext_noop("Tkinter is not available in this Python installation.")
+            )
 
         # Establish the display context before Tk creates its first window.
         prepare_windows_display()
@@ -8721,7 +8917,7 @@ class WatcherApp:
         )
         if start_minimized:
             self.root.withdraw()
-        self.root.title(f"{APP_DISPLAY_NAME} {APP_VERSION}")
+        self.root.title(f"{gettext(APP_DISPLAY_NAME)} {APP_VERSION}")
 
         self.config_store = config_store or ConfigStore()
         self.config = self.config_store.load()
@@ -8890,7 +9086,7 @@ class WatcherApp:
             "write", self._invalidate_verified_legacy_gallery,
         )
         self.api_key_visible_var = tk.BooleanVar(value=False)
-        self.api_key_status_var = tk.StringVar(value="API key configured" if self.config.api_key.strip() else "API key not configured")
+        self.api_key_status_var = tk.StringVar(value=gettext("API key configured") if self.config.api_key.strip() else gettext("API key not configured"))
         self.revoke_blocker_var = tk.StringVar(value="")
         self.interval_var = tk.StringVar(value=str(watcher_config.scan_interval_seconds))
         self.stable_var = tk.StringVar(value=str(watcher_config.stable_seconds))
@@ -8900,7 +9096,7 @@ class WatcherApp:
             value=self.config.simconnect_dll_path
         )
         self.sync_utc_time_var = tk.BooleanVar(value=watcher_config.sync_utc_time)
-        self.utc_sync_status_var = tk.StringVar(value="UTC sync stopped")
+        self.utc_sync_status_var = tk.StringVar(value=gettext("UTC sync stopped"))
         self.delete_uploaded_files_var = tk.BooleanVar(value=watcher_config.delete_uploaded_files)
         self.watch_recursive_var = tk.BooleanVar(value=watcher_config.watch_recursive)
         self.manual_folder_recursive_var = tk.BooleanVar(value=False)
@@ -8928,7 +9124,8 @@ class WatcherApp:
         self.ai_model_name_var = tk.StringVar(value=self.config.ai_model_name)
         self.ai_model_version_var = tk.StringVar(value=self.config.ai_model_version)
         self.ai_external_command_var = tk.StringVar(value=self.config.ai_external_command)
-        self.ai_vision_backend_var = tk.StringVar(value=normalize_ai_vision_backend(self.config.ai_vision_backend))
+        backend = normalize_ai_vision_backend(self.config.ai_vision_backend)
+        self.ai_vision_backend_var = tk.StringVar(value=ai_backend_labels()[backend])
         self.ai_transformers_caption_model_var = tk.StringVar(value=self.config.ai_transformers_caption_model)
         self.ai_transformers_detector_model_var = tk.StringVar(value=self.config.ai_transformers_detector_model)
         self.ai_transformers_object_labels_var = tk.StringVar(value=self.config.ai_transformers_object_labels)
@@ -8939,23 +9136,28 @@ class WatcherApp:
         self.ai_advanced_visible_var = tk.BooleanVar(value=False)
         self.ai_advanced_frame = None
         self.settings_advanced_frame = None
-        self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
-        self.manual_selection_var = tk.StringVar(value="Choose files, a folder, or a ZIP archive")
-        self.manual_preflight_var = tk.StringVar(value="Select a source to build an import summary. Nothing uploads until you press Start import.")
-        self.manual_status_var = tk.StringVar(value="Import idle")
-        self.manual_progress_text_var = tk.StringVar(value="No active import")
+        self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status(for_display=True))
+        self.manual_selection_var = tk.StringVar(value=gettext("Choose files, a folder, or a ZIP archive"))
+        self.manual_preflight_var = tk.StringVar(value=gettext("Select a source to build an import summary. Nothing uploads until you press Start import."))
+        self.manual_status_var = tk.StringVar(value=gettext("Import idle"))
+        self.manual_progress_text_var = tk.StringVar(value=gettext("No active import"))
         self.manual_progress_var = tk.DoubleVar(value=0.0)
-        self.status_var = tk.StringVar(value="Watcher stopped")
-        self.watch_ignored_var = tk.StringVar(value="Ignored at startup: -")
-        self.watch_last_scan_var = tk.StringVar(value="Last scan: -")
-        self.ai_status_var = tk.StringVar(value="AI metadata worker idle")
+        self.status_var = tk.StringVar(value=gettext("Watcher stopped"))
+        self.watch_ignored_var = tk.StringVar(value=gettext("Ignored at startup: -"))
+        self.watch_last_scan_var = tk.StringVar(value=gettext("Last scan: -"))
+        self.ai_status_var = tk.StringVar(value=gettext("AI metadata worker idle"))
         self.monitor_state_var = tk.StringVar(value="Idle")
-        self.monitor_detail_var = tk.StringVar(value="No background worker is active.")
-        self.connection_status_var = tk.StringVar(
-            value="Not tested" if self.config.api_key.strip() else "",
+        self.monitor_detail_var = tk.StringVar(value=gettext("No background worker is active."))
+        self.connection_status_var = tk.StringVar()
+        self.connection_detail_var = tk.StringVar()
+        self._connection_diagnostic: dict[str, str] = {}
+        self._publish_connection_text(
+            "status", gettext_noop("Not tested") if self.config.api_key.strip() else "",
         )
-        self.connection_detail_var = tk.StringVar(value="Save or test the gallery connection in Settings.")
-        self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
+        self._publish_connection_text(
+            "detail", gettext_noop("Save or test the gallery connection in Settings."),
+        )
+        self.gallery_label_var = tk.StringVar(value=gettext("Target gallery: unknown"))
         self.watcher_gallery_label_var = tk.StringVar(value=self.gallery_label_var.get())
         self.watcher_gallery_title_var = tk.StringVar()
         self.watcher_connection_status_var = tk.StringVar()
@@ -8972,10 +9174,10 @@ class WatcherApp:
         self._watcher_last_scan_at: Optional[float] = None
         self.import_activity_var = tk.StringVar(value="Import: idle")
         self.ai_activity_var = tk.StringVar(value="AI: stopped")
-        self.activity_filter_var = tk.StringVar(value="all")
+        self.activity_filter_var = tk.StringVar(value=activity_filter_labels()["all"])
         self.import_details_visible_var = tk.BooleanVar(value=False)
-        self.activity_job_summary_var = tk.StringVar(value="No import job selected")
-        self.latest_activity_var = tk.StringVar(value="Ready when you are")
+        self.activity_job_summary_var = tk.StringVar(value=gettext("No import job selected"))
+        self.latest_activity_var = tk.StringVar(value=gettext("Ready when you are"))
         self.monitor_state = "disabled"
         self.monitor_detail = "No background worker is active."
         self.log_tags_ready = False
@@ -9000,9 +9202,7 @@ class WatcherApp:
         # Keep staged originals intact until durable admission/recovery exists.
         removed_staging: List[str] = []
 
-        from uploader.update_ui import UpdateController
         self.updates = UpdateController(self, APP_VERSION)
-        from uploader.flight_ui import FlightUI
         self.flights = FlightUI(
             self, CONFIG_DIR / "flights", normalize_upload_url,
             revoke_upload_key, self.resume_flight_photos,
@@ -9134,7 +9334,7 @@ class WatcherApp:
         self.update_banner_label.grid(row=0, column=0, sticky="w")
         self.update_banner_action = Button(
             self.update_banner,
-            text="Open update",
+            text=gettext("Open update"),
             command=self.open_update_notice,
             style="Primary.TButton",
         )
@@ -9148,19 +9348,20 @@ class WatcherApp:
         self.notebook.grid(row=2, column=1, sticky="nsew")
         tabs: Dict[str, ttk.Frame | ScrollableFrame] = {}
         self.tab_indices: Dict[str, int] = {}
-        for key, label in [
+        for key, glyph, label in [
             (
                 "photos",
-                "▧  " + tr(
+                "▧",
+                tr(
                     self.flights.ui_language.get(),
                     "photos_pane_title",
                 ),
             ),
-            ("watch", "◉  Watcher"),
-            ("import", "⇧  Import"),
-            ("activity", "≡  Activity"),
-            ("ai", "✦  AI"),
-            ("settings", "⚙  Settings"),
+            ("watch", "◉", gettext("Watcher")),
+            ("import", "⇧", gettext("Import")),
+            ("activity", "≡", gettext("Activity")),
+            ("ai", "✦", "AI"),
+            ("settings", "⚙", gettext("Settings")),
         ]:
             host = ttk.Frame(self.notebook, style="Backdrop.TFrame")
             paint_backdrop(host)
@@ -9175,11 +9376,10 @@ class WatcherApp:
                 scroll = ScrollableFrame(host)
                 scroll.grid(row=0, column=0, sticky="nsew")
                 tabs[key] = scroll
-            self.notebook.add(host, text=label)
+            self.notebook.add(host, text=f"{glyph}  {label}")
             self.tab_indices[key] = self.notebook.index(host)
             self.navigation_buttons[key] = icon_button(
-                rail, label.split()[0],
-                lambda name=key: self.select_tab(name), label.split()[-1],
+                rail, glyph, lambda name=key: self.select_tab(name), label,
             )
             self.navigation_buttons[key].pack(pady=(0, 8))
             if key == "watch":
@@ -9210,7 +9410,7 @@ class WatcherApp:
         footer = ttk.Frame(outer, style="Footer.TFrame", padding=(12, 8))
         footer.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         footer.columnconfigure(1, weight=1)
-        ttk.Label(footer, text="LATEST", style="Eyebrow.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(footer, text=gettext("LATEST"), style="Eyebrow.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 12))
         self.latest_activity_label = ttk.Label(
             footer,
             textvariable=self.latest_activity_var,
@@ -9221,7 +9421,7 @@ class WatcherApp:
             footer,
             "≡",
             lambda: self.select_tab("activity"),
-            "Open full activity history",
+            gettext("Open full activity history"),
         ).grid(row=0, column=2, padx=(8, 0))
 
         self.write_log(f"Configuration: {CONFIG_PATH}", "system")
@@ -9229,7 +9429,7 @@ class WatcherApp:
         self.write_log(f"Log: {LOG_PATH}", "system")
         self.write_log(thumbnail_runtime_status(), "system")
         self.refresh_connection_controls()
-        self.update_monitor_state("disabled", "No background worker is active.")
+        self.update_monitor_state("disabled", gettext("No background worker is active."))
         self.set_update_available(self.update_available_version)
 
     def build_app_header(self, outer: "ttk.Frame") -> CompactAppHeader:
@@ -9324,13 +9524,13 @@ class WatcherApp:
             header.actions,
             "refresh",
             self.updates.check,
-            "Check for updates or open the available update",
+            gettext("Check for updates or open the available update"),
         )
         self.check_updates_button.pack(side='left', padx=4)
         help_button(
             header.actions,
-            "Watcher help",
-            "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled.",
+            gettext("Watcher help"),
+            gettext("Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled."),
         ).pack(side='left', padx=(4, 0))
         header.request_layout()
         return header
@@ -9345,11 +9545,11 @@ class WatcherApp:
         self.root.configure(menu=menu)
         self._edit_focus = None
         file_menu = tk.Menu(menu, tearoff=False)
-        menu.add_cascade(label="File", underline=0, menu=file_menu)
+        menu.add_cascade(label=gettext("File"), underline=0, menu=file_menu)
         for label, action, shortcut in (
-            ("Import files…", self.select_manual_files, "Ctrl+O"),
-            ("Import folder…", self.select_manual_folder, ""),
-            ("Import ZIP archive…", self.select_manual_zip, ""),
+            (gettext("Import files…"), self.select_manual_files, "Ctrl+O"),
+            (gettext("Import folder…"), self.select_manual_folder, ""),
+            (gettext("Import ZIP archive…"), self.select_manual_zip, ""),
         ):
             file_menu.add_command(
                 label=label, accelerator=shortcut,
@@ -9357,23 +9557,23 @@ class WatcherApp:
             )
         file_menu.add_separator()
         file_menu.add_command(
-            label="Open watched folder",
+            label=gettext("Open watched folder"),
             command=lambda: self.menu_command(self.open_watched_folder),
         )
         file_menu.add_command(
-            label="Open log folder",
+            label=gettext("Open log folder"),
             command=lambda: self.menu_command(self.open_config_folder),
         )
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=lambda: self.menu_command(self.close))
+        file_menu.add_command(label=gettext("Exit"), command=lambda: self.menu_command(self.close))
 
         edit = tk.Menu(menu, tearoff=False, postcommand=self.remember_edit_focus)
-        menu.add_cascade(label="Edit", underline=0, menu=edit)
+        menu.add_cascade(label=gettext("Edit"), underline=0, menu=edit)
         for label, event, shortcut in (
-            ("Cut", "<<Cut>>", "Ctrl+X"),
-            ("Copy", "<<Copy>>", "Ctrl+C"),
-            ("Paste", "<<Paste>>", "Ctrl+V"),
-            ("Select all", "<<SelectAll>>", "Ctrl+A"),
+            (gettext("Cut"), "<<Cut>>", "Ctrl+X"),
+            (gettext("Copy"), "<<Copy>>", "Ctrl+C"),
+            (gettext("Paste"), "<<Paste>>", "Ctrl+V"),
+            (gettext("Select all"), "<<SelectAll>>", "Ctrl+A"),
         ):
             edit.add_command(
                 label=label, accelerator=shortcut,
@@ -9381,45 +9581,46 @@ class WatcherApp:
             )
         edit.add_separator()
         edit.add_command(
-            label="Settings…", accelerator="Ctrl+,",
+            label=gettext("Settings…"), accelerator="Ctrl+,",
             command=lambda: self.menu_command(lambda: self.select_tab("settings")),
         )
         view = tk.Menu(menu, tearoff=False)
-        menu.add_cascade(label="View", underline=0, menu=view)
+        menu.add_cascade(label=gettext("View"), underline=0, menu=view)
         for name, label in (
-            ("photos", "Photos"), ("watch", "Watcher"), ("import", "Import"),
-            ("activity", "Activity"), ("ai", "AI"), ("settings", "Settings"),
+            ("photos", gettext("Photos")), ("watch", gettext("Watcher")),
+            ("import", gettext("Import")), ("activity", gettext("Activity")),
+            ("ai", "AI"), ("settings", gettext("Settings")),
         ):
             view.add_command(
                 label=label,
                 command=lambda key=name: self.menu_command(lambda: self.select_tab(key)),
             )
         tools = tk.Menu(menu, tearoff=False)
-        menu.add_cascade(label="Tools", underline=0, menu=tools)
+        menu.add_cascade(label=gettext("Tools"), underline=0, menu=tools)
         for label, action in (
-            ("Watcher settings…", self.open_watcher_settings),
-            ("Refresh upload queue", self.refresh_upload_queue),
-            ("Gallery connections…", self.open_gallery_links),
-            ("API-key connection…", self.open_connection_dialog),
-            ("Check for updates…", self.updates.check),
-            ("Support diagnostics…", self.open_support_report),
+            (gettext("Watcher settings…"), self.open_watcher_settings),
+            (gettext("Refresh upload queue"), self.refresh_upload_queue),
+            (gettext("Gallery connections…"), self.open_gallery_links),
+            (gettext("API-key connection…"), self.open_connection_dialog),
+            (gettext("Check for updates…"), self.updates.check),
+            (gettext("Support diagnostics…"), self.open_support_report),
         ):
             tools.add_command(
                 label=label,
                 command=lambda callback=action: self.menu_command(callback),
             )
         help_menu = tk.Menu(menu, tearoff=False)
-        menu.add_cascade(label="Help", underline=0, menu=help_menu)
+        menu.add_cascade(label=gettext("Help"), underline=0, menu=help_menu)
         help_menu.add_command(
-            label="Using PHP Gallery", accelerator="F1",
+            label=gettext("Using PHP Gallery"), accelerator="F1",
             command=lambda: self.menu_command(self.open_help),
         )
         help_menu.add_command(
-            label="Support diagnostics…", accelerator="Ctrl+Shift+D",
+            label=gettext("Support diagnostics…"), accelerator="Ctrl+Shift+D",
             command=lambda: self.menu_command(self.open_support_report),
         )
         help_menu.add_command(
-            label="About PHP Gallery",
+            label=gettext("About PHP Gallery"),
             command=lambda: self.menu_command(self.open_about),
         )
         for sequence, callback in (
@@ -9473,15 +9674,17 @@ class WatcherApp:
             None: Opens a dismissible help panel without starting background work.
         """
         messagebox.showinfo(
-            "Using PHP Gallery",
-            "Connect a gallery, choose a Watcher folder, then explicitly start "
-            "capture. Finish drains accepted photographs before completing.\n\n"
-            "Use File to choose an import source. Review preflight before "
-            "starting an import. View switches between Photos, Watcher, Import, "
-            "Activity, AI and Settings.\n\n"
-            "Help → Support diagnostics builds a local report you can review, "
-            "copy or save for support. Review it before sharing; nothing is sent "
-            "automatically.", parent=self.root,
+            gettext("Using PHP Gallery"),
+            gettext(
+                "Connect a gallery, choose a Watcher folder, then explicitly start "
+                "capture. Finish drains accepted photographs before completing.\n\n"
+                "Use File to choose an import source. Review preflight before "
+                "starting an import. View switches between Photos, Watcher, Import, "
+                "Activity, AI and Settings.\n\n"
+                "Help → Support diagnostics builds a local report you can review, "
+                "copy or save for support. Review it before sharing; nothing is sent "
+                "automatically."
+            ), parent=self.root,
         )
 
     def open_about(self) -> None:
@@ -9491,9 +9694,14 @@ class WatcherApp:
             None: Displays version and license information in the main window.
         """
         messagebox.showinfo(
-            "About PHP Gallery", f"{APP_DISPLAY_NAME} {APP_VERSION}\n"
-            "Author: Rudolf Klusal\nMIT License\n"
-            "https://github.com/klusik/PHP_gallery", parent=self.root,
+            gettext("About PHP Gallery"), gettext(
+                "{app_display_name} {app_version}\n"
+                "Author: Rudolf Klusal\nMIT License\n"
+                "https://github.com/klusik/PHP_gallery"
+            ).format(
+                app_display_name=gettext(APP_DISPLAY_NAME),
+                app_version=APP_VERSION,
+            ), parent=self.root,
         )
 
     def build_gallery_link_bar(self, header: "ttk.Frame") -> None:
@@ -9513,7 +9721,7 @@ class WatcherApp:
             bar, style="App.Status.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         )
         choose = Button(
-            bar, text="Choose gallery…", command=self.choose_linked_gallery,
+            bar, text=gettext("Choose gallery…"), command=self.choose_linked_gallery,
             style="Accent.Compact.TButton",
         )
         link = Button(
@@ -9553,7 +9761,7 @@ class WatcherApp:
                 and notebook.index("current") == tab_indices.get("photos")
             )
             if issuer:
-                address.configure(text="Linked: " + issuer)
+                address.configure(text=gettext("Linked: ") + issuer)
                 address.grid(row=0, column=0, sticky="w", padx=(0, 8))
                 if photos_selected:
                     link.grid_remove()
@@ -9616,7 +9824,9 @@ class WatcherApp:
         if self.update_banner is not None:
             if has_update:
                 self.update_banner_label.configure(
-                    text=f"Update {self.update_available_version} available"
+                    text=gettext("Update {update_available_version} available").format(
+                        update_available_version=self.update_available_version,
+                    )
                 )
                 self.update_banner.grid()
             else:
@@ -9650,8 +9860,8 @@ class WatcherApp:
                 ``Check for updates``.
         """
         if self.update_available_version is None:
-            return "Check for updates"
-        return f"Update {self.update_available_version}"
+            return gettext("Check for updates")
+        return gettext("Update {version}").format(version=self.update_available_version)
 
     def select_tab(self, name: str) -> None:
         """Select a named view in the application navigation.
@@ -9750,13 +9960,13 @@ class WatcherApp:
             )
         if 'watcher_gallery_label_var' in self.__dict__:
             _publish_watcher_text(self, 'watcher_gallery_label_var',
-                self.gallery_label_var.get() if selected else 'Upload gallery: not set')
+                self.gallery_label_var.get() if selected else gettext('Upload gallery: not set'))
             _publish_watcher_text(self, 'watcher_gallery_title_var',
                 self.gallery_title_var.get() if selected else '')
             _publish_watcher_text(self, 'watcher_connection_status_var',
                 self.connection_status_var.get() if selected else '')
         if blocked or not selected:
-            label = ('Resetting Watcher…' if resetting else 'Watcher reset required'
+            label = (gettext('Resetting Watcher…') if resetting else gettext('Watcher reset required')
                      if blocked else 'Connect Watcher…')
             state = 'disabled' if blocked else 'normal'
             _publish_watcher_value(
@@ -9995,19 +10205,19 @@ class WatcherApp:
             return None
         return pystray.Menu(
             pystray.MenuItem(self.tray_update_menu_label(), self.tray_open_updates),
-            pystray.MenuItem("Open", self.tray_restore_window, default=True),
-            pystray.MenuItem("Open activity", self.tray_open_activity),
-            pystray.MenuItem("Connection / API key...", self.tray_open_connection),
-            pystray.MenuItem("Revoke API key...", self.tray_revoke_api_key),
-            pystray.MenuItem("Pause/resume current import", self.tray_toggle_import_pause),
+            pystray.MenuItem(gettext("Open"), self.tray_restore_window, default=True),
+            pystray.MenuItem(gettext("Open activity"), self.tray_open_activity),
+            pystray.MenuItem(gettext("Connection / API key..."), self.tray_open_connection),
+            pystray.MenuItem(gettext("Revoke API key..."), self.tray_revoke_api_key),
+            pystray.MenuItem(gettext("Pause/resume current import"), self.tray_toggle_import_pause),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Start watching", self.tray_start_watching),
-            pystray.MenuItem("Stop watching", self.tray_stop_watching),
-            pystray.MenuItem("Start AI metadata worker", self.tray_start_ai_worker),
-            pystray.MenuItem("Stop AI metadata worker", self.tray_stop_ai_worker),
+            pystray.MenuItem(gettext("Start watching"), self.tray_start_watching),
+            pystray.MenuItem(gettext("Stop watching"), self.tray_stop_watching),
+            pystray.MenuItem(gettext("Start AI metadata worker"), self.tray_start_ai_worker),
+            pystray.MenuItem(gettext("Stop AI metadata worker"), self.tray_stop_ai_worker),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Open log folder", self.tray_open_log_folder),
-            pystray.MenuItem("Exit", self.tray_exit_application),
+            pystray.MenuItem(gettext("Open log folder"), self.tray_open_log_folder),
+            pystray.MenuItem(gettext("Exit"), self.tray_exit_application),
         )
 
     def start_tray_icon(self) -> None:
@@ -10149,6 +10359,11 @@ class WatcherApp:
             None: Schedules the tray action on the Tk thread.
         """
         def toggle() -> None:
+            """Pause or resume the active Import worker on the Tk thread.
+
+            Returns:
+                None: Updates the active worker or reports that none is active.
+            """
             worker = self.manual_worker
             if worker is None or not worker.is_alive():
                 self.write_log("No active manual import to pause or resume.", "system")
@@ -10267,15 +10482,15 @@ class WatcherApp:
         """
         blockers: List[str] = []
         if self.worker and self.worker.is_alive():
-            blockers.append("watch-folder uploader is running")
+            blockers.append(gettext("watch-folder uploader is running"))
         if self.manual_worker and self.manual_worker.is_alive():
-            blockers.append("manual import is running")
+            blockers.append(gettext("manual import is running"))
         if self.preflight_worker and self.preflight_worker.is_alive():
-            blockers.append("import preflight is running")
+            blockers.append(gettext("import preflight is running"))
         if self.ai_worker and self.ai_worker.is_alive():
-            blockers.append("AI metadata worker is running")
+            blockers.append(gettext("AI metadata worker is running"))
         if self.connection_test_running:
-            blockers.append("connection test is running")
+            blockers.append(gettext("connection test is running"))
         flights = getattr(self, "flights", None)
         operation = getattr(flights, "operation", None)
         if (
@@ -10283,7 +10498,7 @@ class WatcherApp:
             and getattr(operation, "saved_upload", False) is True
             and operation.is_alive()
         ):
-            blockers.append("saved flight PDF upload is running")
+            blockers.append(gettext("saved flight PDF upload is running"))
         return blockers
 
     def background_work_active(self) -> bool:
@@ -10944,7 +11159,7 @@ class WatcherApp:
         )
         icon_button(
             target, "settings", self.open_connection_dialog,
-            "Upload via API key",
+            gettext("Upload via API key"),
         ).grid(row=0, column=1, padx=(8, 0))
         connection = ttk.Frame(hero, style="Card.TFrame")
         connection.grid(row=0, column=1, sticky="e", padx=(16, 0))
@@ -10953,7 +11168,7 @@ class WatcherApp:
             style="Muted.TLabel",
         ).grid(row=0, column=0)
         self.watcher_capture_label = ttk.Label(
-            connection, text="● REC", style="Watcher.Active.TLabel",
+            connection, text=gettext("● REC"), style="Watcher.Active.TLabel",
         )
         self.watcher_capture_label.grid(row=0, column=1, padx=(8, 0))
         self.watcher_capture_label.grid_remove()
@@ -10994,23 +11209,23 @@ class WatcherApp:
         heading = ttk.Frame(card, style="Card.TFrame")
         heading.grid(row=0, column=0, sticky="ew")
         heading.columnconfigure(4, weight=1)
-        ttk.Label(heading, text="WATCH FOLDER", style="Eyebrow.TLabel").grid(
+        ttk.Label(heading, text=gettext("WATCH FOLDER"), style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w"
         )
         Button(
-            heading, text="Choose folder…", command=self.browse_folder,
+            heading, text=gettext("Choose folder…"), command=self.browse_folder,
             style="Compact.TButton",
         ).grid(row=0, column=1, padx=(8, 0))
         icon_button(
             heading,
             "settings",
             self.open_watcher_settings,
-            "Watcher settings",
+            gettext("Watcher settings"),
         ).grid(row=0, column=2, padx=(4, 0))
         help_button(
             heading,
-            "Watcher behavior",
-            "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings.",
+            gettext("Watcher behavior"),
+            gettext("Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings."),
         ).grid(row=0, column=3, padx=(4, 0))
         ttk.Label(
             card, textvariable=self.watch_folder_display_var,
@@ -11038,7 +11253,7 @@ class WatcherApp:
         actions.grid(row=4, column=0, sticky="ew")
         self.watcher_action_button = Button(
             actions,
-            text="▶  Start Watcher",
+            text=gettext("▶  Start Watcher"),
             command=self.toggle_watcher,
             style="Primary.TButton",
             takefocus=True,
@@ -11068,14 +11283,14 @@ class WatcherApp:
         utc.grid(row=5, column=0, sticky="w", pady=(6, 0))
         ttk.Checkbutton(
             utc,
-            text="Sync UTC time",
+            text=gettext("Sync UTC time"),
             variable=self.sync_utc_time_var,
             command=self.toggle_utc_sync,
         ).pack(side="left")
         help_button(
             utc,
-            "UTC sync",
-            "Keeps Flight Simulator in sync with real-world UTC while the watcher runs. Off by default. Your choice is remembered.",
+            gettext("UTC sync"),
+            gettext("Keeps Flight Simulator in sync with real-world UTC while the watcher runs. Off by default. Your choice is remembered."),
         ).pack(side="left", padx=(2, 0))
         ttk.Label(
             utc, textvariable=self.utc_sync_status_var, style="Muted.TLabel",
@@ -11089,7 +11304,7 @@ class WatcherApp:
         self.watch_delete_warning.grid(row=8, column=0, sticky="ew", pady=(14, 0))
         reset_icon = create_smooth_icon(heading, 'refresh', METRIC_ICON_SIZE)
         self.watcher_reset_button = Button(
-            heading, text='Watcher factory reset…', image=reset_icon or '',
+            heading, text=gettext('Watcher factory reset…'), image=reset_icon or '',
             compound='left', style='Compact.TButton', takefocus=True,
             command=self.request_watcher_reset,
         )
@@ -11110,13 +11325,13 @@ class WatcherApp:
             return
         if self.worker is not None and self.worker.is_alive():
             messagebox.showinfo(
-                "Watcher settings",
-                "Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts.",
+                gettext("Watcher settings"),
+                gettext("Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts."),
                 parent=self.root,
             )
             return
         dialog = EmbeddedWindow(self.root)
-        dialog.title("Watcher settings")
+        dialog.title(gettext("Watcher settings"))
         dialog.transient(self.root)
         dialog.resizable(True, True)
         dialog.columnconfigure(0, weight=1)
@@ -11138,10 +11353,10 @@ class WatcherApp:
         panel = GlassCard(scroller.content, padding=(20, 18))
         panel.grid(row=0, column=0, sticky="ew", padx=12, pady=12)
         panel.columnconfigure(0, weight=1)
-        ttk.Label(panel, text="WATCHER PREFERENCES", style="Eyebrow.TLabel").grid(
+        ttk.Label(panel, text=gettext("WATCHER PREFERENCES"), style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Label(panel, text="Watch folder").grid(row=1, column=0, sticky="w", pady=(12, 5))
+        ttk.Label(panel, text=gettext("Watch folder")).grid(row=1, column=0, sticky="w", pady=(12, 5))
         folder_row = ttk.Frame(panel, style="Card.TFrame")
         folder_row.grid(row=2, column=0, sticky="ew")
         folder_row.columnconfigure(0, weight=1)
@@ -11153,42 +11368,42 @@ class WatcherApp:
         folder_entry.grid(row=0, column=0, sticky="ew")
         icon_button(
             folder_row, "add", lambda: self.browse_folder(parent=dialog),
-            "Choose watched folder",
+            gettext("Choose watched folder"),
         ).grid(row=0, column=1, padx=(7, 0))
         icon_button(
-            folder_row, "↗", self.open_watched_folder, "Open watched folder",
+            folder_row, "↗", self.open_watched_folder, gettext("Open watched folder"),
         ).grid(row=0, column=2, padx=(4, 0))
         ttk.Checkbutton(
             panel,
-            text="Include subfolders",
+            text=gettext("Include subfolders"),
             variable=self.watch_recursive_var,
         ).grid(row=3, column=0, sticky="w", pady=(10, 0))
         interval_row = ttk.Frame(panel, style="Card.TFrame")
         interval_row.grid(row=4, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(interval_row, text="Scan folder every").pack(side="left")
+        ttk.Label(interval_row, text=gettext("Scan folder every")).pack(side="left")
         ttk.Entry(interval_row, textvariable=self.interval_var, width=8).pack(
             side="left", padx=7
         )
-        ttk.Label(interval_row, text="seconds").pack(side="left")
+        ttk.Label(interval_row, text=gettext("seconds")).pack(side="left")
         stable_row = ttk.Frame(panel, style="Card.TFrame")
         stable_row.grid(row=5, column=0, sticky="w", pady=(5, 0))
-        ttk.Label(stable_row, text="File stable for").pack(side="left")
+        ttk.Label(stable_row, text=gettext("File stable for")).pack(side="left")
         ttk.Entry(stable_row, textvariable=self.stable_var, width=8).pack(side="left", padx=7)
-        ttk.Label(stable_row, text="seconds").pack(side="left")
+        ttk.Label(stable_row, text=gettext("seconds")).pack(side="left")
         ttk.Checkbutton(
             panel,
-            text="Attach simulator location",
+            text=gettext("Attach simulator location"),
             variable=self.attach_sim_camera_metadata_var,
         ).grid(row=6, column=0, sticky="w", pady=(8, 0))
         ttk.Checkbutton(
             panel,
-            text="Delete uploaded photos from this PC",
+            text=gettext("Delete uploaded photos from this PC"),
             variable=self.delete_uploaded_files_var,
             command=self.refresh_watch_delete_warning,
         ).grid(row=7, column=0, sticky="w", pady=(6, 0))
         ttk.Label(
             panel,
-            text="After confirmed upload. Existing and changed files are kept.",
+            text=gettext("After confirmed upload. Existing and changed files are kept."),
             style="Muted.TLabel",
             wraplength=WINDOW_SUMMARY_WRAP,
         ).grid(row=8, column=0, sticky="w", padx=(24, 0), pady=(1, 0))
@@ -11221,14 +11436,14 @@ class WatcherApp:
             try:
                 WatcherApp._save_watcher_preferences(self, self.current_watcher_config())
             except (OSError, ValueError, ModeCoordinatorError) as exc:
-                messagebox.showerror("Watcher settings", str(exc), parent=dialog)
+                messagebox.showerror(gettext("Watcher settings"), gettext(str(exc)), parent=dialog)
             else:
                 dialog.destroy()
 
-        Button(footer, text="Cancel", command=cancel_changes).pack(side="right")
+        Button(footer, text=gettext("Cancel"), command=cancel_changes).pack(side="right")
         Button(
             footer,
-            text="Save watcher settings",
+            text=gettext("Save watcher settings"),
             command=save_changes,
             style="Primary.TButton",
         ).pack(side="right", padx=(0, 8))
@@ -11304,7 +11519,7 @@ class WatcherApp:
         )
         icon_button(
             identity, "settings", self.open_connection_dialog,
-            "Upload via API key",
+            gettext("Upload via API key"),
         ).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(target, textvariable=self.connection_status_var, style="Muted.TLabel").grid(
             row=2, column=0, sticky="w", pady=(2, 0)
@@ -11321,23 +11536,23 @@ class WatcherApp:
         )
         self.import_abandon_button.grid(row=1, column=1, padx=(6, 0), pady=(6, 0))
 
-        ttk.Label(card, text="CHOOSE SOURCE", style="Eyebrow.TLabel").grid(
+        ttk.Label(card, text=gettext("CHOOSE SOURCE"), style="Eyebrow.TLabel").grid(
             row=2, column=0, sticky="w", pady=(17, 5)
         )
         toolbar = ttk.Frame(card, style="Card.TFrame")
         toolbar.grid(row=3, column=0, sticky="ew")
-        icon_button(toolbar, "upload", self.select_manual_files, "Choose image files").pack(side="left")
-        ttk.Label(toolbar, text="Files", style="Muted.TLabel").pack(side="left", padx=(2, 10))
-        icon_button(toolbar, "add", self.select_manual_folder, "Choose a folder").pack(side="left")
-        ttk.Label(toolbar, text="Folder", style="Muted.TLabel").pack(side="left", padx=(2, 10))
-        icon_button(toolbar, "info", self.select_manual_zip, "Choose a ZIP archive").pack(side="left")
-        ttk.Label(toolbar, text="ZIP", style="Muted.TLabel").pack(side="left", padx=(2, 10))
-        icon_button(toolbar, "close", self.clear_manual_files, "Clear the selected source").pack(side="right")
+        icon_button(toolbar, "upload", self.select_manual_files, gettext("Choose image files")).pack(side="left")
+        ttk.Label(toolbar, text=gettext("Files"), style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "add", self.select_manual_folder, gettext("Choose a folder")).pack(side="left")
+        ttk.Label(toolbar, text=gettext("Folder"), style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "info", self.select_manual_zip, gettext("Choose a ZIP archive")).pack(side="left")
+        ttk.Label(toolbar, text=gettext("ZIP"), style="Muted.TLabel").pack(side="left", padx=(2, 10))
+        icon_button(toolbar, "close", self.clear_manual_files, gettext("Clear the selected source")).pack(side="right")
         ttk.Label(card, textvariable=self.manual_selection_var, style="Body.TLabel", wraplength=800).grid(
             row=4, column=0, sticky="w", pady=(9, 0)
         )
 
-        ttk.Label(card, text="REVIEW", style="Eyebrow.TLabel").grid(
+        ttk.Label(card, text=gettext("REVIEW"), style="Eyebrow.TLabel").grid(
             row=5, column=0, sticky="w", pady=(16, 5)
         )
         ttk.Label(
@@ -11364,7 +11579,7 @@ class WatcherApp:
         actions.grid(row=10, column=0, sticky="ew", pady=(11, 0))
         self.start_import_button = Button(
             actions,
-            text="▶  Start import",
+            text=gettext("▶  Start import"),
             command=self.start_manual_upload,
             state="disabled",
             style="Primary.TButton",
@@ -11375,7 +11590,7 @@ class WatcherApp:
             actions,
             "pause",
             self.pause_manual_upload,
-            "Pause import after active requests finish",
+            gettext("Pause import after active requests finish"),
         )
         self.pause_import_button.state(["disabled"])
         self.pause_import_button.pack(side="left", padx=(7, 0))
@@ -11383,7 +11598,7 @@ class WatcherApp:
             actions,
             "play",
             self.resume_manual_upload,
-            "Resume the paused import",
+            gettext("Resume the paused import"),
         )
         self.resume_import_button.state(["disabled"])
         self.resume_import_button.pack(side="left", padx=(5, 0))
@@ -11391,17 +11606,17 @@ class WatcherApp:
             actions,
             "close",
             self.stop_manual_upload,
-            "Cancel the active import",
+            gettext("Cancel the active import"),
         )
         self.cancel_import_button.state(["disabled"])
         self.cancel_import_button.pack(side="left", padx=(5, 0))
-        self.retry_failed_button = Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
+        self.retry_failed_button = Button(actions, text=gettext("Retry failed"), command=self.retry_failed_import, state="disabled")
         self.retry_failed_button.pack(side="left", padx=(7, 0))
         ttk.Label(actions, textvariable=self.manual_status_var, style="Muted.TLabel").pack(side="right")
 
         advanced_toggle = ttk.Checkbutton(
             card,
-            text="Import options and item details",
+            text=gettext("Import options and item details"),
             variable=self.import_details_visible_var,
             command=self.toggle_import_details,
         )
@@ -11410,24 +11625,24 @@ class WatcherApp:
         self.import_details_frame.columnconfigure(0, weight=1)
         ttk.Checkbutton(
             self.import_details_frame,
-            text="Include subfolders",
+            text=gettext("Include subfolders"),
             variable=self.manual_folder_recursive_var,
             command=self.rebuild_manual_preflight,
         ).grid(row=0, column=0, sticky="w", pady=3)
         ttk.Label(
             self.import_details_frame,
-            text="Original ZIP is kept for manual verification.",
+            text=gettext("Original ZIP is kept for manual verification."),
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=3)
         ttk.Radiobutton(
             self.import_details_frame,
-            text="Server creates thumbnails",
+            text=gettext("Server creates thumbnails"),
             variable=self.manual_local_thumbnails_var,
             value=False,
         ).grid(row=2, column=0, sticky="w", pady=3)
         self.thumbnail_check = ttk.Radiobutton(
             self.import_details_frame,
-            text="This PC creates thumbnails when supported",
+            text=gettext("This PC creates thumbnails when supported"),
             variable=self.manual_local_thumbnails_var,
             value=True,
         )
@@ -11439,11 +11654,11 @@ class WatcherApp:
             height=6,
         )
         for column, title, width in [
-            ("file", "File", 190),
-            ("size", "Size", 70),
-            ("decode", "Media", 85),
-            ("state", "Review", 95),
-            ("reason", "Detail", 290),
+            ("file", gettext("File"), 190),
+            ("size", gettext("Size"), 70),
+            ("decode", gettext("Media"), 85),
+            ("state", gettext("Review"), 95),
+            ("reason", gettext("Detail"), 290),
         ]:
             self.import_item_tree.heading(column, text=title)
             self.import_item_tree.column(column, width=width, stretch=column in {"file", "reason"})
@@ -11478,19 +11693,19 @@ class WatcherApp:
         current.grid(row=1, column=0, sticky="ew", padx=6, pady=4)
         current.columnconfigure(0, weight=1)
         ttk.Label(
-            current, text="Current import", style="Section.TLabel",
+            current, text=gettext("Current import"), style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w", pady=(0, 6))
         ttk.Label(current, textvariable=self.activity_job_summary_var, wraplength=800).grid(row=1, column=0, sticky="w", pady=(0, 8))
         activity_actions = ttk.Frame(current, style="Card.TFrame")
         activity_actions.grid(row=2, column=0, sticky="ew", pady=(0, 8))
-        Button(activity_actions, text="Open Import", command=lambda: self.select_tab("import")).pack(side="left")
-        Button(activity_actions, text="Retry failed", command=self.retry_failed_import).pack(side="left", padx=8)
+        Button(activity_actions, text=gettext("Open Import"), command=lambda: self.select_tab("import")).pack(side="left")
+        Button(activity_actions, text=gettext("Retry failed"), command=self.retry_failed_import).pack(side="left", padx=8)
         self.activity_item_tree = ttk.Treeview(current, columns=("file", "state", "attempts", "detail"), show="headings", height=7)
         for column, title, width in [
-            ("file", "File", 175),
-            ("state", "State", 105),
-            ("attempts", "Tries", 65),
-            ("detail", "Result / error", 330),
+            ("file", gettext("File"), 175),
+            ("state", gettext("State"), 105),
+            ("attempts", gettext("Tries"), 65),
+            ("detail", gettext("Result / error"), 330),
         ]:
             self.activity_item_tree.heading(column, text=title)
             self.activity_item_tree.column(column, width=width, stretch=column in {"file", "detail"})
@@ -11500,14 +11715,14 @@ class WatcherApp:
         history.grid(row=2, column=0, sticky="ew", padx=6, pady=4)
         history.columnconfigure(0, weight=1)
         ttk.Label(
-            history, text="Job history", style="Section.TLabel",
+            history, text=gettext("Job history"), style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w", pady=(0, 8))
         self.job_history_tree = ttk.Treeview(history, columns=("created", "source", "target", "status"), show="headings", height=10)
         for column, title, width in [
-            ("created", "Created", 125),
-            ("source", "Source", 190),
-            ("target", "Target", 140),
-            ("status", "Result", 270),
+            ("created", gettext("Created"), 125),
+            ("source", gettext("Source"), 190),
+            ("target", gettext("Target"), 140),
+            ("status", gettext("Result"), 270),
         ]:
             self.job_history_tree.heading(column, text=title)
             self.job_history_tree.column(column, width=width, stretch=column in {"source", "status"})
@@ -11519,15 +11734,15 @@ class WatcherApp:
         events.grid(row=3, column=0, sticky="ew", padx=6, pady=4)
         events.columnconfigure(0, weight=1)
         ttk.Label(
-            events, text="Recent events", style="Section.TLabel",
+            events, text=gettext("Recent events"), style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w", pady=(0, 8))
         controls = ttk.Frame(events, style="Card.TFrame")
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(controls, text="Show").pack(side="left")
+        ttk.Label(controls, text=gettext("Show")).pack(side="left")
         activity_filter = ttk.Combobox(
             controls,
             textvariable=self.activity_filter_var,
-            values=("all", "active", "succeeded", "skipped", "failed", "warnings"),
+            values=tuple(activity_filter_labels().values()),
             width=12,
             state="readonly",
         )
@@ -11536,8 +11751,8 @@ class WatcherApp:
             "<<ComboboxSelected>>",
             lambda _event: self.refresh_activity_drawer(),
         )
-        Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
-        Button(controls, text="Support diagnostics…", command=self.open_support_report).pack(side="right")
+        Button(controls, text=gettext("Retry failed"), command=self.retry_failed_import).pack(side="left")
+        Button(controls, text=gettext("Support diagnostics…"), command=self.open_support_report).pack(side="right")
         event_table = ttk.Frame(events, style="Card.TFrame")
         event_table.grid(row=2, column=0, sticky="ew")
         event_table.columnconfigure(0, weight=1)
@@ -11551,11 +11766,11 @@ class WatcherApp:
             xscrollcommand=lambda first, last: event_scroll_x.set(first, last),
         )
         for column, title, width in [
-            ("time", "Time", 75),
-            ("level", "Status", 75),
-            ("filename", "File", 125),
-            ("operation", "Type", 85),
-            ("message", "Event", 390),
+            ("time", gettext("Time"), 75),
+            ("level", gettext("Status"), 75),
+            ("filename", gettext("File"), 125),
+            ("operation", gettext("Type"), 85),
+            ("message", gettext("Event"), 390),
         ]:
             self.activity_drawer.heading(column, text=title)
             self.activity_drawer.column(
@@ -11574,14 +11789,14 @@ class WatcherApp:
         diagnostics.grid(row=4, column=0, sticky="ew", padx=6, pady=(4, 8))
         diagnostics.columnconfigure(0, weight=1)
         ttk.Label(
-            diagnostics, text="Live diagnostics log", style="Section.TLabel",
+            diagnostics, text=gettext("Live diagnostics log"), style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w", pady=(0, 8))
         diagnostic_actions = ttk.Frame(diagnostics, style="Card.TFrame")
         diagnostic_actions.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
-        Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
-        Button(diagnostic_actions, text="Support diagnostics…", command=self.open_support_report).pack(side="left")
-        Button(diagnostic_actions, text="Copy report", command=self.copy_diagnostics).pack(side="left", padx=8)
+        Button(diagnostic_actions, text=gettext("Open app folder"), command=self.open_config_folder).pack(side="left")
+        Button(diagnostic_actions, text=gettext("Open log file"), command=self.open_log_file).pack(side="left", padx=8)
+        Button(diagnostic_actions, text=gettext("Support diagnostics…"), command=self.open_support_report).pack(side="left")
+        Button(diagnostic_actions, text=gettext("Copy report"), command=self.copy_diagnostics).pack(side="left", padx=8)
         self.log_text = tk.Text(
             diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6,
             font="TkFixedFont",
@@ -11599,23 +11814,23 @@ class WatcherApp:
             parent (tk.Misc): Scrollable Settings page receiving the controls.
 
         Returns:
-            None: Creates connection, runtime, and advanced sections.
+            None: Creates connection, interface, runtime and advanced controls.
         """
         parent.columnconfigure(0, weight=1)
         connection = GlassCard(parent, padding=(14, 10))
         connection.grid(row=0, column=0, sticky="ew", padx=6, pady=4)
         connection.columnconfigure(1, weight=1)
-        ttk.Label(connection, text="GALLERY CONNECTION", style="Eyebrow.TLabel").grid(
+        ttk.Label(connection, text=gettext("GALLERY CONNECTION"), style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 8)
         )
-        ttk.Label(connection, text="Gallery URL").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=5)
+        ttk.Label(connection, text=gettext("Gallery URL")).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=5)
         self.gallery_url_entry = ttk.Entry(connection, textvariable=self.gallery_url_var)
         self.gallery_url_entry.grid(row=1, column=1, columnspan=3, sticky="ew", pady=5)
-        ttk.Label(connection, text="API key").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=5)
+        ttk.Label(connection, text=gettext("API key")).grid(row=2, column=0, sticky="w", padx=(0, 10), pady=5)
         self.api_key_entry = ttk.Entry(connection, textvariable=self.api_key_var, show="*")
         self.api_key_entry.grid(row=2, column=1, sticky="ew", pady=5)
-        icon_button(connection, "info", self.toggle_api_key_visibility, "Reveal or mask API key").grid(row=2, column=2, padx=(6, 2), pady=5)
-        icon_button(connection, "add", self.paste_api_key_from_clipboard, "Paste API key").grid(row=2, column=3, padx=(2, 0), pady=5)
+        icon_button(connection, "info", self.toggle_api_key_visibility, gettext("Reveal or mask API key")).grid(row=2, column=2, padx=(6, 2), pady=5)
+        icon_button(connection, "add", self.paste_api_key_from_clipboard, gettext("Paste API key")).grid(row=2, column=3, padx=(2, 0), pady=5)
         ttk.Label(connection, textvariable=self.api_key_status_var, style="Muted.TLabel").grid(
             row=3, column=1, sticky="w", pady=(1, 0)
         )
@@ -11624,104 +11839,135 @@ class WatcherApp:
         )
         actions = ttk.Frame(connection, style="Card.TFrame")
         actions.grid(row=5, column=1, columnspan=3, sticky="ew", pady=(10, 0))
-        Button(actions, text="✓  Save & Test", command=self.save_and_test_connection, style="Primary.TButton").pack(side="left")
-        icon_button(actions, "add", self.open_connection_dialog, "Open protected credential editor").pack(side="left", padx=(7, 0))
-        self.revoke_button = Button(actions, text="Revoke key…", command=self.revoke_api_key)
+        Button(actions, text=gettext("✓  Save & Test"), command=self.save_and_test_connection, style="Primary.TButton").pack(side="left")
+        icon_button(actions, "add", self.open_connection_dialog, gettext("Open protected credential editor")).pack(side="left", padx=(7, 0))
+        self.revoke_button = Button(actions, text=gettext("Revoke key…"), command=self.revoke_api_key)
         self.revoke_button.pack(side="left", padx=(7, 0))
         Button(
-            actions, text="Manage link…", command=self.manage_gallery_link,
+            actions, text=gettext("Manage link…"), command=self.manage_gallery_link,
         ).pack(side="left", padx=(7, 0))
-        ttk.Label(connection, textvariable=self.revoke_blocker_var, style="Muted.TLabel", wraplength=760).grid(
+        ttk.Label(connection, textvariable=self.revoke_blocker_var, style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP).grid(
             row=6, column=1, columnspan=3, sticky="w", pady=(6, 0)
         )
 
         runtime = GlassCard(parent, padding=(14, 10))
         runtime.grid(row=1, column=0, sticky="ew", padx=6, pady=4)
         runtime.columnconfigure(1, weight=1)
-        ttk.Label(runtime, text="APP & INTEGRATIONS", style="Eyebrow.TLabel").grid(
+        ttk.Label(runtime, text=gettext("APP & INTEGRATIONS"), style="Eyebrow.TLabel").grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 7)
         )
-        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=5
+        ttk.Label(runtime, text=gettext("Language")).grid(
+            row=1, column=0, sticky="w", pady=5,
         )
-        Button(runtime, text="Repair dependencies", command=self.repair_dependencies).grid(row=1, column=2, padx=(8, 0), pady=5)
-        ttk.Label(runtime, text="SimConnect.dll override").grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
-        Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=2, column=2, pady=5)
-        ttk.Checkbutton(runtime, text="Keep working in the system tray when the window closes", variable=self.close_to_tray_var).grid(
-            row=3, column=1, columnspan=2, sticky="w", pady=(5, 0)
+        self.interface_language_var = tk.StringVar(
+            self.root, value=LANGUAGE_NAMES[self._saved_ui_language],
+        )
+        language_picker = ttk.Combobox(
+            runtime, state="readonly", textvariable=self.interface_language_var,
+            values=tuple(LANGUAGE_NAMES.values()),
+        )
+        language_picker.grid(row=1, column=1, sticky="w", padx=8, pady=5)
+        language_picker.bind("<<ComboboxSelected>>", self.save_interface_language)
+        self.interface_language_pending = ttk.Frame(runtime, style="Card.TFrame")
+        self.interface_language_pending.grid(
+            row=2, column=1, columnspan=2, sticky="w", padx=8,
+        )
+        ttk.Label(
+            self.interface_language_pending,
+            text=gettext("Restart to apply the selected language."),
+            style="Muted.TLabel",
+        ).pack(side="left")
+        Button(
+            self.interface_language_pending,
+            text=gettext("Restart WinApp"),
+            command=lambda: self.close(restart=True),
+        ).pack(side="left", padx=(8, 0))
+        self.refresh_interface_restart()
+        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=5
+        )
+        Button(runtime, text=gettext("Repair dependencies"), command=self.repair_dependencies).grid(row=3, column=2, padx=(8, 0), pady=5)
+        ttk.Label(runtime, text=gettext("Custom SimConnect.dll")).grid(
+            row=4, column=0, sticky="w", pady=5,
+        )
+        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=4, column=1, sticky="ew", padx=8, pady=5)
+        Button(runtime, text=gettext("Choose"), command=self.browse_simconnect_dll).grid(row=4, column=2, pady=5)
+        ttk.Checkbutton(runtime, text=gettext("Keep working in the system tray when the window closes"), variable=self.close_to_tray_var).grid(
+            row=5, column=1, columnspan=2, sticky="w", pady=(5, 0)
         )
         startup_switch = ttk.Checkbutton(
             runtime,
-            text="Start with Windows (minimized to tray)",
+            text=gettext("Start with Windows (minimized to tray)"),
             variable=self.start_with_windows_var,
             command=self.save_startup_preference,
         )
         startup_switch.grid(
-            row=4, column=1, columnspan=2, sticky="w", pady=(5, 0),
+            row=6, column=1, columnspan=2, sticky="w", pady=(5, 0),
         )
         if not startup_supported():
             startup_switch.state(["disabled"])
         ttk.Label(
             runtime,
-            text="Installed Windows app only. This switch saves immediately.",
+            text=gettext("Installed Windows app only. This switch saves immediately."),
             style="Muted.TLabel",
-        ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(3, 0))
+        ).grid(row=7, column=1, columnspan=2, sticky="w", pady=(3, 0))
         # Grid row indices keep the immediate option, its help, save and
         # advanced controls in that order inside the runtime preferences card.
         ttk.Checkbutton(
             runtime,
-            text="Experimental Canvas gallery renderer",
+            text=gettext("Experimental Canvas gallery renderer"),
             variable=self.experimental_canvas_gallery_renderer_var,
             command=self.save_canvas_renderer_preference,
-        ).grid(row=6, column=1, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=8, column=1, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(
             runtime,
             text=(
-                "Use experimental virtualized Canvas rendering for photo "
-                "galleries. Requires application restart."
+                gettext(
+                    "Use experimental virtualized Canvas rendering for photo "
+                    "galleries. Requires application restart."
+                )
             ),
             style="Muted.TLabel",
             wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS,
-        ).grid(row=7, column=1, columnspan=2, sticky="w", pady=(2, 0))
+        ).grid(row=9, column=1, columnspan=2, sticky="w", pady=(2, 0))
         Button(
             runtime,
-            text="✓  Save settings",
+            text=gettext("✓  Save settings"),
             command=self.save_config,
             style="Primary.TButton",
-        ).grid(row=8, column=1, sticky="w", pady=(10, 0))
+        ).grid(row=10, column=1, sticky="w", pady=(10, 0))
 
         advanced_toggle = ttk.Checkbutton(
             runtime,
-            text="Advanced import and archive settings",
+            text=gettext("Advanced import and archive settings"),
             variable=self.settings_advanced_visible_var,
             command=self.toggle_settings_advanced,
         )
         advanced_toggle.grid(
-            row=9, column=0, columnspan=3, sticky="w", pady=(8, 0),
+            row=11, column=0, columnspan=3, sticky="w", pady=(8, 0),
         )
         advanced = GlassCard(parent, padding=(14, 10))
         self.settings_advanced_frame = advanced
         advanced.columnconfigure(1, weight=1)
         rows = [
-            ("Remote inventory reconnect seconds", self.inventory_refresh_var),
-            ("ZIP max entries", self.archive_max_entries_var),
-            ("ZIP max total uncompressed GiB", self.archive_max_total_gib_var),
-            ("ZIP max single file GiB", self.archive_max_file_gib_var),
-            ("ZIP max compression ratio", self.archive_max_ratio_var),
-            ("Staging cleanup age hours", self.staging_cleanup_hours_var),
+            (gettext("Remote inventory reconnect seconds"), self.inventory_refresh_var),
+            (gettext("ZIP max entries"), self.archive_max_entries_var),
+            (gettext("ZIP max total uncompressed GiB"), self.archive_max_total_gib_var),
+            (gettext("ZIP max single file GiB"), self.archive_max_file_gib_var),
+            (gettext("ZIP max compression ratio"), self.archive_max_ratio_var),
+            (gettext("Staging cleanup age hours"), self.staging_cleanup_hours_var),
         ]
         for row, (label, variable) in enumerate(rows):
             ttk.Label(advanced, text=label).grid(row=row, column=0, sticky="w", padx=(0, 14), pady=4)
             ttk.Entry(advanced, textvariable=variable, width=18).grid(row=row, column=1, sticky="w", pady=4)
         workers_row = len(rows)
-        ttk.Label(advanced, text="Local thumbnail processes").grid(row=workers_row, column=0, sticky="w", padx=(0, 14), pady=4)
+        ttk.Label(advanced, text=gettext("Local thumbnail processes")).grid(row=workers_row, column=0, sticky="w", padx=(0, 14), pady=4)
         ttk.Combobox(advanced, textvariable=self.manual_thumbnail_workers_var, values=worker_choice_values(MAX_THUMBNAIL_WORKERS), width=10, state="readonly").grid(row=workers_row, column=1, sticky="w", pady=4)
-        ttk.Label(advanced, text="Upload threads").grid(row=workers_row + 1, column=0, sticky="w", padx=(0, 14), pady=4)
+        ttk.Label(advanced, text=gettext("Upload threads")).grid(row=workers_row + 1, column=0, sticky="w", padx=(0, 14), pady=4)
         ttk.Combobox(advanced, textvariable=self.manual_upload_workers_var, values=worker_choice_values(MAX_UPLOAD_WORKERS), width=10, state="readonly").grid(row=workers_row + 1, column=1, sticky="w", pady=4)
         Button(
             advanced,
-            text="✓  Save settings",
+            text=gettext("✓  Save settings"),
             command=self.save_config,
             style="Primary.TButton",
         ).grid(row=workers_row + 2, column=0, columnspan=2, sticky="w", pady=(10, 0))
@@ -11747,33 +11993,33 @@ class WatcherApp:
         quick = GlassCard(parent, padding=(14, 10))
         quick.grid(row=0, column=0, sticky="ew", padx=6, pady=4)
         quick.columnconfigure(1, weight=1)
-        ttk.Label(quick, text="AI METADATA", style="Eyebrow.TLabel").grid(
+        ttk.Label(quick, text=gettext("AI METADATA"), style="Eyebrow.TLabel").grid(
             row=0, column=0, columnspan=3, sticky="w"
         )
         ttk.Label(
             quick,
-            text="Optional, server-assigned image analysis.",
+            text=gettext("Optional, server-assigned image analysis."),
             style="Section.TLabel",
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(3, 2))
         ttk.Label(
             quick,
-            text="The gallery assigns one job at a time; this PC returns internal search metadata.",
+            text=gettext("The gallery assigns one job at a time; this PC returns internal search metadata."),
             style="Muted.TLabel",
             wraplength=780,
         ).grid(row=2, column=0, columnspan=3, sticky="w")
         ttk.Checkbutton(
             quick,
-            text="Enable AI metadata worker on this PC",
+            text=gettext("Enable AI metadata worker on this PC"),
             variable=self.ai_worker_enabled_var,
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(11, 6))
-        ttk.Label(quick, text="Backend").grid(row=4, column=0, sticky="w", pady=5)
+        ttk.Label(quick, text=gettext("Backend")).grid(row=4, column=0, sticky="w", pady=5)
         ttk.OptionMenu(
             quick,
             self.ai_vision_backend_var,
-            normalize_ai_vision_backend(self.ai_vision_backend_var.get()),
-            *AI_VISION_BACKEND_CHOICES,
+            self.ai_vision_backend_var.get(),
+            *ai_backend_labels().values(),
         ).grid(row=4, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(quick, text="Model version").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Label(quick, text=gettext("Model version")).grid(row=5, column=0, sticky="w", pady=5)
         ttk.Entry(quick, textvariable=self.ai_model_version_var, width=24).grid(
             row=5, column=1, sticky="w", padx=8, pady=5
         )
@@ -11791,30 +12037,30 @@ class WatcherApp:
         ).grid(row=0, column=0, sticky="w")
         self.semantic_ai_install_button = Button(
             runtime_row,
-            text="Install local AI module",
+            text=gettext("Install local AI module"),
             command=self.repair_semantic_ai_dependencies,
         )
         self.semantic_ai_install_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
         Button(
             runtime_row,
-            text="Repair dependencies",
+            text=gettext("Repair dependencies"),
             command=self.repair_dependencies,
         ).grid(row=0, column=2, sticky="e", padx=(6, 0))
         actions = ttk.Frame(quick, style="Card.TFrame")
         actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(12, 0))
         Button(
             actions,
-            text="▶  Start AI worker",
+            text=gettext("▶  Start AI worker"),
             command=self.start_ai_worker,
             style="Primary.TButton",
         ).pack(side="left")
-        icon_button(actions, "stop", self.stop_ai_worker, "Stop AI metadata worker").pack(
+        icon_button(actions, "stop", self.stop_ai_worker, gettext("Stop AI metadata worker")).pack(
             side="left", padx=(7, 0)
         )
 
         advanced_toggle = ttk.Checkbutton(
             quick,
-            text="Advanced AI settings",
+            text=gettext("Advanced AI settings"),
             variable=self.ai_advanced_visible_var,
             command=self.toggle_ai_advanced_settings,
         )
@@ -11826,48 +12072,48 @@ class WatcherApp:
         self.ai_advanced_frame = advanced
         advanced.columnconfigure(1, weight=1)
 
-        ttk.Label(advanced, text="Poll seconds when idle").grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Poll seconds when idle")).grid(row=0, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_worker_poll_var, width=12).grid(row=0, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(advanced, text="Default 60. Larger values keep the server quieter.", foreground="#AABCCB").grid(row=0, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Default 60. Larger values keep the server quieter."), foreground="#AABCCB").grid(row=0, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Lease seconds per job").grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Lease seconds per job")).grid(row=1, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_worker_lease_var, width=12).grid(row=1, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(advanced, text="Default 600. Heartbeats extend the lease while analysis runs.", foreground="#AABCCB").grid(row=1, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Default 600. Heartbeats extend the lease while analysis runs."), foreground="#AABCCB").grid(row=1, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Model or analyzer name").grid(row=2, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Model or analyzer name")).grid(row=2, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_model_name_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Transformers caption model").grid(row=3, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Transformers caption model")).grid(row=3, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_transformers_caption_model_var).grid(row=3, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Label(advanced, text="First use may download model files locally.", foreground="#AABCCB", wraplength=360).grid(row=3, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("First use may download model files locally."), foreground="#AABCCB", wraplength=360).grid(row=3, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Transformers object detector").grid(row=4, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Transformers object detector")).grid(row=4, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_transformers_detector_model_var).grid(row=4, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Label(advanced, text="Zero-shot object labels such as person, bridge, guitar, house.", foreground="#AABCCB").grid(row=4, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Zero-shot object labels such as person, bridge, guitar, house."), foreground="#AABCCB").grid(row=4, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Detector threshold").grid(row=5, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Detector threshold")).grid(row=5, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_transformers_detection_threshold_var, width=12).grid(row=5, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(advanced, text="Default 0.18. Lower sees more objects but may add noise.", foreground="#AABCCB").grid(row=5, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Default 0.18. Lower sees more objects but may add noise."), foreground="#AABCCB").grid(row=5, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Object labels").grid(row=6, column=0, sticky="nw", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Object labels")).grid(row=6, column=0, sticky="nw", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_transformers_object_labels_var).grid(row=6, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Local Ollama URL").grid(row=7, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Local Ollama URL")).grid(row=7, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_ollama_url_var).grid(row=7, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Label(advanced, text="Optional fallback when you intentionally run Ollama.", foreground="#AABCCB").grid(row=7, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Optional fallback when you intentionally run Ollama."), foreground="#AABCCB").grid(row=7, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Ollama vision model").grid(row=8, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Ollama vision model")).grid(row=8, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_ollama_model_var, width=32).grid(row=8, column=1, sticky="w", padx=8, pady=5)
-        ttk.Label(advanced, text="Examples: llava:latest or llama3.2-vision:latest.", foreground="#AABCCB").grid(row=8, column=2, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Examples: llava:latest or llama3.2-vision:latest."), foreground="#AABCCB").grid(row=8, column=2, sticky="w", padx=8, pady=5)
 
-        ttk.Label(advanced, text="Semantic prompt").grid(row=9, column=0, sticky="nw", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("Semantic prompt")).grid(row=9, column=0, sticky="nw", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_semantic_prompt_var).grid(row=9, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
 
-        ttk.Label(advanced, text="External analyzer command").grid(row=10, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text=gettext("External analyzer command")).grid(row=10, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(advanced, textvariable=self.ai_external_command_var).grid(row=10, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
         ttk.Label(
             advanced,
-            text="Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer.",
+            text=gettext("Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer."),
             foreground="#AABCCB",
             wraplength=820,
         ).grid(row=11, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 6))
@@ -11891,8 +12137,11 @@ class WatcherApp:
     def refresh_thumbnail_controls(self) -> None:
         """
         Refresh local thumbnail availability in the manual upload tab.
+
+        Returns:
+            None: Shows the localized runtime status and available thumbnail mode.
         """
-        self.thumbnail_runtime_var.set(thumbnail_runtime_status())
+        self.thumbnail_runtime_var.set(thumbnail_runtime_status(for_display=True))
         if local_thumbnail_supported():
             self.thumbnail_check.state(["!disabled"])
         else:
@@ -11901,13 +12150,17 @@ class WatcherApp:
 
     def repair_dependencies(self) -> None:
         """
-        Install winapp dependencies into the current Python interpreter.
+        Install WinApp dependencies into the current Python interpreter.
+
+        Returns:
+            None: Reports installation or bundled dependency availability.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if getattr(sys, "frozen", False):
             ok, output = install_dependencies_for_current_runtime()
-            (messagebox.showinfo if ok else messagebox.showerror)("Bundled dependencies", output)
+            show = messagebox.showinfo if ok else messagebox.showerror
+            show(gettext("Bundled dependencies"), gettext(output))
             return
         self.write_log("Installing or repairing Python dependencies for the current runtime...")
         ok, output = install_dependencies_for_current_runtime()
@@ -11916,9 +12169,9 @@ class WatcherApp:
         if ok:
             if not self.tray_icon:
                 self.start_tray_icon()
-            messagebox.showinfo("Dependency repair", "Required dependencies are available for this Python runtime.")
+            messagebox.showinfo(gettext("Dependency repair"), gettext("Required dependencies are available for this Python runtime."))
         else:
-            messagebox.showerror("Dependency repair failed", output[-1200:] if output else "pip failed without output")
+            messagebox.showerror(gettext("Dependency repair failed"), output[-1200:] if output else gettext("pip failed without output"))
         self.refresh_thumbnail_controls()
 
     def watcher_reset_blocked(self) -> bool:
@@ -12036,7 +12289,7 @@ class WatcherApp:
                 return
             binding = self.flights.binding()
             question = 'Use the saved gallery API key for Watcher?'
-        if not messagebox.askyesno('Connect Watcher', question, parent=self.root):
+        if not messagebox.askyesno(gettext('Connect Watcher'), question, parent=self.root):
             return
         try:
             if binding != self.flights.binding():
@@ -12047,11 +12300,11 @@ class WatcherApp:
                 'factory_reset', 'new_connection_unconfirmed',
             ), 'warning')
             messagebox.showwarning(
-                'Connect Watcher', 'The Watcher connection could not be saved. Try again.',
+                gettext('Connect Watcher'), gettext('The Watcher connection could not be saved. Try again.'),
                 parent=self.root,
             )
             return
-        self.status_var.set('Watcher gallery selected.')
+        self.status_var.set(gettext('Watcher gallery selected.'))
         self.refresh_watcher_action()
 
     def request_watcher_reset(self) -> None:
@@ -12063,12 +12316,14 @@ class WatcherApp:
         if self._watcher_reset_running or self.exiting:
             return
         if not messagebox.askyesno(
-            'Watcher factory reset',
-            'Stop Watcher and permanently forget its upload gallery, watched '
-            'folder, queued work, and restart history? Watcher preferences '
-            'will return to their defaults.\n\n'
-            'You will keep your screenshots, local reports, logs, and other '
-            'tabs\' settings. An upload already sent may still reach the gallery.',
+            gettext('Watcher factory reset'),
+            gettext(
+                "Stop Watcher and permanently forget its upload gallery, watched "
+                "folder, queued work, and restart history? Watcher preferences "
+                "will return to their defaults.\n\n"
+                "You will keep your screenshots, local reports, logs, and other "
+                "tabs' settings. An upload already sent may still reach the gallery."
+            ),
             default='no', parent=self.watcher_reset_button,
         ):
             return
@@ -12086,7 +12341,7 @@ class WatcherApp:
             self.write_log(format_watch_recovery_diagnostic(
                 'factory_reset', 'update_in_progress',
             ), 'warning')
-            self.status_var.set('Complete the app update before resetting Watcher.')
+            self.status_var.set(gettext('Complete the app update before resetting Watcher.'))
             return
         worker = self.worker
         self.write_log(
@@ -12108,7 +12363,7 @@ class WatcherApp:
             self.write_log(format_watch_recovery_diagnostic(
                 'factory_reset', 'reset_intent_write_unconfirmed', error=exc,
             ), 'error')
-            self.status_var.set('Watcher reset could not be saved. Retry factory reset.')
+            self.status_var.set(gettext('Watcher reset could not be saved. Retry factory reset.'))
             self.refresh_watcher_action()
             return
         self._watcher_profile = profile
@@ -12125,7 +12380,7 @@ class WatcherApp:
         self._set_watcher_recording(False)
         self.utc_sync.stop()
         self.flights.stop_for_watcher_reset()
-        self.watch_queue_status_var.set('Stopping Watcher for factory reset…')
+        self.watch_queue_status_var.set(gettext('Stopping Watcher for factory reset…'))
         self.refresh_watcher_action()
         self._continue_watcher_reset()
 
@@ -12169,14 +12424,16 @@ class WatcherApp:
                 self._watcher_reset_waiting = waiting
                 self.write_log(format_watch_recovery_diagnostic('factory_reset', waiting))
                 self.watch_queue_status_var.set(
-                    'Reset pending. Waiting for Watcher work to stop. '
-                    'You can exit and reopen WinApp to retry an interrupted reset.',
+                    gettext(
+                        "Reset pending. Waiting for Watcher work to stop. "
+                        "You can exit and reopen WinApp to retry an interrupted reset."
+                    ),
                 )
             self.root.after(WATCHER_EVENT_IDLE_POLL_MS, self._continue_watcher_reset)
             return
         profile = self._watcher_profile
         lease = flights.lease
-        self.watch_queue_status_var.set('Restoring Watcher defaults…')
+        self.watch_queue_status_var.set(gettext('Restoring Watcher defaults…'))
         if profile is None or lease is None:
             self._complete_watcher_reset(None, format_watch_recovery_diagnostic(
                 'factory_reset', 'workspace_unavailable',
@@ -12253,7 +12510,7 @@ class WatcherApp:
         self.write_log(diagnostic, 'success' if profile is not None else 'error')
         if profile is None:
             self.watch_queue_status_var.set(
-                'Watcher reset could not finish. Retry factory reset or see Support diagnostics.',
+                gettext('Watcher reset could not finish. Retry factory reset or see Support diagnostics.'),
             )
             self.refresh_watcher_action()
             return
@@ -12283,11 +12540,11 @@ class WatcherApp:
         self.attach_sim_camera_metadata_var.set(settings['attach_sim_camera_metadata'])
         self.delete_uploaded_files_var.set(settings['delete_uploaded_files'])
         self.sync_utc_time_var.set(settings['sync_utc_time'])
-        self.watch_ignored_var.set('Ignored at startup: -')
-        self.watch_last_scan_var.set('Last scan: -')
+        self.watch_ignored_var.set(gettext('Ignored at startup: -'))
+        self.watch_last_scan_var.set(gettext('Last scan: -'))
         self.watch_queue_status_var.set('')
         self.watcher_activity_var.set('Watch: stopped')
-        self.status_var.set('Watcher reset complete. Choose a connection and folder to start.')
+        self.status_var.set(gettext('Watcher reset complete. Choose a connection and folder to start.'))
         self.refresh_watch_delete_warning()
         self.refresh_activity_monitor_state()
         self.refresh_connection_controls()
@@ -12311,7 +12568,7 @@ class WatcherApp:
                 float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS),
             )
         except ValueError as exc:
-            raise ValueError("Enter a valid scan interval and file stability time.") from exc
+            raise ValueError(gettext_noop("Enter a valid scan interval and file stability time.")) from exc
         return replace(
             WatcherApp._saved_watcher_config(self),
             watched_folder=self.watched_folder_var.get().strip(),
@@ -12349,13 +12606,15 @@ class WatcherApp:
             ai_worker_lease = max(60, min(AI_WORKER_MAX_LEASE_SECONDS, int(self.ai_worker_lease_var.get().strip() or DEFAULT_AI_WORKER_LEASE_SECONDS)))
             ai_transformers_detection_threshold = max(0.01, min(0.95, float(self.ai_transformers_detection_threshold_var.get().strip() or AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT)))
         except ValueError as exc:
-            raise ValueError("Timing, worker, archive-safety, and AI numeric settings must contain valid numbers.") from exc
+            raise ValueError(gettext_noop(
+                "Timing, worker, archive-safety, and AI numeric settings must contain valid numbers."
+            )) from exc
 
         gallery_url = self.gallery_url_var.get().strip()
         if gallery_url:
             gallery_url = normalize_upload_url(gallery_url)
             if not gallery_url:
-                raise ValueError("Gallery URL must use HTTP or HTTPS and contain a valid host.")
+                raise ValueError(gettext_noop("Gallery URL must use HTTP or HTTPS and contain a valid host."))
 
         return replace(
             watcher,
@@ -12386,7 +12645,11 @@ class WatcherApp:
             ai_model_name=self.ai_model_name_var.get().strip() or AI_MODEL_NAME_DEFAULT,
             ai_model_version=self.ai_model_version_var.get().strip() or AI_MODEL_VERSION_DEFAULT,
             ai_external_command=self.ai_external_command_var.get().strip(),
-            ai_vision_backend=normalize_ai_vision_backend(self.ai_vision_backend_var.get()),
+            ai_vision_backend=next(
+                (code for code, label in ai_backend_labels().items()
+                 if label == self.ai_vision_backend_var.get()),
+                normalize_ai_vision_backend(self.ai_vision_backend_var.get()),
+            ),
             ai_transformers_caption_model=self.ai_transformers_caption_model_var.get().strip() or AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT,
             ai_transformers_detector_model=self.ai_transformers_detector_model_var.get().strip() or AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT,
             ai_transformers_object_labels=self.ai_transformers_object_labels_var.get().strip() or AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT,
@@ -12407,7 +12670,7 @@ class WatcherApp:
             None: Shows the selected path or a concise empty-state label.
         """
         folder = self.watched_folder_var.get().strip()
-        self.watch_folder_display_var.set(folder or "No folder selected")
+        self.watch_folder_display_var.set(folder or gettext("No folder selected"))
 
     def browse_folder(self, *, parent: Optional["tk.Misc"] = None) -> None:
         """
@@ -12426,7 +12689,7 @@ class WatcherApp:
             return
         if self.worker is not None and self.worker.is_alive():
             messagebox.showinfo(
-                "Watch folder", "Stop Watcher before changing its folder.",
+                gettext("Watch folder"), gettext("Stop Watcher before changing its folder."),
                 parent=parent or self.root,
             )
             return
@@ -12443,21 +12706,24 @@ class WatcherApp:
                     self, replace(saved, watched_folder=selected),
                 )
             except (OSError, ModeCoordinatorError) as exc:
-                messagebox.showerror("Watch folder", str(exc), parent=self.root)
+                messagebox.showerror(gettext("Watch folder"), str(exc), parent=self.root)
                 return
         self.watched_folder_var.set(selected)
-        self.watch_ignored_var.set("Ignored at startup: not scanned yet")
-        self.watch_last_scan_var.set("Last scan: -")
+        self.watch_ignored_var.set(gettext("Ignored at startup: not scanned yet"))
+        self.watch_last_scan_var.set(gettext("Last scan: -"))
 
 
     def browse_simconnect_dll(self) -> None:
         """
         Open a file picker for the optional SimConnect client DLL.
+
+        Returns:
+            None: Sets the draft override when a file is selected.
         """
         selected = filedialog.askopenfilename(
-            title="Select SimConnect.dll",
+            title=gettext("Select SimConnect.dll"),
             initialdir=str(Path(self.simconnect_dll_path_var.get()).parent) if self.simconnect_dll_path_var.get().strip() else str(Path.home()),
-            filetypes=[("SimConnect DLL", "SimConnect.dll"), ("DLL files", "*.dll"), ("All files", "*.*")],
+            filetypes=[(gettext("SimConnect DLL"), "SimConnect.dll"), (gettext("DLL files"), "*.dll"), (gettext("All files"), "*.*")],
         )
         if selected:
             self.simconnect_dll_path_var.set(selected)
@@ -12465,50 +12731,63 @@ class WatcherApp:
     def select_manual_files(self) -> None:
         """
         Open a file picker and add supported images to the manual upload list.
+
+        Returns:
+            None: Starts preflight for the selected files when admitted.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         selected = filedialog.askopenfilenames(
-            title="Choose files to import",
+            title=gettext("Choose files to import"),
             initialdir=self.watched_folder_var.get() or str(Path.home()),
-            filetypes=selected_image_filetypes() + [("All files", "*.*")],
+            filetypes=selected_image_filetypes() + [(gettext("All files"), "*.*")],
         )
         if not selected:
             return
         self.manual_paths = [Path(value) for value in selected]
         self.manual_folder = None
         self.manual_zip = None
-        self.manual_selection_var.set(f"Files: {len(self.manual_paths)} selected")
+        self.manual_selection_var.set(gettext("Files: {manual_path_count} selected").format(
+            manual_path_count=len(self.manual_paths),
+        ))
         self.rebuild_manual_preflight()
 
     def select_manual_folder(self) -> None:
-        """Choose one folder for explicit manual import discovery."""
+        """Choose one folder for explicit manual import discovery.
+
+        Returns:
+            None: Starts preflight for the selected folder when admitted.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
-        selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()), title="Choose folder to import")
+        selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()), title=gettext("Choose folder to import"))
         if not selected:
             return
         self.manual_paths = []
         self.manual_folder = Path(selected)
         self.manual_zip = None
-        self.manual_selection_var.set("Folder: " + str(self.manual_folder))
+        self.manual_selection_var.set(gettext("Folder: ") + str(self.manual_folder))
         self.rebuild_manual_preflight()
 
     def select_manual_zip(self) -> None:
-        """Choose one ZIP archive for bounded staging and preflight."""
+        """Choose one ZIP archive for bounded staging and preflight.
+
+        Returns:
+            None: Starts preflight for the selected archive when admitted.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         selected = filedialog.askopenfilename(
-            title="Choose ZIP archive to import",
+            title=gettext("Choose ZIP archive to import"),
             initialdir=self.watched_folder_var.get() or str(Path.home()),
-            filetypes=[("ZIP archives", "*.zip"), ("All files", "*.*")],
+            filetypes=[(gettext("ZIP archives"), "*.zip"), (gettext("All files"), "*.*")],
         )
         if not selected:
             return
         self.manual_paths = []
         self.manual_folder = None
         self.manual_zip = Path(selected)
-        self.manual_selection_var.set("ZIP: " + str(self.manual_zip))
+        self.manual_selection_var.set(gettext("ZIP: ") + str(self.manual_zip))
         self.rebuild_manual_preflight()
 
 
@@ -12524,7 +12803,7 @@ class WatcherApp:
         if self.preflight_worker and self.preflight_worker.is_alive():
             self.preflight_worker.stop()
             messagebox.showwarning(
-                "Import", "The previous preflight is stopping. Clear the selection again after it finishes.",
+                gettext("Import"), gettext("The previous preflight is stopping. Clear the selection again after it finishes."),
             )
             return
         if not self._discard_unstarted_import_preflight():
@@ -12536,10 +12815,10 @@ class WatcherApp:
         self._preflight_approved = None
         self.current_job = None
         self._import_detail_request = None
-        self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
-        self.manual_preflight_var.set("Select a source to build an import summary. Nothing uploads until you press Start import.")
+        self.manual_selection_var.set(gettext("Choose files, a folder, or a ZIP archive"))
+        self.manual_preflight_var.set(gettext("Select a source to build an import summary. Nothing uploads until you press Start import."))
         self.manual_progress_var.set(0.0)
-        self.manual_progress_text_var.set("No active import")
+        self.manual_progress_text_var.set(gettext("No active import"))
         self.refresh_manual_file_label()
         self.refresh_import_item_tree(None)
         self.start_import_button.configure(state="disabled")
@@ -12554,14 +12833,14 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting import preflight.")
+            messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before starting import preflight."))
             return
         if self.manual_worker and self.manual_worker.is_alive():
             return
         if self.preflight_worker and self.preflight_worker.is_alive():
             self.preflight_worker.stop()
             messagebox.showwarning(
-                'Import', 'The previous preflight is stopping. Start preflight again when it has finished.',
+                gettext('Import'), gettext('The previous preflight is stopping. Start preflight again when it has finished.'),
             )
             return
         if not self.manual_paths and self.manual_folder is None and self.manual_zip is None:
@@ -12576,7 +12855,7 @@ class WatcherApp:
             if linked_target is not None and self.worker and self.worker.is_alive():
                 raise ValueError('Stop the linked watcher before starting import preflight.')
         except ValueError as exc:
-            messagebox.showerror("Invalid settings", str(exc))
+            messagebox.showerror(gettext("Invalid settings"), str(exc))
             return
         if not self._discard_unstarted_import_preflight():
             return
@@ -12586,7 +12865,7 @@ class WatcherApp:
         self._import_detail_request = None
         self.start_import_button.configure(state="disabled")
         self.retry_failed_button.configure(state="disabled")
-        self.manual_preflight_var.set("Inspecting source, hashing files, checking media capabilities, and comparing remote inventory...")
+        self.manual_preflight_var.set(gettext("Inspecting source, hashing files, checking media capabilities, and comparing remote inventory..."))
         self.preflight_progress.grid()
         self.preflight_progress.start(12)
         source_kind = "files" if self.manual_paths else ("folder" if self.manual_folder is not None else "zip")
@@ -12604,7 +12883,7 @@ class WatcherApp:
             (self.mode_owner, config_port),
         )
         self.preflight_worker.start()
-        self.manual_status_var.set("Preflight running")
+        self.manual_status_var.set(gettext("Preflight running"))
         self.import_activity_var.set("Import: preflight")
         self.refresh_revoke_button_state()
 
@@ -12632,26 +12911,45 @@ class WatcherApp:
         ready = sum(1 for item in job.items if item.state in RECOVERABLE_ITEM_STATES)
         unsupported = sum(plan.unsupported.values())
         lines = [
-            f"Target: {job.target_gallery_label}",
-            f"Supported files found: {len(job.items)}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}",
-            f"Estimated accepted bytes: {self.format_bytes(job.bytes_total)}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {len(plan.unsafe_entries)}",
-            "Thumbnail mode: " + ("This PC creates derivatives with server fallback." if self.manual_local_thumbnails_var.get() else "Server creates thumbnails."),
-            "Source deletion: Original files and ZIP archives are kept for manual verification.",
+            gettext("Target: {gallery}").format(gallery=job.target_gallery_label),
+            gettext(
+                "Supported files found: {found}  |  Ready to upload: {ready}  |  "
+                "Duplicate candidates: {duplicates}"
+            ).format(found=len(job.items), ready=ready, duplicates=duplicates),
+            gettext(
+                "Estimated accepted bytes: {size}  |  Unsupported skipped: {unsupported}  |  "
+                "Unsafe ZIP entries rejected: {rejected}"
+            ).format(
+                size=self.format_bytes(job.bytes_total),
+                unsupported=unsupported, rejected=len(plan.unsafe_entries),
+            ),
+            gettext("Thumbnail mode: {mode}").format(mode=(
+                gettext("This PC creates derivatives with server fallback.")
+                if self.manual_local_thumbnails_var.get()
+                else gettext("Server creates thumbnails.")
+            )),
+            gettext("Source deletion: Original files and ZIP archives are kept for manual verification."),
         ]
         special = []
         for suffix in (".heic", ".heif", ".dng"):
             capability = self.media_capabilities.get(suffix)
             if capability is not None:
-                special.append(f"{suffix}: {'local decoder available' if capability.local_previewable else 'server upload only on this PC'}")
+                decoding = (
+                    gettext("local decoder available") if capability.local_previewable
+                    else gettext("server upload only on this PC")
+                )
+                special.append(f"{suffix}: {decoding}")
         if special:
-            lines.append("Local HEIC/DNG capability: " + "; ".join(special))
+            lines.append(gettext("Local HEIC/DNG capability: ") + "; ".join(special))
         if plan.unsupported:
             grouped = ", ".join(f"{key}: {count}" for key, count in sorted(plan.unsupported.items()))
-            lines.append("Unsupported: " + grouped)
+            lines.append(gettext("Unsupported: {types}").format(types=grouped))
         if plan.unsafe_entries:
-            lines.append("Rejected archive entries: " + "; ".join(plan.unsafe_entries[:3]) + (" ..." if len(plan.unsafe_entries) > 3 else ""))
+            lines.append(gettext("Rejected archive entries: ") + "; ".join(plan.unsafe_entries[:3]) + (" ..." if len(plan.unsafe_entries) > 3 else ""))
         if plan.warnings:
-            lines.append("Warnings: " + " | ".join(plan.warnings[:3]))
+            lines.append(gettext("Warnings: {details}").format(
+                details=" | ".join(gettext(item) for item in plan.warnings[:3]),
+            ))
         self.manual_preflight_var.set("\n".join(lines))
         self.refresh_import_item_tree(job)
         self.start_import_button.configure(state="normal" if ready > 0 else "disabled")
@@ -12947,25 +13245,33 @@ class WatcherApp:
         rate = snapshot.bytes_sent / elapsed if elapsed else 0.0
         remaining = max(0, snapshot.bytes_total - snapshot.bytes_sent)
         eta = remaining / rate if rate > 0 else 0.0
-        rate_text = f"{self.format_bytes(int(rate))}/s" if rate > 0 else "rate pending"
-        eta_text = f"ETA {int(eta)}s" if eta > 0 else "ETA pending"
-        text = (
-            f"{terminal}/{total} terminal | "
-            f"{self.format_bytes(snapshot.bytes_sent)} / "
-            f"{self.format_bytes(snapshot.bytes_total)} | {rate_text} | {eta_text}"
+        rate_text = f"{self.format_bytes(int(rate))}/s" if rate > 0 else gettext("rate pending")
+        eta_text = (
+            gettext("ETA {seconds}s").format(seconds=int(eta))
+            if eta > 0 else gettext("ETA pending")
+        )
+        text = gettext(
+            "{complete}/{total} terminal | {sent} / {size} | {rate} | {eta}"
+        ).format(
+            complete=terminal, total=total, sent=self.format_bytes(snapshot.bytes_sent),
+            size=self.format_bytes(snapshot.bytes_total), rate=rate_text, eta=eta_text,
         )
         if self.manual_progress_text_var.get() != text:
             self.manual_progress_text_var.set(text)
 
-    def _describe_import_progress(self, snapshot: ImportProgressSnapshot) -> str:
+    def _describe_import_progress(
+        self, snapshot: ImportProgressSnapshot, *, for_display: bool = True,
+    ) -> str:
         """Describe the selected job from copied counters and labels.
 
         Args:
             snapshot (ImportProgressSnapshot): Saved counters and display labels.
+            for_display (bool): Use the active locale for UI summaries.
 
         Returns:
             str: Activity status and, for active jobs, measurable throughput.
         """
+        translate = gettext if for_display else gettext_noop
         history = snapshot.history
         counts = snapshot.counts
         progress = (
@@ -12977,11 +13283,19 @@ class WatcherApp:
             rate = snapshot.bytes_sent / elapsed
             if rate > 0:
                 remaining = max(0, snapshot.bytes_total - snapshot.bytes_sent)
-                progress += f" at {self.format_bytes(int(rate))}/s, ETA {int(remaining / rate)}s"
-        return (
-            f"{history.source_kind}: {history.source_label} | target {history.target_gallery_label} | "
-            f"confirmed {counts.uploaded}, duplicates {counts.duplicates}, failed {counts.failed}, "
-            f"cancelled {counts.cancelled}, active {counts.active} | {progress}"
+                progress += translate(gettext_noop(" at {rate}/s, ETA {seconds}s")).format(
+                    rate=self.format_bytes(int(rate)), seconds=int(remaining / rate),
+                )
+        summary = gettext_noop(
+            "{kind}: {source} | target {gallery} | "
+            "confirmed {confirmed}, duplicates {duplicates}, failed {failed}, "
+            "cancelled {cancelled}, active {active} | {progress}"
+        )
+        return translate(summary).format(
+            kind=translate(history.source_kind), source=history.source_label,
+            gallery=history.target_gallery_label, confirmed=counts.uploaded,
+            duplicates=counts.duplicates, failed=counts.failed,
+            cancelled=counts.cancelled, active=counts.active, progress=progress,
         )
 
     def _flush_import_presentation(self, *, force: bool = False) -> None:
@@ -13031,9 +13345,9 @@ class WatcherApp:
         snapshot = view.latest if view is not None else None
         failed = snapshot.counts.failed if snapshot is not None else 0
         cancelled_items = snapshot.counts.cancelled if snapshot is not None else 0
-        status = "Import cancelled" if cancelled else "Import finished"
+        status = gettext("Import cancelled") if cancelled else gettext("Import finished")
         if needs_review:
-            status = "Import needs review"
+            status = gettext("Import needs review")
         self.manual_status_var.set(status)
         self.import_activity_var.set(
             "Import: needs review" if needs_review
@@ -13055,8 +13369,17 @@ class WatcherApp:
                 self._request_import_detail(job_id, purpose="finished")
         self.refresh_job_history()
 
-    def describe_job(self, job: ImportJob) -> str:
-        """Return one compact status sentence for Activity and tray views."""
+    def describe_job(self, job: ImportJob, *, for_display: bool = True) -> str:
+        """Return an import summary with stable counters and source identity.
+
+        Args:
+            job (ImportJob): Selected durable import job.
+            for_display (bool): Translate presentation text for the Activity view.
+
+        Returns:
+            str: Compact localized UI text or source-language diagnostics.
+        """
+        translate = gettext if for_display else gettext_noop
         counts = job.counts()
         progress = f"{self.format_bytes(job.bytes_sent)} / {self.format_bytes(job.bytes_total)}"
         if job.started_at and not job.finished_at:
@@ -13064,26 +13387,40 @@ class WatcherApp:
             rate = job.bytes_sent / elapsed
             if rate > 0:
                 remaining = max(0, job.bytes_total - job.bytes_sent)
-                progress += f" at {self.format_bytes(int(rate))}/s, ETA {int(remaining / rate)}s"
-        return (
-            f"{job.source_kind}: {job.source_label} | target {job.target_gallery_label} | "
-            f"confirmed {counts['uploaded']}, duplicates {counts['duplicates']}, failed {counts['failed']}, "
-            f"cancelled {counts['cancelled']}, active {counts['active']} | {progress}"
+                rate_message = gettext_noop(" at {rate}/s, ETA {seconds}s")
+                progress += translate(rate_message).format(
+                    rate=self.format_bytes(int(rate)), seconds=int(remaining / rate),
+                )
+        summary = gettext_noop(
+            "{kind}: {source} | target {gallery} | "
+            "confirmed {confirmed}, duplicates {duplicates}, failed {failed}, "
+            "cancelled {cancelled}, active {active} | {progress}"
+        )
+        return translate(summary).format(
+            kind=translate(job.source_kind), source=job.source_label,
+            gallery=job.target_gallery_label, confirmed=counts["uploaded"],
+            duplicates=counts["duplicates"], failed=counts["failed"],
+            cancelled=counts["cancelled"], active=counts["active"], progress=progress,
         )
 
 
     def refresh_manual_file_label(self) -> None:
         """
         Refresh the visible manual selection count.
+
+        Returns:
+            None: Publishes the current source without changing the job.
         """
         if self.manual_paths:
-            self.manual_selection_var.set(f"Files: {len(self.manual_paths)} selected")
+            self.manual_selection_var.set(gettext("Files: {manual_path_count} selected").format(
+                manual_path_count=len(self.manual_paths),
+            ))
         elif self.manual_folder is not None:
-            self.manual_selection_var.set("Folder: " + str(self.manual_folder))
+            self.manual_selection_var.set(gettext("Folder: ") + str(self.manual_folder))
         elif self.manual_zip is not None:
-            self.manual_selection_var.set("ZIP: " + str(self.manual_zip))
+            self.manual_selection_var.set(gettext("ZIP: ") + str(self.manual_zip))
         else:
-            self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
+            self.manual_selection_var.set(gettext("Choose files, a folder, or a ZIP archive"))
 
 
     def saved_linked_mode_selected(self) -> bool:
@@ -13207,15 +13544,15 @@ class WatcherApp:
                 and existing work permit the change.
         """
         if getattr(self, '_ordinary_restart_closing', False) is True:
-            return 'Wait for the Watcher restart checkpoint to finish.'
+            return gettext('Wait for the Watcher restart checkpoint to finish.')
         if isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
-            return 'Finish the current Watcher capture before changing its gallery.'
+            return gettext('Finish the current Watcher capture before changing its gallery.')
         if self.background_work_active() or self.flights.is_alive() or self.flights.busy():
-            return 'Wait for the current Watcher, import or flight work to stop.'
+            return gettext('Wait for the current Watcher, import or flight work to stop.')
         try:
             view = self.mode_owner.view()
         except ModeCoordinatorError:
-            return 'Upload settings could not be verified. Restart WinApp and try again.'
+            return gettext('Upload settings could not be verified. Restart WinApp and try again.')
 
         legacy_binding = connection_binding(
             normalize_upload_url(self.config.gallery_url), self.config.api_key,
@@ -13232,7 +13569,7 @@ class WatcherApp:
             # token has expired or WinApp has just restarted.
             if (self.flights.pending(binding=current_binding)
                     and desired_binding != current_binding):
-                return 'Continue the current uploads in Watcher before changing the upload gallery.'
+                return gettext('Continue the current uploads in Watcher before changing the upload gallery.')
             # An accepted import retains its binding across restarts. Do not
             # replace its destination, but allow reconnecting to that same
             # exact target to review and explicitly recover incomplete work.
@@ -13247,11 +13584,11 @@ class WatcherApp:
                     bindings, desired_binding,
                 )
                 if result is not True:
-                    return 'Review unfinished imports in Activity before changing the upload target.'
+                    return gettext('Review unfinished imports in Activity before changing the upload target.')
         except UploadStateTooLargeError:
-            return 'Local upload history exceeds the safe size limit. Review Activity.'
+            return gettext('Local upload history exceeds the safe size limit. Review Activity.')
         except (OSError, ValueError, RuntimeError):
-            return 'Local upload history could not be verified. Review Activity.'
+            return gettext('Local upload history could not be verified. Review Activity.')
         return None
 
     def linked_target_changed(self) -> None:
@@ -13269,34 +13606,36 @@ class WatcherApp:
             self.current_job = None
             self.start_import_button.configure(state='disabled')
             self.manual_preflight_var.set(
-                'Gallery connection changed. Run import preflight again.',
+                gettext('Gallery connection changed. Run import preflight again.'),
             )
         target = self.linking_manager.selected_upload_target()
         if target is not None:
             self._verified_legacy_gallery = None
-            self.connection_status_var.set('Ready for uploads')
-            self.connection_detail_var.set(
-                'Choose a folder in Watcher or add files in Import.',
+            WatcherApp._publish_connection_text(self, "status", gettext_noop('Ready for uploads'))
+            WatcherApp._publish_connection_text(
+                self, "detail", gettext_noop('Choose a folder in Watcher or add files in Import.'),
             )
-            self.gallery_label_var.set('Target gallery: ' + target.title)
+            self.gallery_label_var.set(gettext('Target gallery: ') + target.title)
             self.gallery_title_var.set(target.title)
         elif self.linking_manager.linked_upload_mode_selected():
             self._verified_legacy_gallery = None
-            self.connection_status_var.set('Reconnect to upload')
-            self.connection_detail_var.set('The selected upload gallery needs a new link.')
-            self.gallery_label_var.set('Target gallery: unknown')
+            WatcherApp._publish_connection_text(self, "status", gettext_noop('Reconnect to upload'))
+            WatcherApp._publish_connection_text(
+                self, "detail", gettext_noop('The selected upload gallery needs a new link.'),
+            )
+            self.gallery_label_var.set(gettext('Target gallery: unknown'))
             self.gallery_title_var.set('')
         else:
             if self._restore_verified_legacy_gallery():
-                self.connection_status_var.set('Connected')
-                self.connection_detail_var.set(
-                    'Authenticated endpoint available: '
-                    + normalize_upload_url(self.config.gallery_url),
+                WatcherApp._publish_connection_text(self, "status", gettext_noop('Connected'))
+                WatcherApp._publish_connection_text(
+                    self, "detail", gettext_noop('Authenticated endpoint available: {endpoint}'),
+                    endpoint=normalize_upload_url(self.config.gallery_url),
                 )
             else:
-                self.connection_status_var.set('Not tested')
-                self.connection_detail_var.set(
-                    'Saved API-key connection selected.',
+                WatcherApp._publish_connection_text(self, "status", gettext_noop('Not tested'))
+                WatcherApp._publish_connection_text(
+                    self, "detail", gettext_noop('Saved API-key connection selected.'),
                 )
         self.refresh_connection_controls()
 
@@ -13316,10 +13655,10 @@ class WatcherApp:
                 or normalize_upload_url(self.gallery_url_var.get()) != current_url
                 or self.api_key_var.get().strip() != current_key):
             self._verified_legacy_gallery = None
-            self.gallery_label_var.set('Target gallery: unknown')
+            self.gallery_label_var.set(gettext('Target gallery: unknown'))
             self.gallery_title_var.set('')
             return False
-        self.gallery_label_var.set('Target gallery: ' + verified[2])
+        self.gallery_label_var.set(gettext('Target gallery: ') + verified[2])
         self.gallery_title_var.set(verified[3])
         return True
 
@@ -13342,7 +13681,7 @@ class WatcherApp:
             self._verified_legacy_gallery = None
             if (self.linking_manager.selected_upload_target() is None
                     and not self.linking_manager.linked_upload_mode_selected()):
-                self.gallery_label_var.set('Target gallery: unknown')
+                self.gallery_label_var.set(gettext('Target gallery: unknown'))
                 self.gallery_title_var.set('')
 
     def probe_linked_uncertain_upload(
@@ -13587,9 +13926,8 @@ class WatcherApp:
                     # verified installed-version transition plus an active API
                     # session with no potentially interrupted accepted upload.
                     inspection_stage = 'legacy_update_bridge'
-                    from uploader.update_helper import find_legacy_update_ticket
 
-                    ticket = find_legacy_update_ticket(
+                    ticket = update_helper.find_legacy_update_ticket(
                         APP_VERSION, self.updates.previous_version,
                         WATCHER_CONTINUATION_LIFETIME_SECONDS,
                     )
@@ -13780,7 +14118,7 @@ class WatcherApp:
                 if time.monotonic() >= self._update_resume_deadline:
                     self._update_resume_failed('saved_gallery_access_unavailable')
                     return
-                self.status_var.set('Restoring the approved Watcher connection…')
+                self.status_var.set(gettext('Restoring the approved Watcher connection…'))
                 self.root.after(
                     UPDATE_CONTINUATION_POLL_MS, self._continue_update_resume,
                 )
@@ -14008,7 +14346,7 @@ class WatcherApp:
                 self.refresh_watcher_action()
         else:
             self.status_var.set(
-                'Watcher access could not be closed. Review the saved session.',
+                gettext('Watcher access could not be closed. Review the saved session.'),
             )
 
     def _retry_update_continuation(self) -> bool:
@@ -14055,7 +14393,7 @@ class WatcherApp:
             # Never replace a key whose remote close has not been confirmed.
             self._close_update_resume_context_key()
             self.status_var.set(
-                'Closing previous Watcher access. Try again after it finishes.',
+                gettext('Closing previous Watcher access. Try again after it finishes.'),
             )
             return False
         if (record is None or lease is None or self.exiting
@@ -14226,8 +14564,10 @@ class WatcherApp:
                     'stage=resume; reason=saved_watcher_key_close_pending'
                 )
                 self.status_var.set(
-                    'Previous Watcher access is still being closed. Wait for '
-                    'confirmation, then resume Watcher.',
+                    gettext(
+                        "Previous Watcher access is still being closed. Wait for "
+                        "confirmation, then resume Watcher."
+                    ),
                 )
                 self.refresh_watcher_action()
                 return
@@ -14506,12 +14846,66 @@ class WatcherApp:
             unresolved = True
         if self.background_work_active() or unresolved or self.flights.is_alive():
             messagebox.showwarning(
-                "Connection",
-                "Finish or explicitly resolve current work before replacing "
-                "its gallery connection.",
+                gettext("Connection"),
+                gettext(
+                    "Finish or explicitly resolve current work before replacing "
+                    "its gallery connection."
+                ),
             )
             return False
         return True
+
+    def save_interface_language(self, _event: "tk.Event") -> None:
+        """Remember a language choice for the next WinApp session.
+
+        Args:
+            _event (tk.Event): Selection event from the Settings language field.
+
+        Returns:
+            None: Persists the selection and offers a safe restart, or restores
+                the last saved choice after a write failure.
+        """
+        selection = self.interface_language_var.get()
+        previous = self._saved_ui_language
+        language = next(
+            (code for code, name in LANGUAGE_NAMES.items() if name == selection),
+            previous,
+        )
+        if language == previous:
+            return
+        try:
+            save_ui_language(CONFIG_DIR, language)
+        except OSError:
+            self.interface_language_var.set(LANGUAGE_NAMES[previous])
+            messagebox.showerror(
+                gettext("Settings"),
+                gettext("Could not save the interface language."),
+                parent=self.root,
+            )
+            return
+        self._saved_ui_language = language
+        self.refresh_interface_restart()
+        if language == current_language():
+            return
+        if messagebox.askyesno(
+            gettext("Restart WinApp"),
+            gettext("The language was saved. Restart WinApp now to apply it?"),
+            parent=self.root,
+            yes_label=gettext("Restart now"),
+            no_label=gettext("Later"),
+        ):
+            self.close(restart=True)
+
+    def refresh_interface_restart(self) -> None:
+        """Expose the retry action while the saved choice differs from the UI.
+
+        Returns:
+            None: Shows or hides the pending restart controls in Settings.
+        """
+        if self._saved_ui_language != current_language():
+            self.interface_language_pending.grid()
+        else:
+            self.interface_language_pending.grid_remove()
 
     def save_startup_preference(self) -> None:
         """Save the startup switch without admitting unrelated unsaved fields.
@@ -14533,7 +14927,7 @@ class WatcherApp:
             config = self._save_owned_config(config)
         except (OSError, ModeCoordinatorError) as exc:
             self.start_with_windows_var.set(self.config.start_with_windows)
-            messagebox.showerror("Configuration error", str(exc), parent=self.root)
+            messagebox.showerror(gettext("Configuration error"), str(exc), parent=self.root)
             return
         self.config = config
         self.apply_startup_registration()
@@ -14552,16 +14946,16 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             self.experimental_canvas_gallery_renderer_var.set(previous)
             messagebox.showwarning(
-                "Configuration",
-                "Finish the active update before changing this setting.",
+                gettext("Configuration"),
+                gettext("Finish the active update before changing this setting."),
                 parent=self.root,
             )
             return
         if self.api_key_revoke_running:
             self.experimental_canvas_gallery_renderer_var.set(previous)
             messagebox.showwarning(
-                "Configuration",
-                "Wait for API-key revocation to finish before changing this setting.",
+                gettext("Configuration"),
+                gettext("Wait for API-key revocation to finish before changing this setting."),
                 parent=self.root,
             )
             return
@@ -14573,7 +14967,7 @@ class WatcherApp:
         except Exception as exc:  # noqa: BLE001
             self.experimental_canvas_gallery_renderer_var.set(previous)
             messagebox.showerror(
-                "Configuration error", str(exc), parent=self.root,
+                gettext("Configuration error"), str(exc), parent=self.root,
             )
             return
         self.config = saved
@@ -14582,9 +14976,11 @@ class WatcherApp:
             "success",
         )
         messagebox.showinfo(
-            "Restart required",
-            "The setting was saved. Restart the application for the "
-            "experimental Canvas gallery renderer to take effect.",
+            gettext("Restart required"),
+            gettext(
+                "The setting was saved. Restart the application for the "
+                "experimental Canvas gallery renderer to take effect."
+            ),
             parent=self.root,
         )
 
@@ -14602,9 +14998,11 @@ class WatcherApp:
                 "Windows startup registration failed: " + str(exc), "warning",
             )
             messagebox.showwarning(
-                "Windows startup",
-                "Settings were saved, but Windows startup could not be "
-                "updated. Save settings again to retry.\n\n" + str(exc),
+                gettext("Windows startup"),
+                gettext(
+                    "Settings were saved, but Windows startup could not be "
+                    "updated. Save settings again to retry.\n\n"
+                ) + str(exc),
                 parent=self.root,
             )
 
@@ -14618,7 +15016,7 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return False
         if self.api_key_revoke_running:
-            messagebox.showwarning("Configuration", "Wait for API-key revocation to finish before changing connection credentials.")
+            messagebox.showwarning(gettext("Configuration"), gettext("Wait for API-key revocation to finish before changing connection credentials."))
             return False
         try:
             config = self.current_config()
@@ -14631,7 +15029,7 @@ class WatcherApp:
             self.refresh_connection_controls()
             return True
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Configuration error", str(exc))
+            messagebox.showerror(gettext("Configuration error"), gettext(str(exc)))
             return False
 
     def save_and_test_connection(self) -> None:
@@ -14694,7 +15092,7 @@ class WatcherApp:
                 progress.grid_remove()
         button = getattr(self, "watcher_action_button", None)
         if button is not None:
-            caption = "Starting Watcher…" if active else "▶  Start Watcher"
+            caption = gettext("Starting Watcher…") if active else "▶  Start Watcher"
             state = "disabled" if active else "normal"
             _publish_watcher_value(
                 self, "watch_action", button, (caption, state),
@@ -14755,7 +15153,7 @@ class WatcherApp:
         if self._contextual_watch_target is not None:
             self._set_watch_start_activity(False)
             self.release_contextual_watcher()
-            self.status_var.set("Closing previous Watcher access. Try again when it finishes.")
+            self.status_var.set(gettext("Closing previous Watcher access. Try again when it finishes."))
             return
         folder = self.watched_folder_var.get().strip()
         try:
@@ -14772,7 +15170,7 @@ class WatcherApp:
             except OSError:
                 self._set_watch_start_activity(False)
                 return
-        self.status_var.set("Preparing the Watcher connection…")
+        self.status_var.set(gettext("Preparing the Watcher connection…"))
         generation = getattr(self, '_update_resume_generation', 0)
 
         def allowed() -> bool:
@@ -14907,7 +15305,7 @@ class WatcherApp:
             has_folder = False
         if not has_folder:
             messagebox.showinfo(
-                "Watch folder", "Choose a folder to watch before starting.",
+                gettext("Watch folder"), gettext("Choose a folder to watch before starting."),
                 parent=self.root,
             )
             return
@@ -14945,17 +15343,17 @@ class WatcherApp:
                 config = self._save_owned_config(config)
                 self.config = config
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Configuration error", str(exc))
+            messagebox.showerror(gettext("Configuration error"), str(exc))
             return
 
         if (linked_target is None
                 and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
-            messagebox.showerror("Connection", "Gallery URL and API key are required before starting the watcher.")
+            messagebox.showerror(gettext("Connection"), gettext("Gallery URL and API key are required before starting the watcher."))
             return
 
         self._set_watch_start_activity(True, "Reading existing screenshots…")
-        self.watch_ignored_var.set("Ignored at startup: checking existing files…")
-        self.watch_last_scan_var.set("Last scan: preparing")
+        self.watch_ignored_var.set(gettext("Ignored at startup: checking existing files…"))
+        self.watch_last_scan_var.set(gettext("Last scan: preparing"))
         self.utc_sync.stop()
         try:
             captured = capture_worker_config(config)
@@ -14979,7 +15377,7 @@ class WatcherApp:
                 self.worker._linked_lease.release()
             self.flights.stop()
             self._watch_start_failed("Watcher could not prepare its local queue. Check the error and retry.")
-            messagebox.showerror("Watcher state", str(exc))
+            messagebox.showerror(gettext("Watcher state"), str(exc))
             self.worker = None
             return
         if contextual_target is not None:
@@ -15197,7 +15595,7 @@ class WatcherApp:
         except (OSError, ModeCoordinatorError) as exc:
             self.sync_utc_time_var.set(saved.sync_utc_time)
             self.refresh_utc_sync()
-            messagebox.showerror("UTC synchronization", str(exc))
+            messagebox.showerror(gettext("UTC synchronization"), str(exc))
             return
         self.refresh_utc_sync()
 
@@ -15240,7 +15638,7 @@ class WatcherApp:
         if (not flight_detected
                 and status.startswith("UTC sync awaiting simulator:")):
             status = ""
-        _publish_watcher_text(self, "utc_sync_status_var", status)
+        _publish_watcher_text(self, "utc_sync_status_var", utc_status_caption(status))
 
     def start_manual_upload(self) -> None:
         """
@@ -15255,19 +15653,19 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting manual import.")
+            messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before starting manual import."))
             return
         if self.manual_worker and self.manual_worker.is_alive():
             self.write_log("Manual import is already running.")
             return
         if self.preflight_worker and self.preflight_worker.is_alive():
-            messagebox.showwarning("Import", "Preflight is still running. Review the result before starting the import.")
+            messagebox.showwarning(gettext("Import"), gettext("Preflight is still running. Review the result before starting the import."))
             return
         pending_detail = getattr(self, "_import_detail_request", None)
         if pending_detail is not None:
             return
         if self.current_job is None:
-            messagebox.showwarning("Import", "Choose a source and complete preflight first.")
+            messagebox.showwarning(gettext("Import"), gettext("Choose a source and complete preflight first."))
             return
 
         try:
@@ -15278,11 +15676,11 @@ class WatcherApp:
             config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Configuration error", str(exc))
+            messagebox.showerror(gettext("Configuration error"), str(exc))
             return
         if (linked_target is None
                 and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
-            messagebox.showerror("Connection", "Gallery URL and API key are required before starting an import.")
+            messagebox.showerror(gettext("Connection"), gettext("Gallery URL and API key are required before starting an import."))
             return
 
         paths = [
@@ -15291,7 +15689,7 @@ class WatcherApp:
             if item.state in RECOVERABLE_ITEM_STATES and Path(item.path).is_file()
         ]
         if not paths:
-            messagebox.showinfo("Import", "This job has no queued or recoverable files to upload.")
+            messagebox.showinfo(gettext("Import"), gettext("This job has no queued or recoverable files to upload."))
             self.render_preflight_plan(self.manual_plan) if self.manual_plan is not None else None
             return
         self.launch_manual_job(self.current_job, paths, config, linked_target)
@@ -15299,14 +15697,20 @@ class WatcherApp:
     def stop_manual_upload(self) -> None:
         """
         Request cancellation of the current manual import.
+
+        Returns:
+            None: Signals cancellation and refreshes the visible controls.
         """
         if self.manual_worker and self.manual_worker.is_alive():
             self.manual_worker.stop()
-            self.manual_status_var.set("Cancelling after in-flight requests")
+            self.manual_status_var.set(gettext("Cancelling after in-flight requests"))
             self.import_activity_var.set("Import: cancelling")
             self.cancel_import_button.configure(state="disabled")
             self.write_log("Manual import cancellation requested.", "warning")
-            self.record_activity("warning", "Manual import cancellation requested.", "import", job_id=self.current_job.id if self.current_job else "")
+            self.record_activity(
+                "warning", gettext_noop("Manual import cancellation requested."),
+                "import", job_id=self.current_job.id if self.current_job else "",
+            )
         self.refresh_revoke_button_state()
 
     def repair_semantic_ai_dependencies(self) -> None:
@@ -15315,20 +15719,25 @@ class WatcherApp:
 
         PyTorch and Transformers are large packages and may also cause model
         downloads later. Installation is therefore explicit and confirmed.
+
+        Returns:
+            None: Starts confirmed installation or shows the current result.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if getattr(sys, "frozen", False):
             _ok, output = install_semantic_ai_dependencies_for_current_runtime()
-            messagebox.showinfo("Local AI module", output)
+            messagebox.showinfo(gettext("Local AI module"), gettext(output))
             return
         if self.semantic_ai_install_running:
             self.write_log("Optional local AI module dependency installation is already running.")
             return
         if not messagebox.askyesno(
-            "Install local AI module",
-            "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. "
-            "Using those backends can later download large model files. Continue?",
+            gettext("Install local AI module"),
+            gettext(
+                "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. "
+                "Using those backends can later download large model files. Continue?"
+            ),
         ):
             return
 
@@ -15362,13 +15771,15 @@ class WatcherApp:
             return
         if self.linking_manager.linked_upload_mode_selected():
             messagebox.showwarning(
-                "AI metadata worker",
-                "Linked gallery upload does not grant AI access. Switch "
-                "explicitly to the saved API-key connection to use this worker.",
+                gettext("AI metadata worker"),
+                gettext(
+                    "Linked gallery upload does not grant AI access. Switch "
+                    "explicitly to the saved API-key connection to use this worker."
+                ),
             )
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting the AI metadata worker.")
+            messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before starting the AI metadata worker."))
             return
         if self.ai_worker and self.ai_worker.is_alive():
             self.write_log("AI metadata worker is already running.")
@@ -15381,14 +15792,14 @@ class WatcherApp:
             config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Configuration error", str(exc))
+            messagebox.showerror(gettext("Configuration error"), str(exc))
             return
 
         if not config.ai_worker_enabled:
-            messagebox.showwarning("AI metadata worker", "Enable the AI metadata worker before starting it.")
+            messagebox.showwarning(gettext("AI metadata worker"), gettext("Enable the AI metadata worker before starting it."))
             return
         if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
-            messagebox.showerror("Connection", "Gallery URL and API key are required before starting the AI worker.")
+            messagebox.showerror(gettext("Connection"), gettext("Gallery URL and API key are required before starting the AI worker."))
             return
 
         self.ai_worker_stop_requested = False
@@ -15398,10 +15809,10 @@ class WatcherApp:
             captured, self.events, (self.mode_owner, config_port),
         )
         self.ai_worker.start()
-        self.ai_status_var.set("AI metadata worker running")
+        self.ai_status_var.set(gettext("AI metadata worker running"))
         self.ai_activity_var.set("AI: running")
         self.write_log("AI metadata worker started.", "success")
-        self.record_activity("success", "AI metadata worker started.", "ai")
+        self.record_activity("success", gettext_noop("AI metadata worker started."), "ai")
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
@@ -15416,12 +15827,35 @@ class WatcherApp:
         if self.ai_worker and self.ai_worker.is_alive():
             self.ai_worker.stop()
             self.ai_worker_stop_requested = True
-            self.ai_status_var.set("AI metadata worker stopping")
+            self.ai_status_var.set(gettext("AI metadata worker stopping"))
             self.ai_activity_var.set("AI: stopping")
         else:
             self.ai_activity_var.set("AI: stopped")
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
+
+    def _publish_connection_text(
+        self, field: Literal["status", "detail"], message: str, **fields: str,
+    ) -> None:
+        """Publish a connection caption and retain its stable support text.
+
+        Args:
+            field (Literal["status", "detail"]): Caption being updated.
+            message (str): Source-language caption or received diagnostic text.
+            **fields (str): Named display values such as a verified endpoint.
+
+        Returns:
+            None: Retains source text separately from the displayed caption.
+        """
+        evidence = getattr(self, "_connection_diagnostic", None)
+        if not isinstance(evidence, dict):
+            self._connection_diagnostic = evidence = {}
+        evidence[field] = message.format_map(fields) if fields else message
+        caption = gettext(message)
+        if fields:
+            caption = caption.format_map(fields)
+        variable = self.connection_status_var if field == "status" else self.connection_detail_var
+        variable.set(caption)
 
     def refresh_connection_controls(self) -> None:
         """Refresh key settings and the shared Watcher/Import session actions.
@@ -15437,26 +15871,37 @@ class WatcherApp:
         key_present = bool(current_key)
         credentials_saved = current_url == saved_url and current_key == saved_key
         if not key_present:
-            key_status = "API key not configured"
+            key_status = gettext("API key not configured")
         elif credentials_saved:
-            key_status = "API key configured and saved"
+            key_status = gettext("API key configured and saved")
         else:
-            key_status = "API key or gallery URL changed, not saved"
+            key_status = gettext("API key or gallery URL changed, not saved")
         _publish_watcher_text(self, "api_key_status_var", key_status)
         blockers = self.api_key_request_blockers()
         if self.api_key_revoke_running:
-            blocker_text = (
+            blocker_text = gettext(
                 "Finishing accepted work. Open Flight progress for the current "
                 "stage; the key is retained until required work is confirmed."
             )
         elif blockers:
-            blocker_text = "Revoke will stop and finish: " + "; ".join(blockers) + "."
+            blocker_text = gettext("Revoke will stop and finish: {operations}.").format(
+                operations="; ".join(blockers),
+            )
         elif key_present and not credentials_saved:
-            blocker_text = "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
+            blocker_text = gettext(
+                "Revocation unavailable because the connection fields contain "
+                "unsaved changes. Save or restore the saved connection first."
+            )
         elif key_present:
-            blocker_text = "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
+            blocker_text = gettext(
+                "API key can be revoked now. Revocation is permanent for this key "
+                "and removes it from the local configuration after server confirmation."
+            )
         else:
-            blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
+            blocker_text = gettext(
+                "Paste a gallery-scoped API key generated in PHP Gallery Admin "
+                "before testing or uploading."
+            )
         _publish_watcher_text(self, "revoke_blocker_var", blocker_text)
         enabled = key_present and credentials_saved
         action = self.flight_action_state()
@@ -15590,20 +16035,24 @@ class WatcherApp:
                 reports revocation, unreadable clipboard or absent input.
         """
         if self.api_key_revoke_running:
-            messagebox.showwarning("API key", "Wait for API-key revocation to finish before replacing the key.")
+            messagebox.showwarning(gettext("API key"), gettext("Wait for API-key revocation to finish before replacing the key."))
             return
         try:
             value = str(self.root.clipboard_get()).strip()
         except Exception:  # noqa: BLE001
-            messagebox.showwarning("API key", "The clipboard does not contain text.")
+            messagebox.showwarning(gettext("API key"), gettext("The clipboard does not contain text."))
             return
         if not value:
-            messagebox.showwarning("API key", "The clipboard does not contain an API key.")
+            messagebox.showwarning(gettext("API key"), gettext("The clipboard does not contain an API key."))
             return
         self.api_key_var.set(value)
-        _publish_watcher_text(self, "api_key_status_var", "API key entered but not saved")
-        self.connection_status_var.set("Not tested")
-        self.connection_detail_var.set("API key changed. Save and test the connection before starting work.")
+        _publish_watcher_text(self, "api_key_status_var", gettext("API key entered but not saved"))
+        WatcherApp._publish_connection_text(self, "status", gettext_noop("Not tested"))
+        WatcherApp._publish_connection_text(
+            self, "detail", gettext_noop(
+                "API key changed. Save and test the connection before starting work."
+            ),
+        )
         self.refresh_connection_controls()
 
     def link_gallery(self) -> None:
@@ -15793,7 +16242,7 @@ class WatcherApp:
             return
         self.restore_from_tray()
         dialog = EmbeddedWindow(self.root)
-        dialog.title("Gallery connection and API key")
+        dialog.title(gettext("Gallery connection and API key"))
         dialog.transient(self.root)
         dialog.geometry(CONNECTION_DIALOG_GEOMETRY)
         dialog.minsize(*CONNECTION_DIALOG_MINIMUM)
@@ -15806,17 +16255,17 @@ class WatcherApp:
         url_var = tk.StringVar(value=self.gallery_url_var.get())
         key_var = tk.StringVar(value=self.api_key_var.get())
         reveal_var = tk.BooleanVar(value=False)
-        ttk.Label(frame, text="PHP Gallery connection", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        ttk.Label(frame, text=gettext("PHP Gallery connection"), style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
         ttk.Label(
             frame,
-            text="Use a gallery-scoped API key from Admin. Your password is not entered into this app.",
+            text=gettext("Use a gallery-scoped API key from Admin. Your password is not entered into this app."),
             wraplength=520,
             style="Muted.TLabel",
         ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 8))
-        ttk.Label(frame, text="Gallery URL").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Label(frame, text=gettext("Gallery URL")).grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
         url_entry = ttk.Entry(frame, textvariable=url_var, width=70)
         url_entry.grid(row=2, column=1, columnspan=3, sticky="ew", pady=6)
-        ttk.Label(frame, text="API key").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Label(frame, text=gettext("API key")).grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
         key_entry = ttk.Entry(frame, textvariable=key_var, show="*", width=54)
         key_entry.grid(row=3, column=1, sticky="ew", pady=6)
 
@@ -15837,16 +16286,16 @@ class WatcherApp:
             try:
                 value = str(dialog.clipboard_get()).strip()
             except Exception:  # noqa: BLE001
-                messagebox.showwarning("API key", "The clipboard does not contain text.", parent=dialog)
+                messagebox.showwarning(gettext("API key"), gettext("The clipboard does not contain text."), parent=dialog)
                 return
             if not value:
-                messagebox.showwarning("API key", "The clipboard does not contain an API key.", parent=dialog)
+                messagebox.showwarning(gettext("API key"), gettext("The clipboard does not contain an API key."), parent=dialog)
                 return
             key_var.set(value)
 
-        ttk.Checkbutton(frame, text="Reveal", variable=reveal_var, command=toggle_reveal).grid(row=3, column=2, padx=6, pady=6)
-        Button(frame, text="Paste", command=paste_key).grid(row=3, column=3, pady=6)
-        status = "A key is currently stored locally." if self.api_key_var.get().strip() else "No API key is currently stored."
+        ttk.Checkbutton(frame, text=gettext("Reveal"), variable=reveal_var, command=toggle_reveal).grid(row=3, column=2, padx=6, pady=6)
+        Button(frame, text=gettext("Paste"), command=paste_key).grid(row=3, column=3, pady=6)
+        status = gettext("A key is currently stored locally.") if self.api_key_var.get().strip() else gettext("No API key is currently stored.")
         ttk.Label(frame, text=status, style="Muted.TLabel").grid(row=4, column=1, columnspan=3, sticky="w", pady=(0, 8))
 
         def apply_values(test_after: bool) -> None:
@@ -15861,15 +16310,15 @@ class WatcherApp:
             if self.updates.blocked():
                 return
             if self.api_key_revoke_running:
-                messagebox.showwarning("Connection", "Wait for API-key revocation to finish before changing credentials.", parent=dialog)
+                messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before changing credentials."), parent=dialog)
                 return
             url = url_var.get().strip()
             key = key_var.get().strip()
             if not normalize_upload_url(url):
-                messagebox.showerror("Connection", "Enter a valid HTTP(S) Gallery URL or upload endpoint.", parent=dialog)
+                messagebox.showerror(gettext("Connection"), gettext("Enter a valid HTTP(S) Gallery URL or upload endpoint."), parent=dialog)
                 return
             if not key:
-                messagebox.showerror("Connection", "Paste the gallery-scoped API key before saving.", parent=dialog)
+                messagebox.showerror(gettext("Connection"), gettext("Paste the gallery-scoped API key before saving."), parent=dialog)
                 return
             canonical_url = normalize_upload_url(url)
             self.gallery_url_var.set(canonical_url)
@@ -15877,14 +16326,19 @@ class WatcherApp:
             if not self.save_config():
                 return
             dialog.destroy()
-            self.connection_status_var.set("Not tested")
-            self.connection_detail_var.set("Connection saved. Test authentication before starting work." if not test_after else "Connection saved. Testing authentication...")
+            WatcherApp._publish_connection_text(self, "status", gettext_noop("Not tested"))
+            WatcherApp._publish_connection_text(
+                self, "detail", gettext_noop("Connection saved. Testing authentication...")
+                if test_after else gettext_noop(
+                    "Connection saved. Test authentication before starting work."
+                ),
+            )
             self.refresh_connection_controls()
             if test_after:
                 self.test_connection()
 
         revoke = Button(
-            frame, text="Revoke saved API key...",
+            frame, text=gettext("Revoke saved API key..."),
             command=lambda: (dialog.destroy(), self.revoke_api_key()),
         )
         revoke.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 3))
@@ -15900,26 +16354,26 @@ class WatcherApp:
                 """
                 refusal = self.linking_manager.use_saved_api_key()
                 if refusal is not None:
-                    messagebox.showwarning("Upload via API key", refusal, parent=dialog)
+                    messagebox.showwarning(gettext("Upload via API key"), refusal, parent=dialog)
                 else:
                     dialog.destroy()
 
             Button(
-                frame, text="Use saved API key", command=use_saved_key,
+                frame, text=gettext("Use saved API key"), command=use_saved_key,
                 style="Compact.TButton",
             ).grid(row=5, column=2, columnspan=2, sticky="e", pady=(0, 3))
         buttons = ttk.Frame(frame, style="Card.TFrame")
         buttons.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(3, 0))
         buttons.columnconfigure(0, weight=1)
         Button(
-            buttons, text="Cancel", command=dialog.destroy,
+            buttons, text=gettext("Cancel"), command=dialog.destroy,
         ).grid(row=0, column=1, padx=(0, 8))
         Button(
-            buttons, text="Save", command=lambda: apply_values(False),
+            buttons, text=gettext("Save"), command=lambda: apply_values(False),
         ).grid(row=0, column=2, padx=(0, 8))
         Button(
             buttons,
-            text="✓  Save & Test",
+            text=gettext("✓  Save & Test"),
             command=lambda: apply_values(True),
             style="Primary.TButton",
         ).grid(row=0, column=3)
@@ -16027,11 +16481,12 @@ class WatcherApp:
         self.config = cleared_config
         self.api_key_var.set("")
         self._verified_legacy_gallery = None
-        self.connection_status_var.set("Not configured")
-        self.gallery_label_var.set("Target gallery: unknown")
+        WatcherApp._publish_connection_text(self, "status", gettext_noop("Not configured"))
+        self.gallery_label_var.set(gettext("Target gallery: unknown"))
         self.gallery_title_var.set("")
-        message = self.flights.text("flight_abandoned")
-        self.connection_detail_var.set(message)
+        message = tr("en", "flight_abandoned")
+        WatcherApp._publish_connection_text(self, "detail", message)
+        self.connection_detail_var.set(self.flights.text("flight_abandoned"))
         self.write_log(message, "system")
         self.record_activity("info", message, "system")
         self.refresh_connection_controls()
@@ -16062,7 +16517,7 @@ class WatcherApp:
                 replace(self.config, api_key=''), completed_work=work,
             )
         except Exception:  # noqa: BLE001
-            detail = 'Server revocation confirmed; local key cleanup needs review.'
+            detail = gettext_noop('Server revocation confirmed; local key cleanup needs review.')
             retryable = False
             if work is not None:
                 try:
@@ -16071,20 +16526,24 @@ class WatcherApp:
                 except RuntimeError:
                     pass
             operation.confirm_local_cleanup(detail, retryable=retryable)
-            self.connection_detail_var.set(detail)
+            WatcherApp._publish_connection_text(self, "detail", detail)
             self.write_log(detail, 'error')
             self.record_activity('error', detail, 'system')
         else:
             self.config = cleared
             self.api_key_var.set('')
             self._verified_legacy_gallery = None
-            self.connection_status_var.set('Not configured')
-            self.gallery_label_var.set('Target gallery: unknown')
+            WatcherApp._publish_connection_text(self, "status", gettext_noop('Not configured'))
+            self.gallery_label_var.set(gettext('Target gallery: unknown'))
             self.gallery_title_var.set('')
-            self.connection_detail_var.set('API key revoked and removed from local configuration.')
+            WatcherApp._publish_connection_text(
+                self, "detail", gettext_noop('API key revoked and removed from local configuration.'),
+            )
             operation.confirm_local_cleanup()
             self.write_log('Gallery API key revoked.', 'success')
-            self.record_activity('success', 'Gallery API key revoked.', 'system')
+            self.record_activity(
+                'success', gettext_noop('Gallery API key revoked.'), 'system',
+            )
         self.api_key_revoke_running = operation.local_cleanup_pending
         self.api_key_revoke_thread = operation if operation.local_cleanup_pending else None
         self.refresh_connection_controls()
@@ -16102,15 +16561,15 @@ class WatcherApp:
             or self.api_key_var.get().strip() != self.config.api_key.strip()
         ):
             messagebox.showwarning(
-                "Revoke API key",
-                "Save or restore connection fields before revoking the saved key.",
+                gettext("Revoke API key"),
+                gettext("Save or restore connection fields before revoking the saved key."),
             )
             return
         if not normalize_upload_url(self.config.gallery_url) or not self.config.api_key:
-            messagebox.showwarning("Revoke API key", "A saved connection is required.")
+            messagebox.showwarning(gettext("Revoke API key"), gettext("A saved connection is required."))
             return
         self._verified_legacy_gallery = None
-        self.gallery_label_var.set("Target gallery: unknown")
+        self.gallery_label_var.set(gettext("Target gallery: unknown"))
         self.gallery_title_var.set("")
         self.flights.begin(True)
 
@@ -16177,7 +16636,7 @@ class WatcherApp:
             self._update_context_target = worker.linked_target if contextual else None
             worker.request_update_pause()
             self._set_watcher_recording(False)
-            self.status_var.set('Finishing the current upload before updating…')
+            self.status_var.set(gettext('Finishing the current upload before updating…'))
         self.flights.stop()
         self.utc_sync.stop()
         if self.preflight_worker is not None and self.preflight_worker.is_alive():
@@ -16250,13 +16709,12 @@ class WatcherApp:
             ValueError: The checkpoint, helper or selected version changed.
             OSError: The verified checkpoint cannot be persisted.
         """
-        from uploader.update_helper import load_ticket, bind_capture_resume
 
         if not self._update_checkpoint_ready:
             raise ValueError('The update checkpoint is not ready.')
-        selected = load_ticket(ticket)
+        selected = update_helper.load_ticket(ticket)
         record = self._update_continuation
-        bind_capture_resume(ticket, record is not None)
+        update_helper.bind_capture_resume(ticket, record is not None)
         if record is not None:
             lease = self.flights.lease
             if lease is None or selected.target_version != record.target_version:
@@ -16367,12 +16825,13 @@ class WatcherApp:
                 'warning',
             )
 
-    def close(self, *, for_update: bool = False) -> None:
+    def close(self, *, for_update: bool = False, restart: bool = False) -> None:
         """Coordinate shutdown while preserving update and import state.
 
         Args:
             for_update (bool): Terminate after a durable checkpoint, released
                 upload writers and the external helper's readiness acknowledgement.
+            restart (bool): Relaunch WinApp only after a safe ordinary shutdown.
         Returns:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
@@ -16413,8 +16872,19 @@ class WatcherApp:
                     os.getpid(),
                 )
                 os._exit(0)
-        if getattr(self, "updates", None) is not None and self.updates.request_close():
-            return
+        updates = getattr(self, "updates", None)
+        if updates is not None:
+            # A language restart can be retried from Settings. An active
+            # updater keeps its own operation and close intent undisturbed.
+            if restart and (updates.busy or updates.gate.active):
+                messagebox.showwarning(
+                    gettext("Restart WinApp"),
+                    gettext("Wait for the update operation to finish before restarting."),
+                    parent=self.root,
+                )
+                return
+            if updates.request_close():
+                return
         self._prune_force_finished_workers()
         force_shutdown = any(
             worker.is_alive() and worker._queue is not None
@@ -16431,12 +16901,19 @@ class WatcherApp:
                 and (operation is None or not operation.server_request_sent)
             )
             messagebox.showwarning(
-                "Finishing current work",
-                "Choose Interrupt in the progress panel to pause uploads."
-                if can_interrupt else "Wait for the current operation to finish.",
+                gettext("Finishing current work"),
+                gettext("Choose Interrupt in the progress panel to pause uploads.")
+                if can_interrupt else gettext("Wait for the current operation to finish."),
             )
             return
         if self.exiting:
+            return
+        if restart and force_shutdown:
+            messagebox.showwarning(
+                gettext("Restart WinApp"),
+                gettext("Wait for the remaining work to finish before restarting."),
+                parent=self.root,
+            )
             return
         active_worker = self.worker
         active_capture = bool(
@@ -16449,9 +16926,27 @@ class WatcherApp:
         ordinary_prepared = (
             getattr(self, '_ordinary_restart_prepared', False) is True
         )
+        if restart and (
+            WatcherApp.watcher_reset_blocked(self)
+            or self.flights.busy()
+            or any(worker is not None and worker.is_alive() for worker in (
+                self.manual_worker, self.preflight_worker, self.ai_worker,
+                self.flights.dispatch_worker,
+            ))
+            or (not ordinary_prepared and not active_capture and (
+                (active_worker is not None and active_worker.is_alive())
+                or self.flights.is_alive()
+            ))
+        ):
+            messagebox.showwarning(
+                gettext("Restart WinApp"),
+                gettext("Wait for the remaining work to finish before restarting."),
+                parent=self.root,
+            )
+            return
         if (not for_update and not ordinary_prepared
                 and active_capture
-                and (self.worker.linked_target is not None
+                and (restart or self.worker.linked_target is not None
                      or self.mode_owner.view().state in LEGACY_UPLOAD_STATES)):
             if getattr(self, '_ordinary_restart_closing', False) is True:
                 return
@@ -16459,14 +16954,16 @@ class WatcherApp:
                 self.prepare_update_checkpoint(APP_VERSION)
             except (OSError, RuntimeError, ValueError):
                 messagebox.showwarning(
-                    "Watcher is still running",
-                    "The active Watcher could not be safely prepared for restart. "
-                    "Keep the app open and finish or stop Watcher first.",
+                    gettext("Watcher is still running"),
+                    gettext(
+                        "The active Watcher could not be safely prepared for restart. "
+                        "Keep the app open and finish or stop Watcher first."
+                    ),
                 )
                 return
             self._ordinary_restart_closing = True
             self.watcher_activity_var.set('Watch: finishing')
-            self.status_var.set('Saving the Watcher session before closing…')
+            self.status_var.set(gettext('Saving the Watcher session before closing…'))
             self.refresh_watcher_header()
             logging.info(
                 '[watcher-process] phase=checkpoint; reason=ordinary_quit; pid=%d',
@@ -16475,6 +16972,7 @@ class WatcherApp:
             self._ordinary_restart_thread = threading.Thread(
                 target=self._prepare_ordinary_restart_close,
                 name='PHPGalleryOrdinaryRestartCheckpoint', daemon=True,
+                kwargs={"restart": restart},
             )
             try:
                 self._ordinary_restart_thread.start()
@@ -16553,10 +17051,21 @@ class WatcherApp:
                 ". In-flight network work may still be returning, and durable import state is preserved."
             )
             self.write_log(message, "warning")
+            if restart:
+                self.exiting = False
+                self._sync_watcher_recording()
+                self._schedule_activity_drawer_refresh()
+                self._schedule_event_drain(WATCHER_EVENT_IDLE_POLL_MS)
+                messagebox.showwarning(
+                    gettext("Restart WinApp"),
+                    gettext("Wait for the remaining work to finish before restarting."),
+                    parent=self.root,
+                )
+                return
             if (not force_shutdown and self.tray_icon is not None
                     and messagebox.askyesno(
-                "Background work is still stopping",
-                message + "\n\nKeep the application running in the tray instead of forcing it closed?",
+                gettext("Background work is still stopping"),
+                message + gettext("\n\nKeep the application running in the tray instead of forcing it closed?"),
             )):
                 self.exiting = False
                 self.hide_to_tray()
@@ -16586,10 +17095,14 @@ class WatcherApp:
             '[watcher-process] phase=teardown; reason=%s; pid=%d; workers_pending=%d',
             reason, os.getpid(), len(still_running),
         )
+        self._restart_requested = restart
         self.root.destroy()
 
-    def _prepare_ordinary_restart_close(self) -> None:
+    def _prepare_ordinary_restart_close(self, *, restart: bool = False) -> None:
         """Persist clean restart consent after the active Watcher checkpoints.
+
+        Args:
+            restart (bool): Whether the Settings selection requested relaunch.
 
         Returns:
             None: Queues either a safe close event or a recoverable failure.
@@ -16613,7 +17126,7 @@ class WatcherApp:
             self._update_continuation = prepared
             prepared.save(lease)
             prepared.save(lease, ordinary_restart=True)
-            self.events.put({'kind': 'ordinary_restart_ready'})
+            self.events.put({'kind': 'ordinary_restart_ready', 'restart': restart})
         except (OSError, RuntimeError, TimeoutError, ValueError):
             self.events.put({'kind': 'ordinary_restart_failed'})
 
@@ -16625,7 +17138,14 @@ class WatcherApp:
         self.open_local_path(CONFIG_DIR)
 
     def open_local_path(self, path: Path) -> None:
-        """Open one local file/folder with the platform shell when possible."""
+        """Open one local file or folder with the platform shell when possible.
+
+        Args:
+            path (Path): Local file or directory the user chose to open.
+
+        Returns:
+            None: Opens the target or reports a shell failure in Activity.
+        """
         target = Path(path)
         try:
             if hasattr(os, "startfile"):
@@ -16643,10 +17163,14 @@ class WatcherApp:
         self.open_local_path(LOG_PATH)
 
     def open_watched_folder(self) -> None:
-        """Open the currently configured watch folder in Explorer."""
+        """Open the currently configured watch folder in the platform shell.
+
+        Returns:
+            None: Opens an existing folder or shows a selection warning.
+        """
         folder = Path(self.watched_folder_var.get().strip())
         if not folder.is_dir():
-            messagebox.showwarning("Watch folder", "Choose an existing folder first.")
+            messagebox.showwarning(gettext("Watch folder"), gettext("Choose an existing folder first."))
             return
         self.open_local_path(folder)
 
@@ -16678,13 +17202,15 @@ class WatcherApp:
         else:
             failures = self.current_job.counts()["failed"] if self.current_job is not None else 0
         update = (
-            f" | Update {self.update_available_version}"
+            " | " + gettext("Update {version}").format(version=self.update_available_version)
             if self.update_available_version is not None
             else ""
         )
-        summary = (
-            f"PHP Gallery uploader{update} | watch {watch} | "
-            f"import {importing} | AI {ai} | failures {failures}"
+        summary = gettext(
+            "PHP Gallery uploader{update} | watch {watch} | "
+            "import {importing} | AI {ai} | failures {failures}"
+        ).format(
+            update=update, watch=watch, importing=importing, ai=ai, failures=failures,
         )
         return summary[:TRAY_TOOLTIP_MAX_LENGTH]
 
@@ -16708,10 +17234,14 @@ class WatcherApp:
         self.api_key_entry.configure(show="" if visible else "*")
 
     def copy_api_key(self) -> None:
-        """Copy the configured API key to the Windows clipboard on explicit action."""
+        """Copy the configured API key to the clipboard on explicit action.
+
+        Returns:
+            None: Copies the key or shows a warning when it is missing.
+        """
         value = self.api_key_var.get().strip()
         if not value:
-            messagebox.showwarning("API key", "No API key is configured.")
+            messagebox.showwarning(gettext("API key"), gettext("No API key is configured."))
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
@@ -16728,23 +17258,25 @@ class WatcherApp:
             return
         if self.linking_manager.linked_upload_mode_selected():
             messagebox.showinfo(
-                'Connection',
-                'This tests the saved API key. Select the API-key connection '
-                'explicitly before running this test.',
+                gettext('Connection'),
+                gettext(
+                    "This tests the saved API key. Select the API-key connection "
+                    "explicitly before running this test."
+                ),
             )
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before testing the connection.")
+            messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before testing the connection."))
             return
         if self.connection_test_running:
             return
         upload_url = normalize_upload_url(self.gallery_url_var.get())
         api_key = self.api_key_var.get().strip()
         if not upload_url:
-            messagebox.showerror("Connection", "Enter a valid HTTP or HTTPS Gallery URL/endpoint.")
+            messagebox.showerror(gettext("Connection"), gettext("Enter a valid HTTP or HTTPS Gallery URL/endpoint."))
             return
         if not api_key:
-            messagebox.showerror("Connection", "Enter an API key before testing the connection.")
+            messagebox.showerror(gettext("Connection"), gettext("Enter an API key before testing the connection."))
             return
         try:
             current = self.current_config()
@@ -16753,11 +17285,15 @@ class WatcherApp:
             captured = capture_worker_config(current)
             config_port = self.config_store.mode_port(captured)
         except (ValueError, OSError) as exc:
-            messagebox.showerror('Connection', str(exc))
+            messagebox.showerror(gettext('Connection'), str(exc))
             return
         self.connection_test_running = True
-        self.connection_status_var.set("Testing")
-        self.connection_detail_var.set("Checking endpoint and API-key authorization without uploading media...")
+        WatcherApp._publish_connection_text(self, "status", gettext_noop("Testing"))
+        WatcherApp._publish_connection_text(
+            self, "detail", gettext_noop(
+                "Checking endpoint and API-key authorization without uploading media..."
+            ),
+        )
         self.refresh_revoke_button_state()
 
         def tester() -> None:
@@ -16801,7 +17337,7 @@ class WatcherApp:
         if self.delete_uploaded_files_var.get():
             self.watch_delete_warning.grid()
             self.watch_delete_warning.configure(
-                text="Uploaded photos will be deleted from this PC.",
+                text=gettext("Uploaded photos will be deleted from this PC."),
                 style="Muted.TLabel",
             )
         else:
@@ -17719,16 +18255,16 @@ class WatcherApp:
             return
         if (self.linking_manager.linked_upload_mode_selected()
                 != (linked_target is not None)):
-            messagebox.showerror('Import recovery', 'The selected gallery connection changed.')
+            messagebox.showerror(gettext('Import recovery'), gettext('The selected gallery connection changed.'))
             return
         if (linked_target is not None and (
                 self.linking_manager.linked_upload_binding() != linked_target.binding()
                 or self.linking_manager.selected_upload_target() is not linked_target)):
-            messagebox.showerror('Import recovery', 'Reconnect the selected linked gallery.')
+            messagebox.showerror(gettext('Import recovery'), gettext('Reconnect the selected linked gallery.'))
             return
         if self.flights.session_state() != "idle":
             messagebox.showinfo(
-                "Import", "Finish the current Watcher session before starting an import.",
+                gettext("Import"), gettext("Finish the current Watcher session before starting an import."),
                 parent=self.root,
             )
             return
@@ -17750,7 +18286,7 @@ class WatcherApp:
                 raise ValueError('This import needs a new preflight before recovery.')
             self.flights.import_bindings.admit_job(self.job_store, job, binding)
         except (OSError, ValueError, RuntimeError) as exc:
-            messagebox.showerror("Import recovery", str(exc))
+            messagebox.showerror(gettext("Import recovery"), str(exc))
             return
         self.current_job = job
         self._live_import_view = None
@@ -17774,7 +18310,7 @@ class WatcherApp:
             gui_admission=(self.mode_owner, config_port),
         )
         self.manual_worker.start()
-        self.manual_status_var.set("Import running")
+        self.manual_status_var.set(gettext("Import running"))
         self.import_activity_var.set("Import: running")
         self.start_import_button.configure(state="disabled")
         self.pause_import_button.configure(state="normal")
@@ -17782,7 +18318,10 @@ class WatcherApp:
         self.cancel_import_button.configure(state="normal")
         self.retry_failed_button.configure(state="disabled")
         self.write_log(f"Manual import job started with {len(paths)} file(s).", "success")
-        self.record_activity("success", f"Manual import started with {len(paths)} file(s).", "import", job_id=job.id)
+        self.record_activity(
+            "success", gettext_noop("Manual import started with {count} file(s)."),
+            "import", job_id=job.id, fields={"count": str(len(paths))},
+        )
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
@@ -17803,26 +18342,34 @@ class WatcherApp:
                 self.job_store, plan.job.id,
             )
         except (OSError, ValueError, RuntimeError) as exc:
-            messagebox.showwarning("Import recovery", str(exc))
+            messagebox.showwarning(gettext("Import recovery"), str(exc))
             return False
         return True
 
     def pause_manual_upload(self) -> None:
-        """Pause submission of new import work while allowing in-flight requests to finish."""
+        """Pause new import work while allowing in-flight requests to finish.
+
+        Returns:
+            None: Pauses a live worker and updates its controls.
+        """
         if self.manual_worker and self.manual_worker.is_alive():
             self.manual_worker.pause()
-            self.manual_status_var.set("Import paused")
+            self.manual_status_var.set(gettext("Import paused"))
             self.import_activity_var.set("Import: paused")
             self.pause_import_button.configure(state="disabled")
             self.resume_import_button.configure(state="normal")
 
     def resume_manual_upload(self) -> None:
-        """Resume a paused manual import."""
+        """Resume a paused manual import.
+
+        Returns:
+            None: Resumes a live worker and updates its controls when admitted.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.manual_worker and self.manual_worker.is_alive():
             self.manual_worker.resume()
-            self.manual_status_var.set("Import running")
+            self.manual_status_var.set(gettext("Import running"))
             self.import_activity_var.set("Import: running")
             self.pause_import_button.configure(state="normal")
             self.resume_import_button.configure(state="disabled")
@@ -17836,23 +18383,23 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before retrying an import.")
+            messagebox.showwarning(gettext("Connection"), gettext("Wait for API-key revocation to finish before retrying an import."))
             return
         if self.manual_worker and self.manual_worker.is_alive():
-            messagebox.showwarning("Retry import", "Wait for the current import to stop before retrying failed items.")
+            messagebox.showwarning(gettext("Retry import"), gettext("Wait for the current import to stop before retrying failed items."))
             return
         pending_detail = getattr(self, "_import_detail_request", None)
         if pending_detail is not None and pending_detail[2] == "selected":
             return
         if self.current_job is None:
-            messagebox.showwarning("Retry import", "Select a job in Activity first.")
+            messagebox.showwarning(gettext("Retry import"), gettext("Select a job in Activity first."))
             return
         history_view = getattr(self, "_history_import_view", None)
         if (history_view is not None and history_view.latest is not None
                 and history_view.latest.history.job_id == self.current_job.id
                 and getattr(self, "_activity_tab_selected", False)
                 and self.current_job.id not in self.job_history_tree.selection()):
-            messagebox.showwarning("Retry import", "Select a job in Activity first.")
+            messagebox.showwarning(gettext("Retry import"), gettext("Select a job in Activity first."))
             return
         try:
             with accepted_work_owner(CONFIG_DIR):
@@ -17867,12 +18414,12 @@ class WatcherApp:
                     raise ValueError("Accepted import history is missing; review it.")
                 entries = self.flights.import_bindings.entries()
         except (OSError, ValueError, RuntimeError) as exc:
-            messagebox.showwarning('Import review', str(exc))
+            messagebox.showwarning(gettext('Import review'), str(exc))
             return
         if any(item.state == 'skipped_duplicate' for item in refreshed.items):
             messagebox.showwarning(
-                'Retry import',
-                'Earlier duplicate results need a new preflight. Original sources were retained.',
+                gettext('Retry import'),
+                gettext('Earlier duplicate results need a new preflight. Original sources were retained.'),
             )
             return
         try:
@@ -17889,7 +18436,7 @@ class WatcherApp:
             elif entries.get(refreshed.id) != binding:
                 raise ValueError('This import has no verified current gallery binding.')
         except (OSError, ValueError) as exc:
-            messagebox.showwarning('Retry import', str(exc))
+            messagebox.showwarning(gettext('Retry import'), str(exc))
             return
         paths = []
         missing = 0
@@ -17912,16 +18459,20 @@ class WatcherApp:
             try:
                 self.job_store.save_job(refreshed)
             except (OSError, ValueError, RuntimeError) as exc:
-                messagebox.showwarning("Import review", str(exc))
+                messagebox.showwarning(gettext("Import review"), str(exc))
                 return
         if uncertain:
             messagebox.showwarning(
-                'Import review',
-                f'{uncertain} upload(s) have an uncertain result. '
-                'Review the gallery manually; they were not retried.',
+                gettext('Import review'),
+                gettext(
+                    "{uncertain} upload(s) have an uncertain result. "
+                    "Review the gallery manually; they were not retried."
+                ).format(
+                    uncertain=uncertain,
+                ),
             )
         if not paths:
-            messagebox.showinfo("Retry import", "No failed or recoverable local files are available for retry.")
+            messagebox.showinfo(gettext("Retry import"), gettext("No failed or recoverable local files are available for retry."))
             self.current_job = refreshed
             self._live_import_view = None
             self._import_detail_request = None
@@ -17937,11 +18488,11 @@ class WatcherApp:
             config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Configuration error", str(exc))
+            messagebox.showerror(gettext("Configuration error"), str(exc))
             return
         if (linked_target is None
                 and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
-            messagebox.showerror("Connection", "Gallery URL and API key are required before retrying.")
+            messagebox.showerror(gettext("Connection"), gettext("Gallery URL and API key are required before retrying."))
             return
         self.current_job = refreshed
         self.launch_manual_job(refreshed, paths, config, linked_target)
@@ -17960,12 +18511,20 @@ class WatcherApp:
         job = jobs[0]
         counts = job.counts()
         answer = messagebox.askyesno(
-            "Recover unfinished import",
-            f"An unfinished import from {time.strftime('%Y-%m-%d %H:%M', time.localtime(job.created_at))} contains "
-            f"{counts['active'] + counts['failed'] + counts['cancelled']} recoverable item(s). Open it for review and resume/retry?",
+            gettext("Recover unfinished import"),
+            gettext(
+                "An unfinished import from {value} contains "
+                "{value2} recoverable item(s). Open it for review and resume/retry?"
+            ).format(
+                value=time.strftime('%Y-%m-%d %H:%M', time.localtime(job.created_at)),
+                value2=counts['active'] + counts['failed'] + counts['cancelled'],
+            ),
         )
         if not answer:
-            self.record_activity("warning", "Recoverable import remains saved for later review.", "import", job_id=job.id)
+            self.record_activity(
+                "warning", gettext_noop("Recoverable import remains saved for later review."),
+                "import", job_id=job.id,
+            )
             return
         self.current_job = job
         self._import_detail_request = None
@@ -17973,7 +18532,7 @@ class WatcherApp:
         self.manual_paths = [Path(item.path) for item in job.items if Path(item.path).is_file()]
         self.manual_folder = None
         self.manual_zip = Path(job.source_zip) if job.source_zip else None
-        self.manual_selection_var.set("Recovered import: " + job.source_label)
+        self.manual_selection_var.set(gettext("Recovered import: ") + job.source_label)
         self.render_preflight_plan(self.manual_plan)
         self.select_tab("import")
         self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
@@ -18139,26 +18698,43 @@ class WatcherApp:
         )
         self._flush_import_presentation(force=True)
 
-    def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
+    def record_activity(
+        self, level: str, message: str, operation: str = "system",
+        filename: str = "", job_id: str = "",
+        *, fields: dict[str, str] | None = None,
+    ) -> None:
         """Display a redacted event and enqueue its bounded history off Tk.
 
         Args:
             level (str): Event severity such as info, success, warning, or error.
-            message (str): Event detail before credential redaction.
+            message (str): Stable diagnostic detail or source template.
             operation (str): Owning activity category.
             filename (str): Optional local filename associated with the event.
             job_id (str): Optional durable import job identifier.
+            fields (dict[str, str] | None): Named values for a presentation
+                template. Each value is redacted before persistence.
 
         Returns:
             None: Retains and submits every event in order. The latest footer
                 and visible drawer are synchronized through their GUI owners.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
+        message_id = message if fields else ""
+        if fields:
+            message = message.format_map(fields)
         # The queue marker has already selected the structured operation.
         if operation == "simconnect" and message.startswith("[simconnect]"):
             message = message[len("[simconnect]"):].lstrip()
         safe_message = redact_text(message, [secret], redact_paths=False)
-        event = ActivityEvent(level=level, message=safe_message, operation=operation, filename=filename, job_id=job_id)
+        event = ActivityEvent(
+            level=level, message=safe_message, operation=operation,
+            filename=filename, job_id=job_id,
+            message_id=redact_text(message_id, [secret], redact_paths=False),
+            message_fields={
+                key: redact_text(value, [secret], redact_paths=False)
+                for key, value in (fields or {}).items()
+            },
+        )
         self._pending_activity_footer = event
         if getattr(self, "_drain_running", False) is not True:
             self._flush_activity_footer()
@@ -18183,8 +18759,8 @@ class WatcherApp:
         pending = getattr(self, "_pending_activity_footer", None)
         if pending is None or getattr(self, "window_hidden_to_tray", False) is True:
             return
-        one_line_message = " ".join(pending.message.split())
-        text = f"{pending.operation.title()} · {one_line_message}"
+        one_line_message = " ".join(WatcherApp.activity_message(pending).split())
+        text = f"{activity_label(pending.operation, title=True)} · {one_line_message}"
         style = {
             "warning": "Footer.Warning.TLabel",
             "error": "Footer.Error.TLabel",
@@ -18197,6 +18773,31 @@ class WatcherApp:
                 lambda: label.configure(style=style),
             )
         self._pending_activity_footer = None
+
+    @staticmethod
+    def activity_message(event: ActivityEvent) -> str:
+        """Localize only the displayed Activity message.
+
+        Args:
+            event (ActivityEvent): Stable event with redacted text and fields.
+
+        Returns:
+            str: Text in the active locale, or the stored diagnostic detail
+                when a legacy or damaged row has no usable translation.
+        """
+        message_id = event.message_id or event.message
+        translated = gettext(message_id)
+        if translated == message_id:
+            return operational_activity_caption(event)
+        # Only format catalog text. Historical messages and externally supplied
+        # details can contain braces and are kept as ordinary data.
+        try:
+            fields = event.message_fields
+            if "detail" in fields:
+                fields = {**fields, "detail": gettext(fields["detail"])}
+            return translated.format_map(fields) if fields else translated
+        except (KeyError, ValueError):
+            return event.message
 
     def _schedule_activity_drawer_refresh(self) -> None:
         """Coalesce drawer rendering while activity state and persistence stay current.
@@ -18289,7 +18890,12 @@ class WatcherApp:
             self._activity_drawer_dirty = True
             return
         self._activity_drawer_flush_count += 1
-        selected = self.activity_filter_var.get().strip().lower() or "all"
+        caption = self.activity_filter_var.get().strip().casefold()
+        selected = next(
+            (key for key, label in activity_filter_labels().items()
+             if label.casefold() == caption),
+            "all",
+        )
 
         def visible(event: ActivityEvent) -> bool:
             """Return whether one event matches the selected Activity filter.
@@ -18342,7 +18948,8 @@ class WatcherApp:
             filename = Path(event.filename).name if event.filename else ""
             rows.append((
                 item_id,
-                (stamp, event.level, filename, event.operation, event.message),
+                (stamp, activity_label(event.level), filename, activity_label(event.operation),
+                 WatcherApp.activity_message(event)),
             ))
         self._reconcile_tree_rows(
             self.activity_drawer,
@@ -18428,9 +19035,11 @@ class WatcherApp:
         """
         view = WatcherApp._selected_import_view(self)
         if view is not None and view.latest is not None:
-            job_summary = self._describe_import_progress(view.latest)
+            job_summary = self._describe_import_progress(view.latest, for_display=False)
         else:
-            job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
+            job_summary = self.describe_job(
+                self.current_job, for_display=False,
+            ) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
             f"{suffix}={'local' if capability.local_previewable else 'server-only'}"
             for suffix, capability in sorted(self.media_capabilities.items())
@@ -18473,6 +19082,9 @@ class WatcherApp:
             recorder.diagnostics_snapshot() if recorder is not None
             else {"running": False, "sample_count": 0}
         )
+        connection = getattr(self, "_connection_diagnostic", {})
+        connection_status = connection.get("status", "")
+        connection_detail = connection.get("detail", "")
         raw = "\n".join(
             [
                 f"App: {APP_DISPLAY_NAME}",
@@ -18488,7 +19100,7 @@ class WatcherApp:
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
                 f"API key configured: {bool(self.api_key_var.get().strip())}",
-                f"Connection: {self.connection_status_var.get()} | {self.connection_detail_var.get()}",
+                f"Connection: {connection_status} | {connection_detail}",
                 "Browser linking: " + (
                     self.linking_manager.diagnostics_snapshot()
                     or "No linking outcome recorded yet."
@@ -18579,15 +19191,17 @@ class WatcherApp:
             existing.deiconify()
             return
         panel = EmbeddedWindow(self.root)
-        panel.title("Support diagnostics")
+        panel.title(gettext("Support diagnostics"))
         self._support_panel = panel
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(2, weight=1)
         description = ttk.Label(
             panel,
-            text="Review this report before sharing. Credentials, local paths "
-            "and URL query values are filtered. Files and photographs are not "
-            "attached. Nothing is sent automatically.",
+            text=gettext(
+                "Review this report before sharing. Credentials, local paths "
+                "and URL query values are filtered. Files and photographs are not "
+                "attached. Nothing is sent automatically."
+            ),
             wraplength=WINDOW_SUMMARY_WRAP, padding=(16, 12),
         )
         description.grid(row=0, column=0, sticky="ew")
@@ -18622,13 +19236,15 @@ class WatcherApp:
             try:
                 report = self.support_report()
             except (OSError, ValueError, RuntimeError, tk.TclError) as exc:
-                status.set("Report collection failed: " + type(exc).__name__)
+                status.set(gettext("Report collection failed: ") + type(exc).__name__)
                 return
             preview.configure(state="normal")
             preview.delete("1.0", "end")
             preview.insert("1.0", report)
             preview.configure(state="disabled")
-            status.set(f"Report ready · {len(report):,} characters · collected locally")
+            status.set(gettext("Report ready · {report_count:,} characters · collected locally").format(
+                report_count=len(report),
+            ))
 
         def copy_report() -> None:
             """Copy exactly the report currently displayed for review.
@@ -18639,7 +19255,7 @@ class WatcherApp:
             if report:
                 self.root.clipboard_clear()
                 self.root.clipboard_append(report)
-                status.set("Displayed report copied to clipboard.")
+                status.set(gettext("Displayed report copied to clipboard."))
 
         def save_report() -> None:
             """Save the displayed report to an explicitly selected destination.
@@ -18650,24 +19266,24 @@ class WatcherApp:
             if not report:
                 return
             selected = filedialog.asksaveasfilename(
-                parent=panel, title="Save support report", defaultextension=".txt",
+                parent=panel, title=gettext("Save support report"), defaultextension=".txt",
                 initialdir=str(CONFIG_DIR),
                 initialfile="PHP-Gallery-support-" + time.strftime("%Y%m%d-%H%M%S") + ".txt",
-                filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
+                filetypes=((gettext("Text files"), "*.txt"), (gettext("All files"), "*.*")),
             )
             if not selected:
                 return
             try:
                 save_support_report(Path(selected), report)
             except OSError as exc:
-                status.set("Could not save report: " + type(exc).__name__)
+                status.set(gettext("Could not save report: ") + type(exc).__name__)
             else:
-                status.set("Displayed report saved locally. Nothing was sent.")
+                status.set(gettext("Displayed report saved locally. Nothing was sent."))
 
-        Button(actions, text="Refresh report", command=refresh).pack(side="left")
-        Button(actions, text="Copy report", command=copy_report).pack(side="left", padx=8)
-        Button(actions, text="Save report…", command=save_report, style="Primary.TButton").pack(side="left")
-        Button(actions, text="Close", command=panel.destroy).pack(side="right")
+        Button(actions, text=gettext("Refresh report"), command=refresh).pack(side="left")
+        Button(actions, text=gettext("Copy report"), command=copy_report).pack(side="left", padx=8)
+        Button(actions, text=gettext("Save report…"), command=save_report, style="Primary.TButton").pack(side="left")
+        Button(actions, text=gettext("Close"), command=panel.destroy).pack(side="right")
         panel.grab_set()
         preview.focus_set()
         refresh()
@@ -18848,7 +19464,7 @@ class WatcherApp:
             self.ai_activity_var.set(ai_caption)
 
         active = watcher_running or manual_running or ai_running or preflight_running
-        self.update_monitor_state("green" if active else "disabled", "Background activity is running." if active else "No background worker is active.")
+        self.update_monitor_state("green" if active else "disabled", gettext("Background activity is running.") if active else gettext("No background worker is active."))
         if self.tray_icon is not None:
             try:
                 title = self.tray_tooltip_text()
@@ -19162,7 +19778,10 @@ class WatcherApp:
                         continue
                     self._ordinary_restart_prepared = True
                     self._ordinary_restart_closing = False
-                    self.close()
+                    if event.get('restart') is True:
+                        self.close(restart=True)
+                    else:
+                        self.close()
                     continue
                 if kind == 'ordinary_restart_failed':
                     self._ordinary_restart_closing = False
@@ -19172,9 +19791,11 @@ class WatcherApp:
                     self._cancel_ordinary_restart_intent()
                     self.cancel_update_checkpoint()
                     messagebox.showwarning(
-                        'Watcher remains open',
-                        'The active Watcher could not be safely checkpointed. '
-                        'Its queue is retained; wait for recovery, then stop or retry.',
+                        gettext('Watcher remains open'),
+                        gettext(
+                            "The active Watcher could not be safely checkpointed. "
+                            "Its queue is retained; wait for recovery, then stop or retry."
+                        ),
                     )
                     continue
                 if kind == 'watcher_resume_available':
@@ -19201,8 +19822,10 @@ class WatcherApp:
                             # continuation without inventing startup consent.
                             self._update_resume_status = 'stage=resume; reason=legacy_confirmation_required'
                             self.status_var.set(
-                                'An older version left unfinished Watcher work. '
-                                'Resume Watcher continues the original session.',
+                                gettext(
+                                    "An older version left unfinished Watcher work. "
+                                    "Resume Watcher continues the original session."
+                                ),
                             )
                             self.refresh_watcher_action()
                     continue
@@ -19254,8 +19877,10 @@ class WatcherApp:
                         'reason=temporary_target_verification_failure'
                     )
                     self.status_var.set(
-                        'The original gallery is temporarily unavailable. '
-                        'Retrying safely…',
+                        gettext(
+                            "The original gallery is temporarily unavailable. "
+                            "Retrying safely…"
+                        ),
                     )
                     self.root.after(
                         UPDATE_CONTINUATION_TARGET_RETRY_MS,
@@ -19315,8 +19940,10 @@ class WatcherApp:
                     if self._queue_recovery_finish_requested:
                         self._queue_recovery_finish_requested = False
                         self.status_var.set(
-                            'Finish was not started because queue recovery failed. '
-                            'Review the retained session and retry explicitly.',
+                            gettext(
+                                "Finish was not started because queue recovery failed. "
+                                "Review the retained session and retry explicitly."
+                            ),
                         )
                     continue
                 if kind == 'watch_queue_recovered':
@@ -19348,14 +19975,14 @@ class WatcherApp:
                     if kind == "watcher_start_ready":
                         self._set_watch_start_activity(False)
                         self.watch_ignored_var.set(
-                            f"Ignored at startup: {payload['ignored']}"
+                            gettext("Ignored at startup: {value}").format(value=payload['ignored'])
                         )
                         if (self.worker.is_alive()
                                 and not self.worker.stop_event.is_set()
                                 and not self.worker.drain_event.is_set()):
                             if not self._complete_update_resume():
                                 continue
-                            self.status_var.set("Running")
+                            self.status_var.set(gettext("Running"))
                             self.watcher_activity_var.set("Watch: running")
                             self._set_watcher_recording(True, self.worker.linked_target)
                             self.write_log("Watcher started.", "success")
@@ -19407,9 +20034,9 @@ class WatcherApp:
                             self.preflight_progress.grid_remove()
                             self.preflight_worker = None
                             self._preflight_approved = None
-                            self.manual_status_var.set('Preflight needs to be run again')
+                            self.manual_status_var.set(gettext('Preflight needs to be run again'))
                             self.manual_preflight_var.set(
-                                'Configuration changed; run preflight again. Sources were retained.',
+                                gettext('Configuration changed; run preflight again. Sources were retained.'),
                             )
                         continue
                 if ('linked_binding' in payload and payload['linked_binding']
@@ -19417,13 +20044,17 @@ class WatcherApp:
                     continue
                 job_id = str(event.get("job_id", payload.get("job_id", "")) or "")
                 if kind == "preflight_started":
-                    self.manual_status_var.set("Preflight running")
+                    self.manual_status_var.set(gettext("Preflight running"))
                     self.import_activity_var.set("Import: preflight")
                 elif kind == "preflight_progress":
                     current = int(payload.get("current", 0) or 0)
                     total = max(1, int(payload.get("total", 1) or 1))
                     filename = str(payload.get("filename", "") or "")
-                    self.manual_preflight_var.set(f"Inspecting {current}/{total}: {filename}")
+                    self.manual_preflight_var.set(gettext("Inspecting {current}/{total}: {filename}").format(
+                        current=current,
+                        total=total,
+                        filename=filename,
+                    ))
                 elif kind == "preflight_complete":
                     plan = payload.get("plan")
                     self.preflight_progress.stop()
@@ -19433,7 +20064,7 @@ class WatcherApp:
                         binding = payload.get('preflight_binding')
                         if not isinstance(binding, str) or re.fullmatch(r'[0-9a-f]{64}', binding) is None:
                             self._preflight_approved = None
-                            self.manual_status_var.set('Preflight needs to be run again')
+                            self.manual_status_var.set(gettext('Preflight needs to be run again'))
                             continue
                         self._preflight_approved = (
                             plan.job.id, payload['config_generation'], binding,
@@ -19444,23 +20075,31 @@ class WatcherApp:
                         self.render_preflight_plan(plan)
                         self.refresh_job_history()
                         self.write_log("Import preflight completed. Review the summary before starting.", "success")
-                        self.record_activity("success", "Import preflight completed and is awaiting explicit Start import.", "import", job_id=plan.job.id)
-                    self.manual_status_var.set("Ready for review")
+                        self.record_activity(
+                            "success", gettext_noop(
+                                "Import preflight completed and is awaiting explicit Start import."
+                            ),
+                            "import", job_id=plan.job.id,
+                        )
+                    self.manual_status_var.set(gettext("Ready for review"))
                 elif kind == "preflight_failed":
                     self.preflight_progress.stop()
                     self.preflight_progress.grid_remove()
                     self.preflight_worker = None
                     message = str(payload.get("message", "Preflight failed") or "Preflight failed")
-                    self.manual_preflight_var.set("Preflight failed: " + message)
-                    self.manual_status_var.set("Preflight failed")
+                    self.manual_preflight_var.set(gettext("Preflight failed: ") + gettext(message))
+                    self.manual_status_var.set(gettext("Preflight failed"))
                     self.import_activity_var.set("Import: failed preflight")
                     self.write_log("Import preflight failed: " + message, "error")
-                    self.record_activity("error", "Import preflight failed: " + message, "import", job_id=job_id)
+                    self.record_activity(
+                        "error", gettext_noop("Import preflight failed: {detail}"),
+                        "import", job_id=job_id, fields={"detail": message},
+                    )
                 elif kind == "preflight_cancelled":
                     self.preflight_progress.stop()
                     self.preflight_progress.grid_remove()
                     self.preflight_worker = None
-                    self.manual_status_var.set("Preflight cancelled")
+                    self.manual_status_var.set(gettext("Preflight cancelled"))
                     self.import_activity_var.set("Import: idle")
                 elif kind in ("watch_scan", "watch_queue"):
                     if payload.get('worker') is self.worker and kind == 'watch_queue':
@@ -19475,13 +20114,17 @@ class WatcherApp:
                         skipped = int(payload.get('skipped_count', 0) or 0)
                         progress_at = float(payload.get('last_progress', 0) or 0)
                         self.watch_queue_status_var.set(
-                            f'{count} · #{payload.get("head_sequence", 0)} {filename} · {state}'
+                            f'{count} · #{payload.get("head_sequence", 0)} {filename} · '
+                            + watch_queue_state_caption(state)
                             + (' · ' + time.strftime('%H:%M:%S', time.localtime(retry_at))
                                if retry_at else '')
-                            + f' · {acknowledgements} confirmed / {skipped} skipped'
-                            + (' · progress ' + time.strftime('%H:%M:%S', time.localtime(progress_at))
+                            + ' · ' + gettext('{confirmed} confirmed / {skipped} skipped').format(
+                                confirmed=acknowledgements, skipped=skipped,
+                            )
+                            + (gettext(' · progress ') + time.strftime('%H:%M:%S', time.localtime(progress_at))
                                if progress_at else '')
-                            + (' · ' + str(payload['reason']) if payload.get('reason') else '')
+                            + (' · ' + gettext('See Support diagnostics for details.')
+                               if payload.get('reason') else '')
                         )
                         if payload.get('last_scan'):
                             self._watcher_last_scan_at = float(payload['last_scan'])
@@ -19505,7 +20148,7 @@ class WatcherApp:
                         if payload.get("worker") is self.worker:
                             timestamp = float(payload.get("timestamp", time.time()) or time.time())
                             self._watcher_last_scan_at = timestamp
-                            self.watch_last_scan_var.set("Last successful scan: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)))
+                            self.watch_last_scan_var.set(gettext("Last successful scan: ") + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)))
                             self.refresh_watcher_header()
                 elif kind in {"connection_ready", "connection_warning", "connection_error"}:
                     explicit = bool(payload.get("explicit_test", False))
@@ -19530,12 +20173,16 @@ class WatcherApp:
                     if kind == "connection_ready":
                         label = str(payload.get("gallery_label", "gallery") or "gallery")
                         resolved_url = str(payload.get("normalized_url", "") or "")
-                        self.gallery_label_var.set("Target gallery: " + label)
+                        self.gallery_label_var.set(gettext("Target gallery: ") + label)
                         self.gallery_title_var.set(
                             str(payload.get("gallery_title", "") or "").strip()
                         )
-                        self.connection_status_var.set("Connected")
-                        self.connection_detail_var.set("Authenticated endpoint available: " + resolved_url)
+                        WatcherApp._publish_connection_text(self, "status", gettext_noop("Connected"))
+                        WatcherApp._publish_connection_text(
+                            self, "detail",
+                            gettext_noop("Authenticated endpoint available: {endpoint}"),
+                            endpoint=resolved_url,
+                        )
                         if explicit:
                             saved_url = self.config.gallery_url.strip()
                             saved_key = self.config.api_key.strip()
@@ -19557,7 +20204,12 @@ class WatcherApp:
                                 except Exception as exc:  # noqa: BLE001
                                     self.write_log("Connection succeeded, but saving the working API route failed: " + str(exc), "warning")
                             self.write_log("Connection test succeeded for gallery " + label + ".", "success")
-                            self.record_activity("success", "Connection test succeeded for gallery " + label + ".", "system")
+                            self.record_activity(
+                                "success", gettext_noop(
+                                    "Connection test succeeded for gallery {gallery}."
+                                ),
+                                "system", fields={"gallery": label},
+                            )
                         if (not payload.get('linked_binding')
                                 and not self.api_key_revoke_running):
                             saved_url = normalize_upload_url(
@@ -19578,15 +20230,27 @@ class WatcherApp:
                             else:
                                 self._verified_legacy_gallery = None
                     elif kind == "connection_warning":
-                        self.connection_status_var.set("Connection warning")
-                        self.connection_detail_var.set(str(payload.get("message", "Remote preflight unavailable") or "Remote preflight unavailable"))
+                        WatcherApp._publish_connection_text(
+                            self, "status", gettext_noop("Connection warning"),
+                        )
+                        WatcherApp._publish_connection_text(
+                            self, "detail", str(payload.get("message") or gettext_noop(
+                                "Remote preflight unavailable",
+                            )),
+                        )
                     else:
                         message = str(payload.get("message", "Connection failed") or "Connection failed")
                         auth_error = any(token in message.lower() for token in ("api key", "invalid or revoked", "unauthorized", "forbidden", "http 401", "http 403"))
-                        self.connection_status_var.set("Authentication error" if auth_error else "Connection failed")
-                        self.connection_detail_var.set(message)
+                        WatcherApp._publish_connection_text(
+                            self, "status", gettext_noop("Authentication error")
+                            if auth_error else gettext_noop("Connection failed"),
+                        )
+                        WatcherApp._publish_connection_text(self, "detail", message)
                         self.write_log("Connection test failed: " + message, "error")
-                        self.record_activity("error", "Connection test failed: " + message, "system")
+                        self.record_activity(
+                            "error", gettext_noop("Connection test failed: {detail}"),
+                            "system", fields={"detail": message},
+                        )
                 elif kind == "flight_abandoned":
                     self.flights.forgotten(str(payload.get("binding", "")))
                 elif kind == "photos_watch_key_closed":
@@ -19598,7 +20262,7 @@ class WatcherApp:
                             self._contextual_watch_is_flight = False
                             self.linking_manager.detach_photos_watcher_target(target)
                         else:
-                            self.status_var.set("Watcher access could not be closed. Retry.")
+                            self.status_var.set(gettext("Watcher access could not be closed. Retry."))
                         self.refresh_watcher_action()
                 elif kind == 'update_resume_context_key_closed':
                     target = payload.get('target')
@@ -19688,12 +20352,15 @@ class WatcherApp:
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None
                     message = str(payload.get("message", "API-key revocation failed.") or "API-key revocation failed.")
-                    self.connection_status_var.set("Revocation failed")
-                    self.connection_detail_var.set(message)
+                    WatcherApp._publish_connection_text(self, "status", gettext_noop("Revocation failed"))
+                    WatcherApp._publish_connection_text(self, "detail", message)
                     self.write_log("API-key revocation failed: " + message, "error")
-                    self.record_activity("error", "API-key revocation failed: " + message, "system")
+                    self.record_activity(
+                        "error", gettext_noop("API-key revocation failed: {detail}"),
+                        "system", fields={"detail": message},
+                    )
                     self.refresh_connection_controls()
-                    messagebox.showerror("Revoke API key failed", message)
+                    messagebox.showerror(gettext("Revoke API key failed"), message)
                 elif kind == "job_progress":
                     snapshot = payload.get("snapshot")
                     if isinstance(snapshot, ImportProgressSnapshot) and job_id == snapshot.history.job_id:
@@ -19714,7 +20381,7 @@ class WatcherApp:
                         continue
                     self._flush_import_presentation(force=True)
                     paused = bool(payload.get("paused", False))
-                    self.manual_status_var.set("Import paused" if paused else "Import running")
+                    self.manual_status_var.set(gettext("Import paused") if paused else gettext("Import running"))
                     self.import_activity_var.set("Import: paused" if paused else "Import: running")
                     self.pause_import_button.configure(state="disabled" if paused else "normal")
                     self.resume_import_button.configure(state="normal" if paused else "disabled")
@@ -19754,28 +20421,28 @@ class WatcherApp:
             self.record_activity(log_level if log_level in {"success", "warning", "error"} else level, message, operation, job_id=self.current_job.id if operation == "import" and self.current_job else "")
 
             if message.startswith("Manual upload started"):
-                self.manual_status_var.set("Import running")
+                self.manual_status_var.set(gettext("Import running"))
                 self.import_activity_var.set("Import: running")
             elif message.startswith("Watcher stopped"):
-                self.status_var.set("Stopped")
+                self.status_var.set(gettext("Stopped"))
                 self.watcher_activity_var.set("Watch: stopped")
             elif message.startswith("Watching "):
-                self.status_var.set("Running")
+                self.status_var.set(gettext("Running"))
                 self.watcher_activity_var.set("Watch: running")
-                self.watch_last_scan_var.set("Last scan: " + time.strftime("%Y-%m-%d %H:%M:%S"))
+                self.watch_last_scan_var.set(gettext("Last scan: ") + time.strftime("%Y-%m-%d %H:%M:%S"))
             elif message.startswith("AI metadata worker claimed job"):
-                self.ai_status_var.set(message)
+                self.ai_status_var.set(gettext("AI metadata worker is processing a job"))
                 self.ai_activity_var.set("AI: working")
             elif message.startswith("AI metadata stored"):
-                self.ai_status_var.set("AI metadata worker running")
+                self.ai_status_var.set(gettext("AI metadata worker running"))
                 self.ai_activity_var.set("AI: running")
             elif message.startswith("AI metadata worker stopped"):
                 self.ai_worker_stop_requested = False
-                self.ai_status_var.set("AI metadata worker stopped")
+                self.ai_status_var.set(gettext("AI metadata worker stopped"))
                 self.ai_activity_var.set("AI: stopped")
             elif message.startswith("AI metadata worker started"):
                 self.ai_worker_stop_requested = False
-                self.ai_status_var.set("AI metadata worker running")
+                self.ai_status_var.set(gettext("AI metadata worker running"))
                 self.ai_activity_var.set("AI: running")
             if message.startswith("Optional local AI module dependency installation finished"):
                 self.semantic_ai_install_running = False
@@ -20062,17 +20729,17 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Watch a folder and upload new images to PHP Gallery.")
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--once", action="store_true", help="Run one scan using saved configuration and exit.")
+    modes.add_argument("--once", action="store_true", help=gettext("Run one scan using saved configuration and exit."))
     modes.add_argument(
         "--startup", action="store_true",
-        help="Start the installed app in the tray after Windows logon.",
+        help=gettext("Start the installed app in the tray after Windows logon."),
     )
     modes.add_argument(
         "--configure-startup", action="store_true",
-        help="Apply the saved per-user Windows startup preference without a UI.",
+        help=gettext("Apply the saved per-user Windows startup preference without a UI."),
     )
     modes.add_argument('--after-update', metavar='SESSION', help=argparse.SUPPRESS)
-    parser.add_argument("--config", default=str(CONFIG_PATH), help="Path to a config JSON file.")
+    parser.add_argument("--config", default=str(CONFIG_PATH), help=gettext("Path to a config JSON file."))
     result = parser.parse_args(argv)
     if (result.after_update is not None
             and re.fullmatch(r'[0-9a-f]{32}', result.after_update) is None):
@@ -20089,9 +20756,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             omitted, sys.argv is.
 
     Returns:
-        int: Zero after a normal exit, activation or startup reconciliation;
-            one if coordination or configuration fails, or --once overlaps a
-            running app. GUI launches record process lifecycle markers.
+        int: Zero after a normal exit, relaunch, activation or startup
+            reconciliation. One after a failed launch, configuration or
+            coordination, or --once overlapping a running app.
     """
     args = parse_args(list(argv) if argv is not None else sys.argv[1:])
     instance = WindowsInstance(CONFIG_DIR)
@@ -20131,7 +20798,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         app.root.after(ACTIVATION_POLL_MS, app.poll_instance_activation)
         app.run()
         logging.info('[watcher-process] phase=mainloop_returned; pid=%d', os.getpid())
-        return 0
+        restart = getattr(app, "_restart_requested", False) is True
     except OSError as exc:
         # Windowed builds may have no stderr. Native coordination failure must
         # never admit a second writer, and needs a visible manual-launch error.
@@ -20139,7 +20806,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             'process', 'io_error', error=exc,
         ), os.getpid())
         if not args.configure_startup and not args.once and messagebox is not None:
-            messagebox.showerror("Application startup", str(exc))
+            configure_language(load_ui_language(CONFIG_DIR))
+            messagebox.showerror(gettext("Application startup"), gettext(str(exc)))
         elif sys.stderr is not None:
             print("Application startup failed: " + str(exc), file=sys.stderr)
         return 1
@@ -20150,6 +20818,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         raise
     finally:
         instance.close()
+    if restart:
+        command = [sys.executable]
+        environment = os.environ.copy()
+        if getattr(sys, "frozen", False):
+            # The restarted onefile EXE owns its own extracted runtime.
+            environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        else:
+            command.append(str(Path(__file__).resolve()))
+        try:
+            subprocess.Popen([*command, "--config", args.config], env=environment)
+        except OSError as exc:
+            logging.error("WinApp relaunch failed: %s", exc)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

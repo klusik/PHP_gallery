@@ -39,6 +39,32 @@ from unittest import mock
 import zipfile
 from PIL import Image, __version__ as PILLOW_VERSION
 
+from PIL import ImageDraw, ImageGrab, ImageTk
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+# Select the benchmark's production checkout before any uploader imports. Both
+# the standalone child and the Issue 434 child receive the exact same --source.
+_source_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+_source_parser.add_argument("--source", type=Path)
+_source_options, _unused_options = _source_parser.parse_known_args()
+_source_root = _source_options.source or Path(__file__).resolve().parents[2]
+_winapp_source = str(_source_root.resolve() / "winapp")
+if _winapp_source not in sys.path:
+    sys.path.insert(0, _winapp_source)
+
+from uploader import native_gallery_viewer as native
+from uploader.app_linking import (
+    LinkedGallery, LinkedMediaPage, LinkedPhoto, LinkedPresentation, LinkingSession,
+)
+from uploader.gallery_lightbox import PhotoLightbox
+from uploader.native_gallery_viewer import GalleryThumbnailMemory
+from uploader.ui_theme import Button
+from uploader.windows_display import prepare_windows_display
+
 # Purpose: Provide reproducible synthetic colors and row values.
 # Type: int. Units: PRNG seed. Scope: one independent scenario process.
 # Consumers: make_photo_bodies. Rationale: Identical source/cache trials use identical fixtures.
@@ -738,7 +764,6 @@ class Recorder(Generic[P, R]):
             tk.PhotoImage.__init__,
             lambda wrapped: setattr(tk.PhotoImage, "__init__", wrapped),
         )
-        from PIL import ImageTk
         self._wrap_operation(
             "pillow_photoimage", ImageTk.PhotoImage.__init__,
             lambda wrapped: setattr(ImageTk.PhotoImage, "__init__", wrapped),
@@ -1119,7 +1144,6 @@ def build_import_widgets(
     Returns:
         tuple[WatcherHost, ImportJobContract]: Complete fixture host and real job snapshot.
     """
-    from uploader.ui_theme import Button
 
     app = module.WatcherApp.__new__(module.WatcherApp)
     app.root = root
@@ -1203,7 +1227,6 @@ def setup_dashboard(root: tk.Tk, module: ModuleType) -> WatcherHost:
     Returns:
         WatcherHost: Constructor-bypassed Watcher host with complete pump state.
     """
-    from uploader.ui_theme import Button
 
     app = module.WatcherApp.__new__(module.WatcherApp)
     app.root = root
@@ -1283,7 +1306,6 @@ def make_pattern_body(size: tuple[int, int], seed: int) -> bytes:
     Returns:
         bytes: PNG body encoded in memory without disk or network access.
     """
-    from PIL import Image
     width, height = size
     generator = random.Random(seed)
     pixels: list[tuple[int, int, int]] = []
@@ -1314,7 +1336,6 @@ def make_hires_body(seed: int) -> bytes:
     Returns:
         bytes: One 3840 by 2160 JPEG generated on demand and never bulk-retained.
     """
-    from PIL import Image, ImageDraw
     source_size = HIRES_TEXTURE_SIZE
     source = Image.new("RGB", source_size)
     generator = random.Random(seed)
@@ -1742,11 +1763,6 @@ def build_gallery(
     winapp = str(source_root / "winapp")
     if winapp not in sys.path:
         sys.path.insert(0, winapp)
-    from uploader import native_gallery_viewer as native
-    from uploader.app_linking import (
-        LinkedGallery, LinkedMediaPage, LinkedPhoto, LinkedPresentation,
-        LinkingSession,
-    )
 
     bodies = PHOTO_BODY_FIXTURES[seed]
     digest_input = b"".join(hashlib.sha256(body).digest() for body in bodies)
@@ -2204,7 +2220,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
             for variant in range(HIRES_FIXTURE_VARIANTS)
         )
         watchdog.start()
-        from uploader.windows_display import prepare_windows_display
         prepare_windows_display()
         root = tk.Tk()
         root.geometry(f"{VIEWPORT[0]}x{VIEWPORT[1]}")
@@ -2228,7 +2243,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
 
         if args.scenario in ("gallery", "lightbox"):
             root.bind("<Configure>", on_root_configure, add="+")
-        from uploader.ui_theme import Button
         action: Callable[[], None]
         if args.scenario in ("dashboard", "import"):
             module = load_watcher(source_root)
@@ -2383,7 +2397,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
                 nonlocal lightbox_render_original, shared_thumbnails
                 viewer = viewer_holder.get("viewer")
                 if viewer is None:
-                    from uploader.native_gallery_viewer import GalleryThumbnailMemory
                     if shared_thumbnails is None:
                         shared_thumbnails = GalleryThumbnailMemory()
                     viewer, session, fixture, state = build_gallery(
@@ -2392,7 +2405,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
                     )
                     if recorder.enabled:
                         wrap_publication(viewer, recorder)
-                        from uploader.gallery_lightbox import PhotoLightbox
                         if lightbox_render_original is None:
                             lightbox_render_original = PhotoLightbox._render_image
 
@@ -2779,7 +2791,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
                     3,
                 )
             try:
-                from PIL import ImageGrab
                 bounds = (
                     root.winfo_rootx(), root.winfo_rooty(),
                     root.winfo_rootx() + root.winfo_width(),
@@ -2977,7 +2988,6 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
                     status = "FAIL"
                     failure = "A cancelled scenario worker did not relinquish ownership."
         if lightbox_render_original is not None:
-            from uploader.gallery_lightbox import PhotoLightbox
             PhotoLightbox._render_image = lightbox_render_original
         recorder.restore()
         for retired_worker in retired_workers:
@@ -3000,7 +3010,8 @@ def run(args: argparse.Namespace) -> dict[str, JsonValue]:
                 pass
 
     if recorder.enabled:
-        import psutil
+        if psutil is None:
+            raise RuntimeError("Instrumented resource sampling requires psutil.")
         metrics["process_peak_rss_bytes"] = float(psutil.Process().memory_info().peak_wset)
         missing_metrics = [name for name in missing_metrics if name != "process_peak_rss_bytes"]
     metrics["scenario_elapsed_ms"] = round(

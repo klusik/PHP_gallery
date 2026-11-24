@@ -762,6 +762,20 @@ The shell's header/close fixture also requires inherited `DialogSurface` and
 `Button` components; the portable UI library guard continues to reject raw
 toolkit controls throughout the shell and file picker. Capture progress keeps
 the existing nonmodal overlay and its automatic-recovery coverage.
+
+`test_localization.py` inventories literal gettext messages from the WinApp
+runtime AST and compares them with each UTF-8 GNU catalog. Every entry must
+compile, translate and preserve its formatting fields. The same suite uses
+real Tk menus, selectors and embedded panels to exercise Settings at standard
+and minimum widths, including every language choice and worker-count option,
+and Watcher, AI and flight PDF preference controls in all four languages. It
+also exercises the import options, Activity filters and Photos cache quotas.
+The hosted Issue 380 workflow requires a display for these tests. The profile
+fixtures verify deferred and refused restart, reversion to the active language,
+and persistence independent of website and PDF languages. The diagnostic
+fixtures verify the redacted Activity record, native UTC status and stable
+connection output underneath the translated captions.
+
 The issue-scoped Issue 380 integrated WinApp UI workflow runs central
 scripts/audit.php --suite=winapp-partitioned on Ubuntu 24.04 under Xvfb and
 Windows Server 2025, retaining exact-commit artifacts. This is the runtime
@@ -2499,7 +2513,9 @@ file rejection in that owned snapshot. This is a schema-generation
 regression, not a matrix of all historical releases or a complete database
 upgrade certification. Policy cases reject malformed, unordered, duplicate,
 private and updater-owned resource entries, while retaining published resource
-placement. Compact real folder/ZIP fixtures preserve the exact font/license
+placement. The WinApp catalog check covers all three locale paths, rejection in
+the old inventory fields and the published 1.5.7 font/license constraint.
+Compact real folder/ZIP fixtures preserve the exact font, license and catalog
 bytes. `updates_path_safety_test.php` checks updater destination ancestors. The
 compact `production_package_test.php` uses the real canonical PHP builder with
 a minimal isolated payload: folder and ZIP membership, complete SHA-256
@@ -7503,25 +7519,21 @@ contracts, signatures, safe Python parsing, source non-execution,
 documentation-only
 regressions and CI parent-ref enforcement.
 
-The separate `python-import-policy` suite runs in every quick/full/release
-profile
-and forbids `from __future__ import annotations` throughout all admitted `.py`
-and
-`.pyw` sources, including unchanged files. It uses AST import statements, so
-aliases,
-combined imports and multiline syntax are covered; comments, docstrings and
-ordinary
-strings are ignored. `concurrent.futures` and other future features remain
-allowed.
-There is no Git comparison or legacy-debt exemption for this rule. Invalid
-source
-or unavailable Python blocks coverage. The suite writes
-`python-import-policy.json`
-with safe file/line locations; `tests/python_import_policy_test.php` protects
-this
-policy through isolated fixtures. Python is required only for developer/CI
-audits,
-not normal Gallery web requests on shared hosting.
+The `python-import-policy` suite runs in quick/full/release and in the required
+shared source contracts job. It uses the Python AST for every admitted `.py`
+and `.pyw` source, including unchanged files. The absolute
+`python.future_annotations` rule covers aliases, combined imports and multiline
+syntax without a debt exemption. Comments, docstrings and strings are inert.
+Module-level conditional imports, `concurrent.futures` and other future
+features follow the usual scope rules.
+
+`python.function_local_import` covers both import statements under synchronous
+functions, asynchronous functions, methods and their nested blocks. Every
+occurrence fails the gate, including in unchanged files. Both rules emit
+safe file and line locations in `python-import-policy.json` and ignore Git
+history. Invalid source or unavailable Python blocks coverage. The central
+PHP regression `tests/python_import_policy_test.php` exercises the actual
+scanner without Git metadata. Python is a developer/CI audit dependency.
 
 The central audit discovers `viewer_anti_automation_context_test.php` and its
 isolated support fixture. They execute actual registration/resend controllers

@@ -16,8 +16,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+from uploader.localization import gettext
 from uploader.ui_shell import EmbeddedWindow, active_panel, messagebox
 from uploader.ui_theme import Button
+from uploader.ui_theme import _PALETTE
 
 # Purpose: Bound each displayed directory listing while retaining typed paths.
 # Type: int; Units: entries; Scope: one directory scan.
@@ -86,13 +88,12 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
         str | tuple[str, ...]: Selected path, selected paths for multiple mode,
             or an empty value when cancelled.
     """
-    from uploader.ui_theme import _PALETTE
 
     owner = parent or tk._default_root
     if owner is owner.winfo_toplevel():
         owner = active_panel(owner) or owner
     panel = EmbeddedWindow(owner)
-    panel.title(title or 'Select ' + ('folder' if mode == 'directory' else 'file'))
+    panel.title(title or (gettext('Select folder') if mode == 'directory' else gettext('Select file')))
     body = ttk.Frame(panel, padding=12)
     body.pack(fill='both', expand=True)
     current = Path(initialdir).expanduser() if initialdir else Path.home()
@@ -161,7 +162,7 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
     name_entry = ttk.Entry(body, textvariable=name_var)
     name_entry.pack(fill='x', pady=6)
     name_var.trace_add('write', lambda *_args: listing_box.selection_clear(0, 'end'))
-    filters = list(filetypes) or [('All files', '*')]
+    filters = list(filetypes) or [(gettext('All files'), '*')]
     filter_index = tk.StringVar(master=panel, value=filters[0][0])
     filter_control = ttk.Combobox(body, textvariable=filter_index, values=[item[0] for item in filters], state='readonly')
     if mode != 'directory':
@@ -178,7 +179,7 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
         path = Path(path_var.get()).expanduser()
         selected = next((patterns for label, patterns in filters if label == filter_index.get()), '*')
         patterns = (tuple(selected.split()) if isinstance(selected, str) else selected) if mode != 'directory' else ()
-        status.set('Loading…')
+        status.set(gettext('Loading…'))
         listing_box.delete(0, 'end')
         listing.clear()
 
@@ -198,7 +199,10 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
                 listing[:] = [row for row in rows if mode != 'directory' or row[1]]
                 for name, directory in listing:
                     listing_box.insert('end', ('📁 ' if directory else '') + name)
-                status.set(error or ('Listing truncated; enter a full path to select other items.' if truncated else ''))
+                status.set(gettext(error) if error else (
+                    gettext('Listing truncated; enter a full path to select other items.')
+                    if truncated else ''
+                ))
         except queue.Empty:
             pass
         if panel.winfo_exists():
@@ -213,7 +217,7 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
             None: Refreshes the listing when the path is a directory.
         """
         if not path.is_dir():
-            status.set('Folder does not exist or cannot be accessed.')
+            status.set(gettext('Folder does not exist or cannot be accessed.'))
             return
         path_var.set(str(path))
         refresh()
@@ -252,7 +256,7 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
         if mode == 'directory' and not paths:
             paths = [Path(path_var.get()).expanduser()]
         if not paths:
-            status.set('Select an item or enter a path.')
+            status.set(gettext('Select an item or enter a path.'))
             return
         if mode != 'directory' and len(paths) == 1 and paths[0].is_dir():
             navigate(paths[0])
@@ -260,29 +264,29 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
             return
         if mode == 'directory':
             if mustexist and not paths[0].is_dir():
-                status.set('Select an existing folder.')
+                status.set(gettext('Select an existing folder.'))
                 return
         elif mode in ('open', 'multiple'):
             if any(not path.is_file() for path in paths):
-                status.set('Select existing files.')
+                status.set(gettext('Select existing files.'))
                 return
         else:
             path = paths[0]
             if defaultextension and not path.suffix:
                 path = path.with_suffix(defaultextension if defaultextension.startswith('.') else '.' + defaultextension)
             if not path.parent.is_dir():
-                status.set('The destination folder does not exist.')
+                status.set(gettext('The destination folder does not exist.'))
                 return
-            if path.exists() and not messagebox.askyesno('Replace file', 'Replace the existing file?', parent=panel):
+            if path.exists() and not messagebox.askyesno(gettext('Replace file'), gettext('Replace the existing file?'), parent=panel):
                 return
             paths = [path]
         values = tuple(str(path) for path in paths)
         finish(values if mode == 'multiple' else values[0])
 
-    Button(controls, text='Go', command=lambda: navigate(Path(path_var.get()).expanduser())).pack(side='left')
-    Button(controls, text='Up', command=lambda: navigate(Path(path_var.get()).parent)).pack(side='left')
-    Button(controls, text='Home', command=lambda: navigate(Path.home())).pack(side='left')
-    Button(controls, text='Root', command=lambda: navigate(Path(Path(path_var.get()).anchor or '/'))).pack(side='left')
+    Button(controls, text=gettext('Go'), command=lambda: navigate(Path(path_var.get()).expanduser())).pack(side='left')
+    Button(controls, text=gettext('Up'), command=lambda: navigate(Path(path_var.get()).parent)).pack(side='left')
+    Button(controls, text=gettext('Home'), command=lambda: navigate(Path.home())).pack(side='left')
+    Button(controls, text=gettext('Root'), command=lambda: navigate(Path(Path(path_var.get()).anchor or '/'))).pack(side='left')
     def invalidate_path(*_args: str) -> None:
         """Discard rows as soon as the user edits their source directory.
 
@@ -316,9 +320,9 @@ def _choose(mode: str, parent: tk.Misc | None = None, title: str = '', initialdi
     filter_control.bind('<<ComboboxSelected>>', lambda _event: refresh())
     footer = ttk.Frame(body)
     footer.pack(fill='x', pady=8)
-    Button(footer, text='Select', command=accept).pack(side='left')
+    Button(footer, text=gettext('Select'), command=accept).pack(side='left')
     cancel = () if mode == 'multiple' else ''
-    Button(footer, text='Cancel', command=lambda: finish(cancel)).pack(side='left')
+    Button(footer, text=gettext('Cancel'), command=lambda: finish(cancel)).pack(side='left')
     panel.protocol('WM_DELETE_WINDOW', lambda: finish(cancel))
 
     def destroyed(event: tk.Event) -> None:

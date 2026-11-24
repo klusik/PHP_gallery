@@ -22,6 +22,7 @@ require_once __DIR__ . '/fixtures/updater_inventory_before_resources.php';
 use function Gallery\Core\release_file_policy_read;
 use function Gallery\Core\release_file_policy_archive_updater_paths;
 use function Gallery\Core\release_file_policy_paths;
+use function Gallery\Core\release_file_policy_validate_path_list;
 use function Gallery\Tests\CompanionInstalledPolicy\{
     release_file_policy_archive_updater_paths as companion_installed_archive_paths,
     release_file_policy_read as companion_installed_policy_read
@@ -47,6 +48,44 @@ function updater_inventory_compatibility_assert(
     if (!$condition) {
         throw new RuntimeException($message);
     }
+}
+
+/**
+ * Apply the published 1.5.7 resource check before the frozen updater fixture.
+ *
+ * @param string $root Directory containing the test-owned incoming archive.
+ * @return array{files:list<string>,legacy:bool} The installed activation scope.
+ * @throws RuntimeException When the published resource allowlist refuses a path.
+ */
+function updater_inventory_compatibility_resource_aware_paths(string $root): array
+{
+    $manifest = json_decode(
+        (string) file_get_contents($root . '/app/production-files.json'),
+        true,
+        flags: JSON_THROW_ON_ERROR,
+    );
+    // Preserve the field and literal allowlist shipped in v_1.5.7. That reader
+    // ignores extensions it does not know and rejects surprises in this list.
+    if (
+        !is_array($manifest)
+        || (
+            array_key_exists('companion_resource_files', $manifest)
+            && !is_array($manifest['companion_resource_files'])
+        )
+    ) {
+        throw new RuntimeException('Invalid installed resource field.');
+    }
+    foreach (release_file_policy_validate_path_list(
+        $manifest['companion_resource_files'] ?? [],
+    ) as $path) {
+        if (!in_array($path, [
+            'winapp/uploader/resources/DejaVuSans.ttf',
+            'winapp/uploader/resources/LICENSE_DEJAVU',
+        ], true)) {
+            throw new RuntimeException('Installed resource allowlist rejected the path.');
+        }
+    }
+    return companion_installed_archive_paths($root);
 }
 
 /**
@@ -99,6 +138,16 @@ updater_inventory_compatibility_assert(
     $inventory['companion_resource_files'] === $resources,
     'The real generated inventory did not isolate the new font and license in its additive field.',
 );
+$locales = [
+    'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po',
+    'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
+    'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
+];
+updater_inventory_compatibility_assert(
+    $inventory['companion_locale_files'] === $locales
+        && array_intersect($locales, $inventory['updater_files']) === [],
+    'The real package must isolate all WinApp catalogs from CMS activation.',
+);
 
 $fixture =
     sys_get_temp_dir()
@@ -130,6 +179,32 @@ try {
             === $inventory['updater_files'],
         'The real incoming package changed installed activation ownership.',
     );
+    updater_inventory_compatibility_assert(
+        updater_inventory_compatibility_resource_aware_paths($incomingRoot)['files']
+            === $inventory['updater_files'],
+        'The 1.5.7 resource contract refused the packaged WinApp catalogs.',
+    );
+    $incomingSidecar = $incomingRoot . '/app/production-files.json';
+    $incomingBytes = (string) file_get_contents($incomingSidecar);
+    $misplaced = $inventory;
+    $misplaced['companion_resource_files'] = array_merge($resources, $locales);
+    unset($misplaced['companion_locale_files']);
+    file_put_contents($incomingSidecar, json_encode($misplaced, JSON_THROW_ON_ERROR));
+    try {
+        $refused = false;
+        try {
+            updater_inventory_compatibility_resource_aware_paths($incomingRoot);
+        } catch (RuntimeException $exception) {
+            $refused = $exception->getMessage()
+                === 'Installed resource allowlist rejected the path.';
+        }
+        updater_inventory_compatibility_assert(
+            $refused,
+            'The compatibility fixture must detect catalogs in the old resource field.',
+        );
+    } finally {
+        file_put_contents($incomingSidecar, $incomingBytes);
+    }
     $unlisted = $incomingRoot . '/app/unlisted-compatibility.php';
     file_put_contents($unlisted, "unlisted fixture\n");
     $refused = false;

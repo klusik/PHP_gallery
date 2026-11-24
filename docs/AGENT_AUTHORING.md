@@ -233,7 +233,11 @@ unused PHP inputs.
 ### Python: native annotations and typed Google-style docstring
 
 Do not add `from __future__ import annotations`; the repository's Python import
-policy checks this independently. This example needs no postponed annotations.
+policy checks this independently. Put imports at module scope, including
+optional, platform-specific and typing-only imports. The same AST policy rejects
+all imports under synchronous and asynchronous callables, including methods and
+their nested blocks. If two modules require each other, move their shared
+dependency to an independent owner.
 
 <!-- checked-example: python-declaration -->
 ```python

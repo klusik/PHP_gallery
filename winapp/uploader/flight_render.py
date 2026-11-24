@@ -20,6 +20,9 @@ from typing import Callable
 from uploader.flight_data import FlightAnalysis
 from uploader.flight_jobs import REPORT_LANGUAGES
 
+ReportMaps = Callable[[FlightAnalysis, Path], tuple[bytes, bytes]]
+ReportRenderer = Callable[[FlightAnalysis, str, Path, tuple[bytes, bytes]], Path]
+
 # Purpose: Notice cancellation without busy-waiting while PDF children run.
 # Type: float; Units: seconds; Scope: one language-render batch.
 # Consumers: render_report_variants. Rationale: 0.1 seconds keeps cancellation
@@ -27,30 +30,14 @@ from uploader.flight_jobs import REPORT_LANGUAGES
 RENDER_POLL_SECONDS = 0.1
 
 
-def _render_language(
-    analysis: FlightAnalysis, language: str, destination: Path,
-    map_images: tuple[bytes, bytes],
-) -> Path:
-    """Render one edition inside a child without GUI state or gallery credentials.
-
-    Args:
-        analysis (FlightAnalysis): Serializable immutable flight observations.
-        language (str): One supported normalized output language.
-        destination (Path): Unique parent-reserved PDF filename.
-        map_images (tuple[bytes, bytes]): Prepared overview/full PNG backgrounds.
-    Returns:
-        Path: Atomically completed PDF with its individual renderer manifest.
-    """
-    from uploader.flight_report import render_report
-
-    return render_report(analysis, language, destination, map_images)
-
-
 def render_report_variants(
     analysis: FlightAnalysis, destinations: dict[str, Path],
     cancel: threading.Event | None = None,
     on_started: Callable[[str], None] | None = None,
     on_completed: Callable[[str, Path], None] | None = None,
+    *,
+    prepare_maps: ReportMaps,
+    render: ReportRenderer,
 ) -> dict[str, Path]:
     """Run all selected language editions concurrently and join before returning.
 
@@ -62,6 +49,8 @@ def render_report_variants(
         on_started (Callable[[str], None] | None): Parent-thread language-start hook.
         on_completed (Callable[[str, Path], None] | None): Parent-thread hook for
             each successful PDF, including work completed during cancellation.
+        prepare_maps (ReportMaps): Render overview and full PNG bytes once.
+        render (ReportRenderer): Spawn-safe renderer for one language edition.
     Returns:
         dict[str, Path]: Complete PDFs in requested language order, after every
             child exits. Partial sets are never returned as complete success.
@@ -72,8 +61,6 @@ def render_report_variants(
         Exception: Preparation, a renderer or a completion hook failed; other
             running children are drained and their finished artifacts retained.
     """
-    from uploader.flight_report import prepare_report_maps
-
     if not destinations or any(code not in REPORT_LANGUAGES for code in destinations):
         raise ValueError("Select supported report languages before rendering.")
     paths = list(destinations.values())
@@ -87,7 +74,7 @@ def render_report_variants(
         raise ValueError("A report batch must use one output directory.")
     if cancel is not None and cancel.is_set():
         raise InterruptedError("PDF creation cancelled; finished reports retained.")
-    maps = prepare_report_maps(analysis, paths[0].parent)
+    maps = prepare_maps(analysis, paths[0].parent)
     if cancel is not None and cancel.is_set():
         raise InterruptedError("PDF creation cancelled; finished reports retained.")
     results: dict[str, Path] = {}
@@ -102,7 +89,7 @@ def render_report_variants(
         pending = {}
         try:
             for language, destination in destinations.items():
-                future = pool.submit(_render_language, analysis, language, destination, maps)
+                future = pool.submit(render, analysis, language, destination, maps)
                 pending[future] = language
                 if on_started is not None:
                     on_started(language)

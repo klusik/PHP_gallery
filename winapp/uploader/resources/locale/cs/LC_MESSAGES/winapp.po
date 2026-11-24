@@ -1,0 +1,2227 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po
+# Module Type: WinApp GNU gettext Catalog
+# Purpose: Provide Czech interface text for WinApp.
+# Responsibilities: Translate WinApp interface messages and retain their named fields.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+msgid ""
+msgstr ""
+"Project-Id-Version: PHP Gallery WinApp\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n == 1 ? 0 : n >= 2 && n <= 4 ? 1 : 2);\n"
+
+msgid "\n\nKeep the application running in the tray instead of forcing it closed?"
+msgstr "\n\nNechat aplikaci běžet v oznamovací oblasti? Druhá možnost ji vynuceně ukončí."
+
+msgid " · progress "
+msgstr " · průběh "
+
+msgid " at {rate}/s, ETA {seconds}s"
+msgstr " rychlostí {rate}/s, zbývá {seconds} s"
+
+msgid ". The saved API key remains unchanged."
+msgstr ". Uložený klíč API zůstává stejný."
+
+msgid "{app_display_name} {app_version}\nAuthor: Rudolf Klusal\nMIT License\nhttps://github.com/klusik/PHP_gallery"
+msgstr "{app_display_name} {app_version}\nAutor: Rudolf Klusal\nLicence MIT\nhttps://github.com/klusik/PHP_gallery"
+
+msgid "{complete}/{total} terminal | {sent} / {size} | {rate} | {eta}"
+msgstr "{complete}/{total} dokončeno | {sent} / {size} | {rate} | {eta}"
+
+msgid "{kind}: {source} | target {gallery} | confirmed {confirmed}, duplicates {duplicates}, failed {failed}, cancelled {cancelled}, active {active} | {progress}"
+msgstr "{kind}: {source} | cílová galerie {gallery} | potvrzeno {confirmed}, duplicity {duplicates}, selhalo {failed}, zrušeno {cancelled}, probíhá {active} | {progress}"
+
+msgid "{uncertain} upload(s) have an uncertain result. Review the gallery manually; they were not retried."
+msgstr "Nahrávky s nejistým výsledkem: {uncertain}. Prověřte je přímo v galerii. WinApp je nenahrál znovu."
+
+msgid "▶  Start AI worker"
+msgstr "▶  Spustit AI analýzu"
+
+msgid "▶  Start import"
+msgstr "▶  Spustit import"
+
+msgid "▶  Start Watcher"
+msgstr "▶  Spustit Sledovátko"
+
+msgid "● REC"
+msgstr "● REC"
+
+msgid "✓  Save & Test"
+msgstr "✓  Uložit a otestovat"
+
+msgid "✓  Save settings"
+msgstr "✓  Uložit nastavení"
+
+msgid "A gallery request is already in progress."
+msgstr "Požadavek na galerii už probíhá."
+
+msgid "A key is currently stored locally."
+msgstr "Klíč je uložený v tomto počítači."
+
+msgid "A saved connection is required."
+msgstr "Nejdřív uložte připojení."
+
+msgid "About PHP Gallery"
+msgstr "O PHP Gallery"
+
+msgid "Acknowledging the saved creation receipt…"
+msgstr "Potvrzuji uloženou stvrzenku o vytvoření galerie…"
+
+msgid "active"
+msgstr "aktivní"
+
+msgid "Activity"
+msgstr "Aktivita"
+
+msgid "Advanced AI settings"
+msgstr "Pokročilá nastavení AI"
+
+msgid "Advanced import and archive settings"
+msgstr "Pokročilá nastavení importu a archivů"
+
+msgid "After confirmed upload. Existing and changed files are kept."
+msgstr "Po potvrzeném nahrání. Dřívější a změněné soubory zůstanou na disku."
+
+msgid "ai"
+msgstr "AI"
+
+msgid "Ai"
+msgstr "AI"
+
+msgid "AI METADATA"
+msgstr "METADATA Z AI"
+
+msgid "AI metadata worker"
+msgstr "AI analýza metadat"
+
+msgid "AI metadata worker idle"
+msgstr "AI analýza metadat čeká"
+
+msgid "AI metadata worker is running"
+msgstr "probíhá AI analýza metadat"
+
+msgid "AI metadata worker running"
+msgstr "AI analýza metadat běží"
+
+msgid "AI metadata worker started."
+msgstr "AI analýza metadat spuštěna."
+
+msgid "AI metadata worker stopped"
+msgstr "AI analýza metadat zastavena"
+
+msgid "AI metadata worker stopping"
+msgstr "AI analýza metadat se zastavuje"
+
+msgid "all"
+msgstr "vše"
+
+msgid "All files"
+msgstr "Všechny soubory"
+
+msgid "Allow creating galleries"
+msgstr "Povolit vytváření galerií"
+
+msgid "Allow gallery uploads"
+msgstr "Povolit nahrávání do galerií"
+
+msgid "Allow listing galleries"
+msgstr "Povolit výpis galerií"
+
+msgid "An older version left unfinished Watcher work. Resume Watcher continues the original session."
+msgstr "Starší verze nechala rozpracovanou úlohu Sledovátka. Volba Pokračovat ve sledování obnoví původní relaci."
+
+msgid "An unfinished import from {value} contains {value2} recoverable item(s). Open it for review and resume/retry?"
+msgstr "Nedokončený import z {value} obsahuje položky k obnovení: {value2}. Otevřít ho ke kontrole a pokračovat v importu?"
+
+msgid "An update operation is still in progress."
+msgstr "Aktualizace už probíhá."
+
+msgid "API key"
+msgstr "Klíč API"
+
+msgid "API key changed. Save and test the connection before starting work."
+msgstr "Klíč API se změnil. Než začnete pracovat, uložte a otestujte připojení."
+
+msgid "API key configured"
+msgstr "Klíč API je nastavený"
+
+msgid "API key entered but not saved"
+msgstr "Klíč API je zadaný a čeká na uložení"
+
+msgid "API key not configured"
+msgstr "Klíč API není nastavený"
+
+msgid "API key revoked and removed from local configuration."
+msgstr "Klíč API byl zneplatněn a odebrán z místního nastavení."
+
+msgid "API-key connection…"
+msgstr "Připojení pomocí klíče API…"
+
+msgid "API-key revocation failed: {detail}"
+msgstr "Klíč API se nepodařilo zneplatnit: {detail}"
+
+msgid "APP & INTEGRATIONS"
+msgstr "APLIKACE A INTEGRACE"
+
+msgid "Application startup"
+msgstr "Spuštění aplikace"
+
+msgid "Apply the saved per-user Windows startup preference without a UI."
+msgstr "Použít uloženou volbu spouštění s Windows pro aktuálního uživatele bez otevření rozhraní."
+
+msgid "Attach simulator location"
+msgstr "Připojit polohu simulátoru"
+
+msgid "Authenticated endpoint available: {endpoint}"
+msgstr "Ověřená adresa API: {endpoint}"
+
+msgid "Authentication error"
+msgstr "Chyba ověření přístupu"
+
+msgid "Auto"
+msgstr "Automaticky"
+
+msgid "Backend"
+msgstr "Výpočetní modul"
+
+msgid "Background activity is running."
+msgstr "Probíhá práce na pozadí."
+
+msgid "Background work is still stopping"
+msgstr "Práce na pozadí se ještě ukončuje"
+
+msgid "Cancel"
+msgstr "Zrušit"
+
+msgid "Cancel download"
+msgstr "Zrušit stahování"
+
+msgid "Cancel the active import"
+msgstr "Zrušit probíhající import"
+
+msgid "cancelled"
+msgstr "zrušeno"
+
+msgid "Cancelling after in-flight requests"
+msgstr "Ruší se po dokončení odeslaných požadavků"
+
+msgid "Check create status"
+msgstr "Ověřit stav vytváření"
+
+msgid "Check for updates"
+msgstr "Vyhledat aktualizace"
+
+msgid "Check for updates or open the available update"
+msgstr "Vyhledat aktualizace nebo otevřít dostupnou aktualizaci"
+
+msgid "Check for updates…"
+msgstr "Vyhledat aktualizace…"
+
+msgid "Check uncertain upload"
+msgstr "Prověřit nejisté nahrání"
+
+msgid "Checking endpoint and API-key authorization without uploading media..."
+msgstr "Ověřuji adresu a oprávnění klíče API bez nahrávání souborů…"
+
+msgid "Checking for updates..."
+msgstr "Vyhledávám aktualizace…"
+
+msgid "Checking gallery creation…"
+msgstr "Ověřuji vytvoření galerie…"
+
+msgid "Checking the approved identity…"
+msgstr "Ověřuji schválený účet…"
+
+msgid "Checking the saved gallery connection…"
+msgstr "Ověřuji uložené připojení ke galerii…"
+
+msgid "Checking the securely saved connection…"
+msgstr "Ověřuji bezpečně uložené připojení…"
+
+msgid "Checking the uncertain upload once…"
+msgstr "Jednorázově ověřuji nejisté nahrání…"
+
+msgid "Choose"
+msgstr "Vybrat"
+
+msgid "Choose a different visibility."
+msgstr "Vyberte jinou viditelnost."
+
+msgid "Choose a folder"
+msgstr "Vybrat složku"
+
+msgid "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled."
+msgstr "Vyberte složku a připojte galerii. Sledovátko při spuštění přeskočí již uložené soubory a nahraje nové podporované snímky, jakmile se dokopírují. Soubory zůstanou v počítači, pokud výslovně nepovolíte mazání po potvrzeném nahrání."
+
+msgid "Choose a folder in Watcher or add files in Import."
+msgstr "Vyberte složku ve Sledovátku nebo přidejte soubory v Importu."
+
+msgid "Choose a folder to watch before starting."
+msgstr "Nejdřív vyberte složku, kterou chcete sledovat."
+
+msgid "Choose a source and complete preflight first."
+msgstr "Vyberte zdroj a dokončete kontrolu před importem."
+
+msgid "Choose a ZIP archive"
+msgstr "Vybrat archiv ZIP"
+
+msgid "Choose an existing folder first."
+msgstr "Nejdřív vyberte existující složku."
+
+msgid "Choose files to import"
+msgstr "Vybrat soubory k importu"
+
+msgid "Choose files, a folder, or a ZIP archive"
+msgstr "Vyberte soubory, složku nebo archiv ZIP"
+
+msgid "Choose folder to import"
+msgstr "Vybrat složku k importu"
+
+msgid "Choose folder…"
+msgstr "Vybrat složku…"
+
+msgid "Choose gallery…"
+msgstr "Vybrat galerii…"
+
+msgid "Choose image files"
+msgstr "Vybrat soubory s obrázky"
+
+msgid "Choose Interrupt in the progress panel to pause uploads."
+msgstr "V přehledu průběhu zvolte Přerušit, chcete-li nahrávání pozastavit."
+
+msgid "Choose permissions for this connection. Optional secure storage requires separate browser consent and permits renewal for up to 30 days, with a seven-day inactivity limit. The saved API key remains available; server grants may remain until revoked."
+msgstr "Vyberte oprávnění pro toto připojení. Volitelné bezpečné uložení vyžaduje zvláštní souhlas v prohlížeči a umožňuje obnovu až 30 dní, nejvýše po sedmi dnech nečinnosti. Uložený klíč API zůstává k dispozici. Oprávnění na serveru mohou zůstat platná do odvolání."
+
+msgid "CHOOSE SOURCE"
+msgstr "VÝBĚR ZDROJE"
+
+msgid "Choose watched folder"
+msgstr "Vybrat sledovanou složku"
+
+msgid "Choose ZIP archive to import"
+msgstr "Vybrat archiv ZIP k importu"
+
+msgid "Clear the selected source"
+msgstr "Zrušit výběr zdroje"
+
+msgid "Close"
+msgstr "Zavřít"
+
+msgid "Close unresolved creation"
+msgstr "Uzavřít nevyřešené vytvoření galerie"
+
+msgid "Closing after the update operation stops..."
+msgstr "Aplikace se zavře po ukončení aktualizace…"
+
+msgid "Closing previous Watcher access. Try again after it finishes."
+msgstr "Ukončuji předchozí přístup Sledovátka. Zkuste to znovu po dokončení."
+
+msgid "Closing previous Watcher access. Try again when it finishes."
+msgstr "Ukončuji předchozí přístup Sledovátka. Zkuste to znovu po dokončení."
+
+msgid "Complete the app update before resetting Watcher."
+msgstr "Před obnovením výchozího nastavení Sledovátka dokončete aktualizaci."
+
+msgid "Configuration"
+msgstr "Konfigurace"
+
+msgid "Configuration changed; run preflight again. Sources were retained."
+msgstr "Nastavení se změnilo. Spusťte kontrolu před importem znovu. Zdroje zůstaly uložené."
+
+msgid "Configuration error"
+msgstr "Chyba nastavení"
+
+msgid "confirmed"
+msgstr "potvrzeno"
+
+msgid "Connect a gallery, choose a Watcher folder, then explicitly start capture. Finish drains accepted photographs before completing.\n\nUse File to choose an import source. Review preflight before starting an import. View switches between Photos, Watcher, Import, Activity, AI and Settings.\n\nHelp → Support diagnostics builds a local report you can review, copy or save for support. Review it before sharing; nothing is sent automatically."
+msgstr "Připojte galerii, vyberte složku ve Sledovátku a spusťte záznam. Volba Dokončit nejdřív nahraje přijaté snímky a pak relaci ukončí.\n\nV nabídce Soubor vyberte zdroj k importu. Před spuštěním importu zkontrolujte výsledek předběžné kontroly. V nabídce Zobrazení můžete přepínat mezi Fotkami, Sledovátkem, Importem, Aktivitou, AI a Nastavením.\n\nV nabídce Nápověda otevřete Diagnostiku pro podporu. Místní report si můžete prohlédnout, zkopírovat nebo uložit. Před sdílením ho zkontrolujte. Aplikace jej sama neodesílá."
+
+msgid "Connect Watcher"
+msgstr "Připojit Sledovátko"
+
+msgid "Connected"
+msgstr "Připojeno"
+
+msgid "Connection"
+msgstr "Připojení"
+
+msgid "Connection / API key..."
+msgstr "Připojení / klíč API…"
+
+msgid "Connection failed"
+msgstr "Připojení selhalo"
+
+msgid "Connection saved. Test authentication before starting work."
+msgstr "Připojení uloženo. Než začnete pracovat, otestujte ověření přístupu."
+
+msgid "Connection saved. Testing authentication..."
+msgstr "Připojení uloženo. Ověřuji přístup…"
+
+msgid "Connection test failed: {detail}"
+msgstr "Test připojení selhal: {detail}"
+
+msgid "connection test is running"
+msgstr "probíhá test připojení"
+
+msgid "Connection test succeeded for gallery {gallery}."
+msgstr "Test připojení ke galerii {gallery} proběhl úspěšně."
+
+msgid "Connection warning"
+msgstr "Upozornění k připojení"
+
+msgid "Copy"
+msgstr "Kopírovat"
+
+msgid "Copy report"
+msgstr "Kopírovat report"
+
+msgid "Could not acknowledge the creation receipt."
+msgstr "Nepodařilo se potvrdit převzetí stvrzenky o vytvoření."
+
+msgid "Could not connect to the gallery service."
+msgstr "Ke službě galerie se nepodařilo připojit."
+
+msgid "Could not create the gallery. Check the connection or try another name. Using the same name resumes its saved request."
+msgstr "Galerii se nepodařilo vytvořit. Zkontrolujte připojení nebo zkuste jiný název. Se stejným názvem se pokračuje v uloženém požadavku."
+
+msgid "Could not establish secure HTTPS to the gallery."
+msgstr "Nepodařilo se navázat zabezpečené připojení HTTPS ke galerii."
+
+msgid "Could not load galleries."
+msgstr "Galerie se nepodařilo načíst."
+
+msgid "Could not load the current gallery list. Access may have expired or been revoked; refresh after reconnecting."
+msgstr "Aktuální seznam galerií se nepodařilo načíst. Přístup mohl vypršet nebo být odvolán. Připojte se znovu a obnovte seznam."
+
+msgid "Could not open the browser. Try connecting again."
+msgstr "Nepodařilo se otevřít prohlížeč. Zkuste se připojit znovu."
+
+msgid "Could not open the gallery in your browser."
+msgstr "Galerii se nepodařilo otevřít v prohlížeči."
+
+msgid "Could not prepare the Watcher connection. Try again."
+msgstr "Nepodařilo se připravit připojení Sledovátka. Zkuste to znovu."
+
+msgid "Could not reach the saved gallery renewal service. Try again when it is available."
+msgstr "Služba pro obnovení uloženého připojení ke galerii je nedostupná. Zkuste to, až bude znovu dostupná."
+
+msgid "Could not read the original creation request."
+msgstr "Nepodařilo se načíst původní požadavek na vytvoření galerie."
+
+msgid "Could not resolve the gallery address (DNS)."
+msgstr "Adresu galerie se nepodařilo přeložit přes DNS."
+
+msgid "Could not save report: "
+msgstr "Report se nepodařilo uložit: "
+
+msgid "Could not save the interface language."
+msgstr "Jazyk aplikace se nepodařilo uložit."
+
+msgid "Could not start a secure linking attempt."
+msgstr "Nepodařilo se zahájit zabezpečené propojení."
+
+msgid "Could not start gallery creation."
+msgstr "Nepodařilo se zahájit vytváření galerie."
+
+msgid "Could not start gallery verification."
+msgstr "Nepodařilo se zahájit ověřování galerie."
+
+msgid "Could not start local removal."
+msgstr "Nepodařilo se zahájit místní odebrání připojení."
+
+msgid "Could not start secure unlink cleanup."
+msgstr "Nepodařilo se zahájit bezpečné dočištění po odpojení."
+
+msgid "Could not start the gallery detail request."
+msgstr "Nepodařilo se požádat o podrobnosti galerie."
+
+msgid "Could not start the gallery request."
+msgstr "Nepodařilo se odeslat požadavek na galerii."
+
+msgid "Could not start the linked Watcher. Check the Watcher settings and try again."
+msgstr "Propojené Sledovátko se nepodařilo spustit. Zkontrolujte jeho nastavení a zkuste to znovu."
+
+msgid "Could not start the secure reconnect."
+msgstr "Nepodařilo se zahájit bezpečné opětovné připojení."
+
+msgid "Could not start the upload observation."
+msgstr "Nepodařilo se zahájit kontrolu nahrání."
+
+msgid "Could not start the visibility request; read details again."
+msgstr "Nepodařilo se požádat o změnu viditelnosti. Načtěte znovu podrobnosti."
+
+msgid "Could not verify the created gallery."
+msgstr "Vytvořenou galerii se nepodařilo ověřit."
+
+msgid "Could not verify the gallery or prepare Watcher access. Check the connection and try again."
+msgstr "Nepodařilo se ověřit galerii nebo připravit přístup pro Sledovátko. Zkontrolujte připojení a zkuste to znovu."
+
+msgid "Could not verify the saved link. Try again."
+msgstr "Uložené propojení se nepodařilo ověřit. Zkuste to znovu."
+
+msgid "Could not verify the uncertain upload. It remains unresolved."
+msgstr "Nejisté nahrání se nepodařilo ověřit. Výsledek zůstává nevyřešený."
+
+msgid "Create gallery"
+msgstr "Vytvořit galerii"
+
+msgid "Create inside {gallery}? Choose No to create at the root."
+msgstr "Vytvořit galerii uvnitř {gallery}? Volbou Ne ji vytvoříte v kořeni."
+
+msgid "Created"
+msgstr "Vytvořeno"
+
+msgid "Created "
+msgstr "Vytvořeno: "
+
+msgid "Creation acknowledged. You may create another gallery."
+msgstr "Vytvoření bylo potvrzeno. Můžete vytvořit další galerii."
+
+msgid "Creation is unconfirmed. Do not create it again. Reconnect to the same account and check status. Explicitly Resume original creation, or review the gallery and storage and use Close unresolved creation."
+msgstr "Vytvoření zatím není potvrzené. Nezakládejte galerii znovu. Připojte se stejným účtem a ověřte stav. Pokračujte volbou Obnovit původní vytvoření, nebo zkontrolujte galerii i úložiště a použijte Uzavřít nevyřešené vytvoření galerie."
+
+msgid "Current import"
+msgstr "Aktuální import"
+
+msgid "Cut"
+msgstr "Vyjmout"
+
+msgid "Default 0.18. Lower sees more objects but may add noise."
+msgstr "Výchozí hodnota je 0,18. Nižší hodnota zachytí více objektů, ale může přidat chybné nálezy."
+
+msgid "Default 60. Larger values keep the server quieter."
+msgstr "Výchozí hodnota je 60. Vyšší hodnoty snižují zátěž serveru."
+
+msgid "Default 600. Heartbeats extend the lease while analysis runs."
+msgstr "Výchozí hodnota je 600. Pravidelné signály prodlužují rezervaci úlohy během analýzy."
+
+msgid "Delete uploaded photos from this PC"
+msgstr "Odstranit nahrané fotky z tohoto počítače"
+
+msgid "Dependency repair"
+msgstr "Oprava závislostí"
+
+msgid "Dependency repair failed"
+msgstr "Oprava závislostí se nezdařila"
+
+msgid "Detail"
+msgstr "Podrobnosti"
+
+msgid "Detector threshold"
+msgstr "Práh detekce"
+
+msgid "discovered"
+msgstr "nalezeno"
+
+msgid "Dismiss"
+msgstr "Skrýt"
+
+msgid "Dismiss result"
+msgstr "Skrýt výsledek"
+
+msgid "Displayed report copied to clipboard."
+msgstr "Zobrazený report byl zkopírován do schránky."
+
+msgid "Displayed report saved locally. Nothing was sent."
+msgstr "Zobrazený report byl uložen v počítači. Nic se neodeslalo."
+
+msgid "DLL files"
+msgstr "Soubory DLL"
+
+msgid "Downloading installer: {done:,} / {total:,} bytes"
+msgstr "Stahuji instalátor: {done:,} / {total:,} bajtů"
+
+msgid "Downloading installer..."
+msgstr "Stahuji instalátor…"
+
+msgid "Earlier duplicate results need a new preflight. Original sources were retained."
+msgstr "Dřívější výsledky o duplicitách vyžadují novou kontrolu před importem. Původní zdroje zůstaly uložené."
+
+msgid "Edit"
+msgstr "Upravit"
+
+msgid "Enable AI metadata worker on this PC"
+msgstr "Povolit AI analýzu metadat na tomto počítači"
+
+msgid "Enable the AI metadata worker before starting it."
+msgstr "Před spuštěním povolte AI analýzu metadat."
+
+msgid "Enter a valid gallery address first."
+msgstr "Nejdřív zadejte platnou adresu galerie."
+
+msgid "Enter a valid HTTP or HTTPS Gallery URL/endpoint."
+msgstr "Zadejte platnou adresu galerie nebo jejího API přes HTTP nebo HTTPS."
+
+msgid "Enter a valid HTTP(S) Gallery URL or upload endpoint."
+msgstr "Zadejte platnou adresu galerie nebo místa pro nahrávání přes HTTP či HTTPS."
+
+msgid "Enter a valid number within the allowed range."
+msgstr "Zadejte platné číslo v povoleném rozsahu."
+
+msgid "Enter an API key before testing the connection."
+msgstr "Před testem připojení zadejte klíč API."
+
+msgid "Enter the address of your gallery."
+msgstr "Zadejte adresu své galerie."
+
+msgid "Enter the original file size in bytes. No local file is opened. A match only reports observed bytes and does not confirm an upload."
+msgstr "Zadejte původní velikost souboru v bajtech. Místní soubor se neotevře. Shoda znamená pouze stejný počet bajtů a nepotvrzuje nahrání."
+
+msgid "error"
+msgstr "chyba"
+
+msgid "Estimated accepted bytes: {size}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {rejected}"
+msgstr "Odhad velikosti přijatých souborů: {size}  |  Nepodporované přeskočeny: {unsupported}  |  Nebezpečné položky ZIP odmítnuty: {rejected}"
+
+msgid "ETA {seconds}s"
+msgstr "Zbývá {seconds} s"
+
+msgid "ETA pending"
+msgstr "Zbývající čas se počítá"
+
+msgid "Event"
+msgstr "Událost"
+
+msgid "Examples: llava:latest or llama3.2-vision:latest."
+msgstr "Například llava:latest nebo llama3.2-vision:latest."
+
+msgid "Exit"
+msgstr "Ukončit"
+
+msgid "Experimental Canvas gallery renderer"
+msgstr "Experimentální vykreslování galerie v Canvas"
+
+msgid "External analyzer command"
+msgstr "Příkaz externího analyzátoru"
+
+msgid "External command"
+msgstr "Externí příkaz"
+
+msgid "failed"
+msgstr "neúspěšné"
+
+msgid "failed_permanent"
+msgstr "trvalé selhání"
+
+msgid "failed_retryable"
+msgstr "selhalo, lze zopakovat"
+
+msgid "File"
+msgstr "Soubor"
+
+msgid "File stable for"
+msgstr "Soubor musí být beze změny"
+
+msgid "Files"
+msgstr "Soubory"
+
+msgid "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings."
+msgstr "Soubory, které už ve složce byly při spuštění, se přeskočí. Nový soubor se zpracuje, až se přestane měnit jeho velikost a čas změny. Podsložky se sledují, jen pokud je povolíte v nastavení Sledovátka."
+
+msgid "Files: {manual_path_count} selected"
+msgstr "Vybrané soubory: {manual_path_count}"
+
+msgid "Finish or explicitly resolve current work before replacing its gallery connection."
+msgstr "Než změníte připojení ke galerii, dokončete nebo výslovně vyřešte rozpracovanou práci."
+
+msgid "Finish or resolve existing upload work and verify the original creation receipt before changing target."
+msgstr "Před změnou cíle dokončete nebo vyřešte zbývající nahrávání a ověřte původní stvrzenku o vytvoření."
+
+msgid "Finish the active update before changing this setting."
+msgstr "Před změnou tohoto nastavení dokončete probíhající aktualizaci."
+
+msgid "Finish the current Watcher session before starting an import."
+msgstr "Před spuštěním importu dokončete aktuální relaci Sledovátka."
+
+msgid "Finish was not started because queue recovery failed. Review the retained session and retry explicitly."
+msgstr "Dokončování se nespustilo, protože se nepodařilo obnovit frontu. Zkontrolujte zachovanou relaci a spusťte dokončení znovu."
+
+msgid "Finishing current uploads and saving Watcher state…"
+msgstr "Dokončuji nahrávání a ukládám stav Sledovátka…"
+
+msgid "Finishing current work"
+msgstr "Dokončuje se rozpracovaná práce"
+
+msgid "Finishing setup…"
+msgstr "Dokončuji nastavení…"
+
+msgid "Finishing the current upload before updating…"
+msgstr "Před aktualizací dokončuji probíhající nahrávání…"
+
+msgid "First use may download model files locally."
+msgstr "Při prvním použití se mohou stáhnout soubory modelu."
+
+msgid "Flight workspace unavailable."
+msgstr "Pracovní prostor letů není dostupný."
+
+msgid "Folder"
+msgstr "Složka"
+
+msgid "Folder does not exist or cannot be accessed."
+msgstr "Složka neexistuje nebo k ní nemáte přístup."
+
+msgid "Folder: "
+msgstr "Složka: "
+
+msgid "Forget saved link"
+msgstr "Zapomenout uložené propojení"
+
+msgid "Gallery #{number}: {title} · Revision {revision}. Saved visibility: {visibility}; access: {access}; listing: {listing}. Inherited access is not shown."
+msgstr "Galerie č. {number}: {title} · Revize {revision}. Uložená viditelnost: {visibility}. Přístup: {access}. Zobrazení v seznamu: {listing}. Zděděný přístup se nezobrazuje."
+
+msgid "Gallery access is unavailable or another connection operation is running. Try again."
+msgstr "Přístup ke galerii je nedostupný nebo už probíhá jiná operace s připojením. Zkuste to znovu."
+
+msgid "Gallery API key revoked."
+msgstr "Klíč API galerie byl zneplatněn."
+
+msgid "GALLERY CONNECTION"
+msgstr "PŘIPOJENÍ KE GALERII"
+
+msgid "Gallery connection and API key"
+msgstr "Připojení ke galerii a klíč API"
+
+msgid "Gallery connection changed. Run import preflight again."
+msgstr "Připojení ke galerii se změnilo. Spusťte kontrolu před importem znovu."
+
+msgid "Gallery connections…"
+msgstr "Připojení ke galeriím…"
+
+msgid "Gallery detail is unsupported or unavailable. Existing connections and saved API-key upload remain unchanged."
+msgstr "Podrobnosti galerie nejsou podporované nebo dostupné. Stávající připojení i nahrávání s uloženým klíčem API dál fungují."
+
+msgid "Gallery link expired."
+msgstr "Platnost propojení s galerií vypršela."
+
+msgid "Gallery linking cancelled."
+msgstr "Propojení s galerií bylo zrušeno."
+
+msgid "Gallery title:"
+msgstr "Název galerie:"
+
+msgid "Gallery unlinked."
+msgstr "Galerie byla odpojena."
+
+msgid "Gallery URL"
+msgstr "URL galerie"
+
+msgid "Gallery URL and API key are required before retrying."
+msgstr "Před dalším pokusem zadejte URL galerie a klíč API."
+
+msgid "Gallery URL and API key are required before starting an import."
+msgstr "Před zahájením importu zadejte URL galerie a klíč API."
+
+msgid "Gallery URL and API key are required before starting the AI worker."
+msgstr "Před spuštěním AI analýzy zadejte URL galerie a klíč API."
+
+msgid "Gallery URL and API key are required before starting the watcher."
+msgstr "Před spuštěním Sledovátka zadejte URL galerie a klíč API."
+
+msgid "GiB"
+msgstr "GiB"
+
+msgid "Go"
+msgstr "Přejít"
+
+msgid "hashing"
+msgstr "výpočet otisku"
+
+msgid "Help"
+msgstr "Nápověda"
+
+msgid "Help: {title}"
+msgstr "Nápověda: {title}"
+
+msgid "Home"
+msgstr "Domovská složka"
+
+msgid "Ignored at startup: -"
+msgstr "Přeskočeno při spuštění: –"
+
+msgid "Ignored at startup: {value}"
+msgstr "Přeskočeno při spuštění: {value}"
+
+msgid "Ignored at startup: checking existing files…"
+msgstr "Přeskočeno při spuštění: kontroluji existující soubory…"
+
+msgid "Ignored at startup: not scanned yet"
+msgstr "Přeskočeno při spuštění: ještě neproběhla kontrola"
+
+msgid "Image files"
+msgstr "Soubory s obrázky"
+
+msgid "import"
+msgstr "import"
+
+msgid "Import"
+msgstr "Import"
+
+msgid "Import cancelled"
+msgstr "Import byl zrušen"
+
+msgid "Import files…"
+msgstr "Importovat soubory…"
+
+msgid "Import finished"
+msgstr "Import dokončen"
+
+msgid "Import folder…"
+msgstr "Importovat složku…"
+
+msgid "Import idle"
+msgstr "Import čeká"
+
+msgid "Import needs review"
+msgstr "Import vyžaduje kontrolu"
+
+msgid "Import options and item details"
+msgstr "Volby importu a podrobnosti o souborech"
+
+msgid "Import paused"
+msgstr "Import je pozastaven"
+
+msgid "Import preflight completed and is awaiting explicit Start import."
+msgstr "Kontrola skončila. Import čeká na ruční spuštění."
+
+msgid "Import preflight failed: {detail}"
+msgstr "Kontrola před importem selhala: {detail}"
+
+msgid "import preflight is running"
+msgstr "probíhá kontrola před importem"
+
+msgid "Import recovery"
+msgstr "Obnovení importu"
+
+msgid "Import review"
+msgstr "Kontrola importu"
+
+msgid "Import running"
+msgstr "Import probíhá"
+
+msgid "Import ZIP archive…"
+msgstr "Importovat archiv ZIP…"
+
+msgid "Include subfolders"
+msgstr "Zahrnout podsložky"
+
+msgid "info"
+msgstr "informace"
+
+msgid "Inspecting {current}/{total}: {filename}"
+msgstr "Kontroluji {current}/{total}: {filename}"
+
+msgid "Inspecting source, hashing files, checking media capabilities, and comparing remote inventory..."
+msgstr "Prověřuji zdroj, počítám otisky souborů, zjišťuji podporu formátů a porovnávám soubory s galerií…"
+
+msgid "Install local AI module"
+msgstr "Nainstalovat místní modul AI"
+
+msgid "Installed Windows app only. This switch saves immediately."
+msgstr "Pouze pro nainstalovanou aplikaci ve Windows. Tato volba se ukládá ihned."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app."
+msgstr "Instalátor je ověřený.\nAktualizace ukončí aplikaci, nainstaluje novou verzi a znovu ji otevře."
+
+msgid "Installer verified.\nUpdate closes, installs and restarts the app.\nWindows may request administrator approval."
+msgstr "Instalátor je ověřený.\nAktualizace ukončí aplikaci, nainstaluje novou verzi a znovu ji otevře.\nWindows mohou vyžádat souhlas správce."
+
+msgid "Installer verified. Open installer starts manual installation; this source application and source folder remain open and intact."
+msgstr "Instalátor je ověřený. Volbou Otevřít instalátor spustíte ruční instalaci. Spuštěná zdrojová aplikace i její složka zůstanou otevřené a beze změny."
+
+msgid "Installer verified. Open installer starts manual installation; this source application remains open."
+msgstr "Instalátor je ověřený. Volbou Otevřít instalátor spustíte ruční instalaci. Aplikace spuštěná ze zdrojů zůstane otevřená."
+
+msgid "Installing…"
+msgstr "Instaluji…"
+
+msgid "Invalid settings"
+msgstr "Neplatné nastavení"
+
+msgid "Job history"
+msgstr "Historie úloh"
+
+msgid "Keep working in the system tray when the window closes"
+msgstr "Po zavření okna dál pracovat v oznamovací oblasti"
+
+msgid "Keeps Flight Simulator in sync with real-world UTC while the watcher runs. Off by default. Your choice is remembered."
+msgstr "Během sledování složky udržuje čas ve Flight Simulatoru podle skutečného UTC. Výchozí stav je vypnuto. Volba se uloží."
+
+msgid "Language"
+msgstr "Jazyk"
+
+msgid "Last scan: "
+msgstr "Poslední kontrola: "
+
+msgid "Last scan: -"
+msgstr "Poslední kontrola: –"
+
+msgid "Last scan: preparing"
+msgstr "Poslední kontrola: příprava"
+
+msgid "Last successful scan: "
+msgstr "Poslední úspěšná kontrola: "
+
+msgid "Later"
+msgstr "Později"
+
+msgid "LATEST"
+msgstr "NEJNOVĚJŠÍ"
+
+msgid "Lease seconds per job"
+msgstr "Rezervace úlohy v sekundách"
+
+msgid "Link the gallery to load its gallery list."
+msgstr "Nejdřív propojte galerii, aby se mohl načíst její seznam galerií."
+
+msgid "Linked gallery upload does not grant AI access. Switch explicitly to the saved API-key connection to use this worker."
+msgstr "Propojené nahrávání do galerie nezahrnuje oprávnění pro AI. Chcete-li AI použít, přepněte na uložené připojení s klíčem API."
+
+msgid "Linked upload mode cannot be verified."
+msgstr "Režim nahrávání přes propojení nelze ověřit."
+
+msgid "Linked upload mode is unconfirmed. Reconnect and verify the saved mode before attempting any upload."
+msgstr "Režim nahrávání přes propojení není potvrzený. Před nahráváním se znovu připojte a ověřte uložený režim."
+
+msgid "Linked upload permission changed; reconnect and verify the saved mode before uploading."
+msgstr "Oprávnění k nahrávání přes propojení se změnilo. Před nahráváním se znovu připojte a ověřte uložený režim."
+
+msgid "Linked upload selection is temporarily unavailable. The current connection remains selected."
+msgstr "Výběr propojené galerie pro nahrávání je dočasně nedostupný. Stávající připojení je dál vybrané."
+
+msgid "Linked upload target: "
+msgstr "Propojená galerie pro nahrávání: "
+
+msgid "Linked: "
+msgstr "Propojeno: "
+
+msgid "linking"
+msgstr "propojení"
+
+msgid "Linking"
+msgstr "Propojení"
+
+msgid "Linking could not be verified; an older server may not support it. Saved API-key upload remains available. A server grant may exist; review gallery links."
+msgstr "Propojení se nepodařilo ověřit. Starší server ho nemusí podporovat. Nahrávání s uloženým klíčem API je dál dostupné. Oprávnění na serveru už může existovat. Zkontrolujte propojení galerie."
+
+msgid "Listing truncated; enter a full path to select other items."
+msgstr "Seznam je zkrácený. Pro výběr jiné položky zadejte úplnou cestu."
+
+msgid "Live diagnostics log"
+msgstr "Živý diagnostický log"
+
+msgid "Loading galleries…"
+msgstr "Načítám galerie…"
+
+msgid "Loading the current gallery page…"
+msgstr "Načítám aktuální stránku seznamu galerií…"
+
+msgid "Loading…"
+msgstr "Načítání…"
+
+msgid "local"
+msgstr "místní"
+
+msgid "Local AI module"
+msgstr "Místní modul AI"
+
+msgid "local decoder available"
+msgstr "dekodér je dostupný v počítači"
+
+msgid "Local HEIC/DNG capability: "
+msgstr "Místní podpora HEIC/DNG: "
+
+msgid "Local Ollama URL"
+msgstr "URL místního Ollama"
+
+msgid "Local thumbnail processes"
+msgstr "Místní procesy pro náhledy"
+
+msgid "Manage gallery links"
+msgstr "Spravovat propojení galerií"
+
+msgid "Manage link…"
+msgstr "Spravovat propojení…"
+
+msgid "Manual import cancellation requested."
+msgstr "Bylo vyžádáno zrušení ručního importu."
+
+msgid "manual import is running"
+msgstr "probíhá ruční import"
+
+msgid "Manual import started with {count} file(s)."
+msgstr "Ruční import zahájen. Souborů: {count}."
+
+msgid "Media"
+msgstr "Média"
+
+msgid "Model or analyzer name"
+msgstr "Název modelu nebo analyzátoru"
+
+msgid "Model version"
+msgstr "Verze modelu"
+
+msgid "No"
+msgstr "Ne"
+
+msgid "No active import"
+msgstr "Žádný probíhající import"
+
+msgid "No API key is configured."
+msgstr "Klíč API není nastavený."
+
+msgid "No API key is currently stored."
+msgstr "Žádný klíč API není uložený."
+
+msgid "No background worker is active."
+msgstr "Na pozadí nic neběží."
+
+msgid "No failed or recoverable local files are available for retry."
+msgstr "V počítači nejsou žádné neúspěšné ani obnovitelné soubory k dalšímu pokusu."
+
+msgid "No folder selected"
+msgstr "Není vybraná složka"
+
+msgid "No import job selected"
+msgstr "Není vybraná žádná úloha importu"
+
+msgid "No newer Windows uploader installer is available."
+msgstr "Novější instalátor pro Windows není dostupný."
+
+msgid "No unresolved creation is available for this account. Check the creation status before continuing."
+msgstr "Pro tento účet není evidované nevyřešené vytváření galerie. Než budete pokračovat, ověřte stav."
+
+msgid "Not configured"
+msgstr "Nenastaveno"
+
+msgid "Not tested"
+msgstr "Neotestováno"
+
+msgid "Object labels"
+msgstr "Popisky objektů"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Ollama vision model"
+msgstr "Model Ollama pro analýzu obrázků"
+
+msgid "Open"
+msgstr "Otevřít"
+
+msgid "Open activity"
+msgstr "Otevřít Aktivitu"
+
+msgid "Open app folder"
+msgstr "Otevřít složku aplikace"
+
+msgid "Open full activity history"
+msgstr "Otevřít úplnou historii aktivity"
+
+msgid "Open Import"
+msgstr "Otevřít Import"
+
+msgid "Open installer"
+msgstr "Otevřít instalátor"
+
+msgid "Open log file"
+msgstr "Otevřít soubor logu"
+
+msgid "Open log folder"
+msgstr "Otevřít složku logů"
+
+msgid "Open Manage link to change the approved access."
+msgstr "Oprávnění změníte v nabídce Spravovat propojení."
+
+msgid "Open protected credential editor"
+msgstr "Otevřít chráněný editor přihlašovacích údajů"
+
+msgid "Open update"
+msgstr "Otevřít aktualizaci"
+
+msgid "Open watched folder"
+msgstr "Otevřít sledovanou složku"
+
+msgid "Optional fallback when you intentionally run Ollama."
+msgstr "Volitelná náhradní možnost, pokud Ollama spouštíte záměrně."
+
+msgid "Optional, server-assigned image analysis."
+msgstr "Volitelná analýza obrázků podle úloh ze serveru."
+
+msgid "Optional. Use {image_path}, {filename}, and {job_id}. External analyzer output is treated as untrusted JSON and validated before use. Leave blank unless you use your own local analyzer."
+msgstr "Volitelné. Použijte {image_path}, {filename} a {job_id}. Výstup externího analyzátoru ve formátu JSON se před použitím ověřuje. Pole ponechte prázdné, pokud nepoužíváte vlastní místní analyzátor."
+
+msgid "Original ZIP is kept for manual verification."
+msgstr "Původní soubor ZIP zůstane uložený ke kontrole."
+
+msgid "Paste"
+msgstr "Vložit"
+
+msgid "Paste API key"
+msgstr "Vložit klíč API"
+
+msgid "Paste the gallery-scoped API key before saving."
+msgstr "Před uložením vložte klíč API pro tuto galerii."
+
+msgid "Path to a config JSON file."
+msgstr "Cesta k souboru nastavení ve formátu JSON."
+
+msgid "Pause import after active requests finish"
+msgstr "Pozastavit import po dokončení probíhajících požadavků"
+
+msgid "Pause/resume current import"
+msgstr "Pozastavit nebo obnovit aktuální import"
+
+msgid "PDF unavailable; refresh the list."
+msgstr "PDF není dostupné. Obnovte seznam."
+
+msgid "Photos"
+msgstr "Fotky"
+
+msgid "PHP Gallery connection"
+msgstr "Připojení k PHP Gallery"
+
+msgid "PHP Gallery Uploader update"
+msgstr "Aktualizace PHP Gallery Uploader"
+
+msgid "PHP Gallery Uploader updates"
+msgstr "Aktualizace pro PHP Gallery Uploader"
+
+msgid "pip failed without output"
+msgstr "pip selhal bez výstupu"
+
+msgid "Poll seconds when idle"
+msgstr "Interval dotazování při nečinnosti (s)"
+
+msgid "Preflight cancelled"
+msgstr "Kontrola před importem zrušena"
+
+msgid "Preflight failed"
+msgstr "Kontrola před importem selhala"
+
+msgid "Preflight failed: "
+msgstr "Kontrola před importem selhala: "
+
+msgid "Preflight is still running. Review the result before starting the import."
+msgstr "Kontrola stále probíhá. Před zahájením importu zkontrolujte její výsledek."
+
+msgid "Preflight needs to be run again"
+msgstr "Kontrolu před importem je potřeba spustit znovu"
+
+msgid "Preflight running"
+msgstr "Probíhá kontrola před importem"
+
+msgid "Preparing installation: stopping new work and waiting for active operations..."
+msgstr "Příprava instalace: zastavuji příjem nových úloh a čekám na dokončení probíhajících operací…"
+
+msgid "Preparing installation…"
+msgstr "Připravuji instalaci…"
+
+msgid "Preparing setup…"
+msgstr "Připravuji instalátor…"
+
+msgid "Preparing the Watcher connection…"
+msgstr "Připravuji připojení Sledovátka…"
+
+msgid "Previous Watcher access is still being closed. Wait for confirmation, then resume Watcher."
+msgstr "Předchozí přístup Sledovátka se ještě ukončuje. Počkejte na potvrzení a potom pokračujte ve sledování."
+
+msgid "private"
+msgstr "soukromá"
+
+msgid "public"
+msgstr "veřejná"
+
+msgid "queued"
+msgstr "ve frontě"
+
+msgid "rate pending"
+msgstr "rychlost se počítá"
+
+msgid "Read gallery details"
+msgstr "Načítat podrobnosti galerie"
+
+msgid "Read selected details"
+msgstr "Načíst vybrané podrobnosti"
+
+msgid "Reading the original creation request…"
+msgstr "Načítám původní požadavek na vytvoření galerie…"
+
+msgid "Reading the selected gallery details…"
+msgstr "Načítám podrobnosti vybrané galerie…"
+
+msgid "Ready for review"
+msgstr "Připraveno ke kontrole"
+
+msgid "Ready for uploads"
+msgstr "Připraveno k nahrávání"
+
+msgid "Ready when you are"
+msgstr "Připraveno"
+
+msgid "Recent events"
+msgstr "Nedávné události"
+
+msgid "Reconnect and verify the created gallery first."
+msgstr "Nejdřív se znovu připojte a ověřte vytvořenou galerii."
+
+msgid "Reconnect saved link"
+msgstr "Obnovit uložené propojení"
+
+msgid "Reconnect the selected linked gallery."
+msgstr "Znovu se připojte k vybrané propojené galerii."
+
+msgid "Reconnect to upload"
+msgstr "Znovu připojit pro nahrávání"
+
+msgid "Recover unfinished import"
+msgstr "Obnovit nedokončený import"
+
+msgid "Recoverable import remains saved for later review."
+msgstr "Obnovitelný import zůstal uložený ke kontrole."
+
+msgid "Recovered import: "
+msgstr "Obnovený import: "
+
+msgid "Refresh report"
+msgstr "Obnovit report"
+
+msgid "Refresh upload queue"
+msgstr "Obnovit frontu nahrávání"
+
+msgid "Rejected archive entries: "
+msgstr "Odmítnuté položky archivu: "
+
+msgid "Remember securely"
+msgstr "Bezpečně uložit"
+
+msgid "Remote inventory reconnect seconds"
+msgstr "Prodleva před obnovením spojení pro seznam souborů (s)"
+
+msgid "Remote preflight unavailable"
+msgstr "Kontrola na serveru není dostupná"
+
+msgid "Remove the saved local credential? The current session remains active. This does not revoke the server grant. Manage gallery links to review or revoke it."
+msgstr "Odebrat místně uložené přihlašovací údaje? Aktuální relace zůstane aktivní. Oprávnění na serveru se tím neodvolá. Zkontrolovat nebo odvolat ho můžete ve správě propojení galerií."
+
+msgid "Removing the saved connection…"
+msgstr "Odebírám uložené připojení…"
+
+msgid "Removing the saved local link…"
+msgstr "Odebírám místně uložené propojení…"
+
+msgid "Repair dependencies"
+msgstr "Opravit závislosti"
+
+msgid "Replace file"
+msgstr "Nahradit soubor"
+
+msgid "Replace the existing file?"
+msgstr "Nahradit existující soubor?"
+
+msgid "Report collection failed: "
+msgstr "Report se nepodařilo sestavit: "
+
+msgid "Report ready · {report_count:,} characters · collected locally"
+msgstr "Report je připravený · počet znaků: {report_count:,} · vytvořený v počítači"
+
+msgid "Required dependencies are available for this Python runtime."
+msgstr "Požadované závislosti jsou pro toto prostředí Python dostupné."
+
+msgid "Reset pending. Waiting for Watcher work to stop. You can exit and reopen WinApp to retry an interrupted reset."
+msgstr "Obnovení nastavení čeká na ukončení práce Sledovátka. Pokud se přeruší, můžete WinApp ukončit a znovu otevřít."
+
+msgid "Resetting Watcher…"
+msgstr "Obnovuji výchozí nastavení Sledovátka…"
+
+msgid "Restart now"
+msgstr "Restartovat teď"
+
+msgid "Restart required"
+msgstr "Vyžaduje restart"
+
+msgid "Restart to apply the selected language."
+msgstr "Restartujte WinApp, aby se změna jazyka projevila."
+
+msgid "Restart WinApp"
+msgstr "Restartovat WinApp"
+
+msgid "Restoring the approved Watcher connection…"
+msgstr "Obnovuje se schválené připojení Sledovátka…"
+
+msgid "Restoring Watcher defaults…"
+msgstr "Obnovuje se výchozí nastavení Sledovátka…"
+
+msgid "Result"
+msgstr "Výsledek"
+
+msgid "Result / error"
+msgstr "Výsledek / chyba"
+
+msgid "Resume original creation"
+msgstr "Pokračovat v původním vytváření"
+
+msgid "Resume the paused import"
+msgstr "Pokračovat v pozastaveném importu"
+
+msgid "Retry failed"
+msgstr "Zopakovat neúspěšné položky"
+
+msgid "Retry import"
+msgstr "Zopakovat import"
+
+msgid "Reveal"
+msgstr "Zobrazit"
+
+msgid "Reveal or mask API key"
+msgstr "Zobrazit nebo skrýt API klíč"
+
+msgid "Review"
+msgstr "Kontrola"
+
+msgid "REVIEW"
+msgstr "KE KONTROLE"
+
+msgid "Review this report before sharing. Credentials, local paths and URL query values are filtered. Files and photographs are not attached. Nothing is sent automatically."
+msgstr "Před sdílením si report projděte. Přihlašovací údaje, místní cesty a hodnoty parametrů v URL jsou odfiltrované. Soubory ani fotky nejsou přiložené. Nic se automaticky neodesílá."
+
+msgid "Revocation failed"
+msgstr "Zneplatnění se nezdařilo"
+
+msgid "Revoke API key"
+msgstr "Zneplatnit API klíč"
+
+msgid "Revoke API key failed"
+msgstr "API klíč se nepodařilo zneplatnit"
+
+msgid "Revoke API key..."
+msgstr "Zneplatnit API klíč…"
+
+msgid "Revoke key…"
+msgstr "Zneplatnit klíč…"
+
+msgid "Revoke saved API key..."
+msgstr "Zneplatnit uložený API klíč…"
+
+msgid "Root"
+msgstr "Kořen"
+
+msgid "Run one scan using saved configuration and exit."
+msgstr "Jednou prohledat složku podle uloženého nastavení a skončit."
+
+msgid "Running"
+msgstr "Běží"
+
+msgid "Save"
+msgstr "Uložit"
+
+msgid "Save or restore connection fields before revoking the saved key."
+msgstr "Před zneplatněním uloženého klíče uložte nebo obnovte údaje připojení."
+
+msgid "Save or test the gallery connection in Settings."
+msgstr "Uložte nebo vyzkoušejte připojení ke galerii v Nastavení."
+
+msgid "Save report…"
+msgstr "Uložit report…"
+
+msgid "Save support report"
+msgstr "Uložit report pro podporu"
+
+msgid "Save watcher settings"
+msgstr "Uložit nastavení Sledovátka"
+
+msgid "Saved API-key connection selected."
+msgstr "Vybráno uložené připojení přes API klíč."
+
+msgid "saved flight PDF upload is running"
+msgstr "probíhá nahrávání uloženého letového PDF"
+
+msgid "Saved gallery access expired. Approve the link again."
+msgstr "Platnost uloženého přístupu ke galerii vypršela. Znovu schvalte propojení."
+
+msgid "Saved local credential removed; the current session and server grant may still exist."
+msgstr "Uložený přihlašovací údaj byl odstraněn z tohoto počítače. Aktuální relace a oprávnění na serveru mohou stále platit."
+
+msgid "Saving the Watcher session before closing…"
+msgstr "Před zavřením se ukládá relace Sledovátka…"
+
+msgid "Scan folder every"
+msgstr "Prohledávat složku každých"
+
+msgid "seconds"
+msgstr "sekund"
+
+msgid "Select"
+msgstr "Vybrat"
+
+msgid "Select a job in Activity first."
+msgstr "Nejprve v Aktivitě vyberte úlohu."
+
+msgid "Select a source to build an import summary. Nothing uploads until you press Start import."
+msgstr "Vyberte zdroj pro souhrn importu. Nahrávání začne až po stisknutí tlačítka Spustit import."
+
+msgid "Select all"
+msgstr "Vybrat vše"
+
+msgid "Select an existing folder."
+msgstr "Vyberte existující složku."
+
+msgid "Select an item or enter a path."
+msgstr "Vyberte položku nebo zadejte cestu."
+
+msgid "Select existing files."
+msgstr "Vyberte existující soubory."
+
+msgid "Select file"
+msgstr "Vybrat soubor"
+
+msgid "Select folder"
+msgstr "Vybrat složku"
+
+msgid "Select SimConnect.dll"
+msgstr "Vybrat SimConnect.dll"
+
+msgid "Semantic prompt"
+msgstr "Prompt pro rozpoznávání obsahu"
+
+msgid "Server creates thumbnails"
+msgstr "Náhledy vytváří server"
+
+msgid "Server creates thumbnails."
+msgstr "Náhledy vytváří server."
+
+msgid "Server revocation confirmed; local key cleanup needs review."
+msgstr "Server potvrdil zneplatnění. Zkontrolujte odstranění místního klíče."
+
+msgid "server upload only on this PC"
+msgstr "pouze nahrávání na server na tomto počítači"
+
+msgid "server_only"
+msgstr "pouze server"
+
+msgid "Settings"
+msgstr "Nastavení"
+
+msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
+msgstr "Nastavení se uložilo, ale nepodařilo se upravit spouštění s Windows. Uložte nastavení znovu a pokus se zopakuje.\n\n"
+
+msgid "Settings…"
+msgstr "Nastavení…"
+
+msgid "Show"
+msgstr "Zobrazit"
+
+msgid "simconnect"
+msgstr "SimConnect"
+
+msgid "Simconnect"
+msgstr "SimConnect"
+
+msgid "SimConnect DLL"
+msgstr "SimConnect DLL"
+
+msgid "Size"
+msgstr "Velikost"
+
+msgid "skipped"
+msgstr "přeskočeno"
+
+msgid "skipped_duplicate"
+msgstr "přeskočeno jako duplicita"
+
+msgid "skipped_unsupported"
+msgstr "přeskočen nepodporovaný soubor"
+
+msgid "Source"
+msgstr "Zdroj"
+
+msgid "Source deletion: Original files and ZIP archives are kept for manual verification."
+msgstr "Mazání zdroje: původní soubory a ZIP archivy zůstávají k ruční kontrole."
+
+msgid "staged"
+msgstr "připraveno k nahrání"
+
+msgid "Staging cleanup age hours"
+msgstr "Smazat pracovní kopie po (h)"
+
+msgid "Start AI metadata worker"
+msgstr "Spustit zpracování metadat pomocí AI"
+
+msgid "Start the installed app in the tray after Windows logon."
+msgstr "Po přihlášení do Windows spustit nainstalovanou aplikaci v oznamovací oblasti."
+
+msgid "Start watching"
+msgstr "Spustit sledování"
+
+msgid "Start with Windows (minimized to tray)"
+msgstr "Spustit s Windows (v oznamovací oblasti)"
+
+msgid "Starting Watcher…"
+msgstr "Spouští se Sledovátko…"
+
+msgid "State"
+msgstr "Stav"
+
+msgid "Status"
+msgstr "Stav"
+
+msgid "Stop AI metadata worker"
+msgstr "Zastavit zpracování metadat pomocí AI"
+
+msgid "Stop the watcher before changing its folder or upload policy. Changes apply when the next watcher starts."
+msgstr "Před změnou sledované složky nebo pravidel nahrávání Sledovátko zastavte. Změny začnou platit při jeho dalším spuštění."
+
+msgid "Stop Watcher and permanently forget its upload gallery, watched folder, queued work, and restart history? Watcher preferences will return to their defaults.\n\nYou will keep your screenshots, local reports, logs, and other tabs' settings. An upload already sent may still reach the gallery."
+msgstr "Zastavit Sledovátko a trvale zapomenout cílovou galerii, sledovanou složku, úlohy ve frontě a historii obnovy? Nastavení Sledovátka se vrátí na výchozí hodnoty.\n\nSnímky obrazovky, místní reporty, protokoly a nastavení ostatních karet zůstanou zachovány. Rozpracované nahrávání může ještě dorazit do galerie."
+
+msgid "Stop Watcher before changing its folder."
+msgstr "Před změnou složky Sledovátko zastavte."
+
+msgid "Stop watching"
+msgstr "Zastavit sledování"
+
+msgid "Stopped"
+msgstr "Vypnuto"
+
+msgid "Stopping Watcher for factory reset…"
+msgstr "Sledovátko se zastavuje před obnovením výchozího nastavení…"
+
+msgid "succeeded"
+msgstr "dokončeno"
+
+msgid "success"
+msgstr "úspěch"
+
+msgid "Support diagnostics"
+msgstr "Diagnostika pro podporu"
+
+msgid "Support diagnostics…"
+msgstr "Diagnostika pro podporu…"
+
+msgid "Supported files found: {found}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}"
+msgstr "Nalezené podporované soubory: {found}  |  Připravené k nahrání: {ready}  |  Možné duplicity: {duplicates}"
+
+msgid "Sync UTC time"
+msgstr "Synchronizovat čas UTC"
+
+msgid "system"
+msgstr "systém"
+
+msgid "System"
+msgstr "Systém"
+
+msgid "Target"
+msgstr "Cíl"
+
+msgid "Target gallery: "
+msgstr "Cílová galerie: "
+
+msgid "Target gallery: unknown"
+msgstr "Cílová galerie: neznámá"
+
+msgid "Target: {gallery}"
+msgstr "Cíl: {gallery}"
+
+msgid "Testing"
+msgstr "Probíhá test"
+
+msgid "Text files"
+msgstr "Textové soubory"
+
+msgid "The active Watcher could not be safely checkpointed. Its queue is retained; wait for recovery, then stop or retry."
+msgstr "Stav běžícího Sledovátka se nepodařilo bezpečně uložit. Fronta zůstala zachována. Počkejte na obnovu a pak sledování zastavte nebo pokus zopakujte."
+
+msgid "The active Watcher could not be safely prepared for restart. Keep the app open and finish or stop Watcher first."
+msgstr "Spuštěné Sledovátko nešlo bezpečně připravit na restart. Nechte aplikaci otevřenou a nejprve sledování dokončete nebo zastavte."
+
+msgid "The application cannot safely commit a linked upload mode."
+msgstr "Aplikace nemůže bezpečně uložit režim nahrávání pro propojenou galerii."
+
+msgid "The approved Photos connection could not be saved safely."
+msgstr "Schválené připojení pro Fotky se nepodařilo bezpečně uložit."
+
+msgid "The clipboard does not contain an API key."
+msgstr "Ve schránce není API klíč."
+
+msgid "The clipboard does not contain text."
+msgstr "Ve schránce není text."
+
+msgid "The created gallery is unavailable or its access could not be verified."
+msgstr "Vytvořená galerie je nedostupná nebo se nepodařilo ověřit přístup."
+
+msgid "The created gallery verification is no longer current."
+msgstr "Ověření vytvořené galerie už není aktuální."
+
+msgid "The creation receipt could not be acknowledged safely."
+msgstr "Potvrzení o vytvoření se nepodařilo bezpečně potvrdit zpět serveru."
+
+msgid "The creation receipt was saved; reconnect and check its status."
+msgstr "Potvrzení o vytvoření se uložilo. Znovu se připojte a ověřte stav."
+
+msgid "The destination folder does not exist."
+msgstr "Cílová složka neexistuje."
+
+msgid "The gallery assigns one job at a time; this PC returns internal search metadata."
+msgstr "Galerie zadává vždy jednu úlohu. Tento počítač vrací metadata pro interní vyhledávání."
+
+msgid "The gallery did not approve this link."
+msgstr "Galerie propojení neschválila."
+
+msgid "The gallery request timed out."
+msgstr "Vypršel časový limit požadavku na galerii."
+
+msgid "The gallery selection changed during verification. The previous upload target remains unchanged."
+msgstr "Během ověřování se výběr galerie změnil. Původní cíl nahrávání zůstává v platnosti."
+
+msgid "The installed application could not be verified. Open the downloaded installer manually to install this application."
+msgstr "Nainstalovanou aplikaci se nepodařilo ověřit. Pro instalaci spusťte stažený instalátor ručně."
+
+msgid "The language was saved. Restart WinApp now to apply it?"
+msgstr "Jazyk byl uložen. Chcete WinApp hned restartovat, aby se změna projevila?"
+
+msgid "The linking response could not be accepted."
+msgstr "Odpověď na propojení nebylo možné přijmout."
+
+msgid "The original creation remains unresolved."
+msgstr "Původní požadavek na vytvoření stále není vyřešený."
+
+msgid "The original gallery is temporarily unavailable. Retrying safely…"
+msgstr "Původní galerie je dočasně nedostupná. Probíhá bezpečný opakovaný pokus…"
+
+msgid "The original key is closed. A gallery or files may already exist or old work may still be finishing. Verify it has stopped and inspect the gallery and storage before creating another."
+msgstr "Původní klíč operace je uzavřen. Galerie nebo soubory už mohou existovat a předchozí operace ještě může dobíhat. Před dalším vytvořením ověřte, že předchozí operace skončila, a prohlédněte galerii i úložiště."
+
+msgid "The previous preflight is stopping. Clear the selection again after it finishes."
+msgstr "Předchozí vstupní kontrola se zastavuje. Zrušte výběr znovu, až skončí."
+
+msgid "The previous preflight is stopping. Start preflight again when it has finished."
+msgstr "Předchozí vstupní kontrola se zastavuje. Po jejím skončení spusťte vstupní kontrolu znovu."
+
+msgid "The saved secure reconnect could not be removed. The gallery remains connected."
+msgstr "Uložený údaj pro zabezpečené opětovné připojení nešel odstranit. Galerie zůstává připojená."
+
+msgid "The securely saved gallery connection is unavailable."
+msgstr "Bezpečně uložené připojení ke galerii je nedostupné."
+
+msgid "The selected gallery changed during approval."
+msgstr "Během schvalování se vybraná galerie změnila."
+
+msgid "The selected gallery connection changed."
+msgstr "Vybrané připojení ke galerii se změnilo."
+
+msgid "The selected gallery could not be verified. The previous upload target is unchanged."
+msgstr "Vybranou galerii se nepodařilo ověřit. Původní cíl nahrávání zůstává v platnosti."
+
+msgid "The selected upload gallery needs a new link."
+msgstr "Vybranou galerii pro nahrávání je třeba znovu propojit."
+
+msgid "The setting was saved. Restart the application for the experimental Canvas gallery renderer to take effect."
+msgstr "Nastavení bylo uloženo. Experimentální vykreslování galerie pomocí Canvas se projeví po restartu aplikace."
+
+msgid "The upload observation is no longer current."
+msgstr "Zjištěný stav nahrávání už není aktuální."
+
+msgid "The Watcher connection could not be saved. Try again."
+msgstr "Připojení Sledovátka se nepodařilo uložit. Zkuste to znovu."
+
+msgid "These permissions include private and unpublished galleries."
+msgstr "Tato oprávnění zahrnují neveřejné i nepublikované galerie."
+
+msgid "This installs large optional Python packages such as PyTorch and Transformers into the current Python runtime. Using those backends can later download large model files. Continue?"
+msgstr "Do aktuálního prostředí Python se nainstalují velké volitelné balíčky, například PyTorch a Transformers. Při jejich pozdějším použití se mohou stáhnout velké soubory s modely. Pokračovat?"
+
+msgid "This job has no queued or recoverable files to upload."
+msgstr "Tato úloha nemá žádné soubory ve frontě ani soubory, jejichž nahrávání lze obnovit."
+
+msgid "This link does not include the gallery list."
+msgstr "Toto propojení nezahrnuje přístup k seznamu galerií."
+
+msgid "This PC creates derivatives with server fallback."
+msgstr "Tento počítač vytváří odvozené obrázky. V případě potřeby je vytvoří server."
+
+msgid "This PC creates thumbnails when supported"
+msgstr "Tento počítač vytváří náhledy, pokud je to možné"
+
+msgid "This tests the saved API key. Select the API-key connection explicitly before running this test."
+msgstr "Tato volba testuje uložený API klíč. Před testem výslovně vyberte připojení přes API klíč."
+
+msgid "Thumbnail mode: {mode}"
+msgstr "Způsob tvorby náhledů: {mode}"
+
+msgid "Time"
+msgstr "Čas"
+
+msgid "Tkinter is not available in this Python installation."
+msgstr "V této instalaci Pythonu není Tkinter dostupný."
+
+msgid "Tools"
+msgstr "Nástroje"
+
+msgid "Transformers caption model"
+msgstr "Model popisu fotek Transformers"
+
+msgid "Transformers object detector"
+msgstr "Detekce objektů pomocí Transformers"
+
+msgid "Tries"
+msgstr "Pokusy"
+
+msgid "Type"
+msgstr "Typ"
+
+msgid "unknown"
+msgstr "neznámé"
+
+msgid "Unlinked locally. Check Manage link to confirm server revocation."
+msgstr "Místní propojení bylo zrušeno. Potvrďte zneplatnění na serveru v části Správa propojení."
+
+msgid "Unlinked locally. Check Manage link to revoke access."
+msgstr "Místní propojení bylo zrušeno. Zneplatněte přístup v části Správa propojení."
+
+msgid "Unlinking gallery…"
+msgstr "Ruší se propojení s galerií…"
+
+msgid "unpublished"
+msgstr "nezveřejněná"
+
+msgid "Unsafe report directory."
+msgstr "Složka pro reporty není bezpečná."
+
+msgid "Unsupported: {types}"
+msgstr "Nepodporované: {types}"
+
+msgid "Up"
+msgstr "Nahoru"
+
+msgid "Update"
+msgstr "Aktualizovat"
+
+msgid "Update {update_available_version} available"
+msgstr "Je dostupná aktualizace {update_available_version}"
+
+msgid "Update {version}"
+msgstr "Aktualizace {version}"
+
+msgid "Update canceled before installation."
+msgstr "Aktualizace byla před instalací zrušena."
+
+msgid "Update postponed: current work could not be safely checkpointed. The application remains open; see diagnostics."
+msgstr "Aktualizace byla odložena, protože se nepodařilo bezpečně uložit stav probíhající práce. Aplikace zůstává otevřená. Podrobnosti jsou v diagnostice."
+
+msgid "Update stopped: {detail}"
+msgstr "Aktualizace zastavena: {detail}"
+
+msgid "Upload gallery: "
+msgstr "Galerie pro nahrávání: "
+
+msgid "Upload gallery: not set"
+msgstr "Galerie pro nahrávání: nenastavena"
+
+msgid "Upload mode was activated, but the display did not refresh. Reopen the connection view to verify the target."
+msgstr "Režim nahrávání byl aktivován, ale zobrazení se neaktualizovalo. Znovu otevřete přehled připojení a ověřte cíl."
+
+msgid "Upload threads"
+msgstr "Vlákna pro nahrávání"
+
+msgid "Upload via API key"
+msgstr "Nahrávat přes API klíč"
+
+msgid "uploaded {uploaded}, duplicate {duplicates}, failed {failed}, cancelled {cancelled}, active {active}"
+msgstr "nahráno {uploaded}, duplicitní {duplicates}, selhalo {failed}, zrušeno {cancelled}, probíhá {active}"
+
+msgid "Uploaded photos will be deleted from this PC."
+msgstr "Nahrané fotky se z tohoto počítače smažou."
+
+msgid "uploading"
+msgstr "nahrává se"
+
+msgid "Use a gallery-scoped API key from Admin. Your password is not entered into this app."
+msgstr "Použijte API klíč omezený na konkrétní galerii z administrace. Své heslo do této aplikace nezadávejte."
+
+msgid "Use experimental virtualized Canvas rendering for photo galleries. Requires application restart."
+msgstr "Použít experimentální vykreslování galerií fotek na Canvas s virtualizací. Vyžaduje restart aplikace."
+
+msgid "Use saved API key"
+msgstr "Použít uložený API klíč"
+
+msgid "Using PHP Gallery"
+msgstr "Jak používat PHP Gallery"
+
+msgid "UTC sync"
+msgstr "Synchronizace UTC"
+
+msgid "UTC sync stopped"
+msgstr "Synchronizace UTC zastavena"
+
+msgid "UTC synchronization"
+msgstr "Synchronizace UTC"
+
+msgid "validating"
+msgstr "probíhá ověření"
+
+msgid "Verifying installation…"
+msgstr "Ověřuje se instalace…"
+
+msgid "Verifying installer size and SHA-256..."
+msgstr "Ověřuje se velikost instalátoru a SHA-256…"
+
+msgid "Verifying the administrator and selected gallery…"
+msgstr "Ověřuje se správce a vybraná galerie…"
+
+msgid "Verifying the created gallery before selection…"
+msgstr "Vytvořená galerie se před výběrem ověřuje…"
+
+msgid "Version {version} is available (current: {current}). Update downloads and verifies Setup for manual installation; this source folder remains intact."
+msgstr "Je dostupná verze {version} (aktuální: {current}). Aktualizace stáhne a ověří instalátor pro ruční instalaci. Tato zdrojová složka zůstane zachována."
+
+msgid "Version {version} is available (installed: {current}). Update downloads and verifies Setup, closes this app and restarts it after installation. Windows may request administrator approval."
+msgstr "Je dostupná verze {version} (nainstalovaná: {current}). Aktualizace stáhne a ověří instalátor, zavře aplikaci a po instalaci ji znovu spustí. Windows může požádat o schválení správcem."
+
+msgid "View"
+msgstr "Zobrazení"
+
+msgid "Wait for API-key revocation to finish before changing connection credentials."
+msgstr "Před změnou přihlašovacích údajů připojení počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before changing credentials."
+msgstr "Před změnou přihlašovacích údajů počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before changing this setting."
+msgstr "Před změnou tohoto nastavení počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before replacing the key."
+msgstr "Před nahrazením klíče počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before retrying an import."
+msgstr "Před opakováním importu počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before starting import preflight."
+msgstr "Před spuštěním vstupní kontroly importu počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before starting manual import."
+msgstr "Před spuštěním ručního importu počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before starting the AI metadata worker."
+msgstr "Před spuštěním zpracování metadat pomocí AI počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for API-key revocation to finish before testing the connection."
+msgstr "Před testem připojení počkejte na dokončení zneplatnění API klíče."
+
+msgid "Wait for the current gallery request to finish."
+msgstr "Počkejte na dokončení aktuálního požadavku na galerii."
+
+msgid "Wait for the current import to stop before retrying failed items."
+msgstr "Před opakováním neúspěšných položek počkejte na zastavení aktuálního importu."
+
+msgid "Wait for the current operation to finish."
+msgstr "Počkejte na dokončení aktuální operace."
+
+msgid "Wait for the previous gallery verification to finish."
+msgstr "Počkejte na dokončení předchozího ověření galerie."
+
+msgid "Wait for the remaining work to finish before restarting."
+msgstr "Před restartem počkejte na dokončení zbývající práce."
+
+msgid "Wait for the update operation to finish before restarting."
+msgstr "Před restartem počkejte na dokončení aktualizace."
+
+msgid "Waiting for uploader to close…"
+msgstr "Čeká se na ukončení nahrávání…"
+
+msgid "warning"
+msgstr "varování"
+
+msgid "warnings"
+msgstr "varování"
+
+msgid "Warnings: {details}"
+msgstr "Varování: {details}"
+
+msgid "Watch folder"
+msgstr "Sledovat složku"
+
+msgid "WATCH FOLDER"
+msgstr "SLEDOVANÁ SLOŽKA"
+
+msgid "watch-folder uploader is running"
+msgstr "probíhá nahrávání ze sledované složky"
+
+msgid "watcher"
+msgstr "Sledovátko"
+
+msgid "Watcher"
+msgstr "Sledovátko"
+
+msgid "Watcher access could not be closed. Retry."
+msgstr "Přístup Sledovátka se nepodařilo ukončit. Zkuste to znovu."
+
+msgid "Watcher access could not be closed. Review the saved session."
+msgstr "Přístup Sledovátka se nepodařilo ukončit. Zkontrolujte uloženou relaci."
+
+msgid "Watcher behavior"
+msgstr "Chování Sledovátka"
+
+msgid "Watcher factory reset"
+msgstr "Obnovení výchozího nastavení Sledovátka"
+
+msgid "Watcher factory reset…"
+msgstr "Obnovit výchozí nastavení Sledovátka…"
+
+msgid "Watcher gallery selected."
+msgstr "Vybrána galerie pro Sledovátko."
+
+msgid "Watcher help"
+msgstr "Nápověda ke Sledovátku"
+
+msgid "Watcher is still running"
+msgstr "Sledovátko stále běží"
+
+msgid "WATCHER PREFERENCES"
+msgstr "PŘEDVOLBY SLEDOVÁTKA"
+
+msgid "Watcher remains open"
+msgstr "Sledovátko zůstává otevřené"
+
+msgid "Watcher reset complete. Choose a connection and folder to start."
+msgstr "Výchozí nastavení Sledovátka bylo obnoveno. Začněte výběrem připojení a složky."
+
+msgid "Watcher reset could not be saved. Retry factory reset."
+msgstr "Obnovení výchozího nastavení Sledovátka se nepodařilo uložit. Zkuste to znovu."
+
+msgid "Watcher reset could not finish. Retry factory reset or see Support diagnostics."
+msgstr "Obnovení výchozího nastavení Sledovátka se nepodařilo dokončit. Zkuste to znovu nebo otevřete Diagnostiku pro podporu."
+
+msgid "Watcher reset required"
+msgstr "Je nutné obnovit výchozí nastavení Sledovátka"
+
+msgid "Watcher settings"
+msgstr "Nastavení Sledovátka"
+
+msgid "Watcher settings…"
+msgstr "Nastavení Sledovátka…"
+
+msgid "Watcher state"
+msgstr "Stav Sledovátka"
+
+msgid "Watcher stopped"
+msgstr "Sledovátko stojí"
+
+msgid "Windows restart required. Restart Windows before opening the uploader."
+msgstr "Je potřeba restartovat Windows. Před spuštěním nahrávání systém restartujte."
+
+msgid "Windows startup"
+msgstr "Spouštění s Windows"
+
+msgid "Yes"
+msgstr "Ano"
+
+msgid "Your gallery on autopilot"
+msgstr "Vaše galerie na autopilota"
+
+msgid "Zero-shot object labels such as person, bridge, guitar, house."
+msgstr "Rozpoznávání objektů bez trénování na příkladech, třeba člověk, most, kytara nebo dům."
+
+msgid "ZIP"
+msgstr "ZIP"
+
+msgid "ZIP archives"
+msgstr "Archivy ZIP"
+
+msgid "ZIP max compression ratio"
+msgstr "Max. kompresní poměr ZIP"
+
+msgid "ZIP max entries"
+msgstr "Max. počet položek v ZIP"
+
+msgid "ZIP max single file GiB"
+msgstr "Max. velikost souboru v ZIP (GiB)"
+
+msgid "ZIP max total uncompressed GiB"
+msgstr "Max. celková velikost rozbaleného ZIP (GiB)"
+
+msgid "ZIP: "
+msgstr "ZIP: "
+
+msgid "Custom SimConnect.dll"
+msgstr "Vlastní SimConnect.dll"
+
+msgid "API key configured and saved"
+msgstr "API klíč je nastavený a uložený"
+
+msgid "API key or gallery URL changed, not saved"
+msgstr "API klíč nebo URL galerie byly změněny a zatím nejsou uložené"
+
+msgid "Finishing accepted work. Open Flight progress for the current stage; the key is retained until required work is confirmed."
+msgstr "Dokončují se přijaté úlohy. Aktuální krok ukazuje Průběh letu. Klíč zůstane uložený do potvrzení potřebných úloh."
+
+msgid "Revoke will stop and finish: {operations}."
+msgstr "Zneplatnění zastaví a dokončí tyto operace: {operations}."
+
+msgid "Revocation unavailable because the connection fields contain unsaved changes. Save or restore the saved connection first."
+msgstr "Klíč nelze zneplatnit, protože údaje připojení obsahují neuložené změny. Nejprve změny uložte nebo obnovte uložené připojení."
+
+msgid "API key can be revoked now. Revocation is permanent for this key and removes it from the local configuration after server confirmation."
+msgstr "API klíč teď můžete trvale zneplatnit. Po potvrzení serverem se odebere z místního nastavení."
+
+msgid "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
+msgstr "Před testem nebo nahráváním vložte API klíč pro konkrétní galerii vytvořený v administraci PHP Gallery."
+
+msgid "PHP Gallery uploader{update} | watch {watch} | import {importing} | AI {ai} | failures {failures}"
+msgstr "PHP Gallery{update} | Sledovátko {watch} | import {importing} | AI {ai} | chyby {failures}"
+
+msgid "UTC sync connected: {simulator}"
+msgstr "Synchronizace UTC připojena: {simulator}"
+
+msgid "Waiting for the simulator for UTC sync"
+msgstr "Synchronizace UTC čeká na simulátor"
+
+msgid "UTC sync is unavailable for this simulator"
+msgstr "Tento simulátor nepodporuje synchronizaci UTC"
+
+msgid "UTC sync paused by the simulator state"
+msgstr "Synchronizace UTC pozastavena kvůli stavu simulátoru"
+
+msgid "UTC time synchronized"
+msgstr "Čas UTC byl synchronizován"
+
+msgid "UTC correction could not be verified. Retrying…"
+msgstr "Úpravu času UTC se nepodařilo ověřit. Probíhá další pokus…"
+
+msgid "Waiting for the simulator UTC time"
+msgstr "Čeká se na čas UTC ze simulátoru"
+
+msgid "UTC time aligned"
+msgstr "Čas UTC souhlasí"
+
+msgid "Could not close the UTC connection"
+msgstr "Připojení pro synchronizaci UTC nešlo ukončit"
+
+msgid "AI metadata worker is processing a job"
+msgstr "AI právě zpracovává metadata"
+
+msgid "Manage link"
+msgstr "Správa propojení"
+
+msgid "Choose gallery"
+msgstr "Vybrat galerii"
+
+msgid "Standard access"
+msgstr "Běžný přístup"
+
+msgid "Password protected"
+msgstr "Chráněno heslem"
+
+msgid "Listed"
+msgstr "Zobrazeno v seznamu"
+
+msgid "Unlisted"
+msgstr "Skryto v seznamu"
+
+msgid "The gallery returned HTTP {status} with an HTML response."
+msgstr "Galerie vrátila HTTP {status} s odpovědí ve formátu HTML."
+
+msgid "The gallery returned HTTP {status}."
+msgstr "Galerie vrátila HTTP {status}."
+
+msgid "PHP Gallery uploader"
+msgstr "Nahrávání do PHP Gallery"
+
+msgid "Linked upload recovery requires manual review; database absence does not prove failure."
+msgstr "Obnovu nahrávání do propojené galerie je třeba ručně zkontrolovat. Chybějící záznam v databázi sám o sobě nepotvrzuje selhání."
+
+msgid "Gallery authorization could not be verified; AI heartbeat stopped."
+msgstr "Oprávnění ke galerii se nepodařilo ověřit. Pravidelné potvrzování úlohy AI bylo zastaveno."
+
+msgid "Gallery authorization could not be verified; AI worker stopped."
+msgstr "Oprávnění ke galerii se nepodařilo ověřit. Zpracování metadat pomocí AI bylo zastaveno."
+
+msgid "AI metadata worker is disabled in configuration."
+msgstr "Zpracování metadat pomocí AI je v nastavení vypnuté."
+
+msgid "AI metadata worker needs Gallery URL and API key."
+msgstr "Zpracování metadat pomocí AI vyžaduje URL galerie a API klíč."
+
+msgid "AI metadata worker stopped."
+msgstr "Zpracování metadat pomocí AI bylo zastaveno."
+
+msgid "AI metadata worker received an invalid job payload."
+msgstr "Přijatá úloha AI obsahuje neplatná data."
+
+msgid "Force-finished queue is retained and cannot be refreshed."
+msgstr "Nuceně ukončená fronta zůstala uložená a nelze ji obnovit."
+
+msgid "Queue refresh merged with the pending request."
+msgstr "Požadavek na obnovení fronty se sloučil s čekajícím požadavkem."
+
+msgid "Queue refresh requested; FIFO and retry deadlines retained."
+msgstr "Bylo vyžádáno obnovení fronty. Pořadí FIFO a termíny dalších pokusů zůstaly zachovány."
+
+msgid "Watcher session was explicitly force-finished; pending sources remain retained."
+msgstr "Relace Sledovátka byla nuceně ukončena. Čekající zdrojové soubory zůstaly zachovány."
+
+msgid "Queue persistence needs recovery; sources retained."
+msgstr "Uloženou frontu je třeba obnovit. Zdrojové soubory zůstaly zachovány."
+
+msgid "Watcher stopped; pending photographs are retained."
+msgstr "Sledovátko bylo zastaveno. Čekající fotky zůstaly zachovány."
+
+msgid "Confirmed upload retained; optional cleanup failed."
+msgstr "Potvrzené nahrání zůstalo zachováno. Volitelný úklid se nezdařil."
+
+msgid "Manual import paused. In-flight requests may still finish."
+msgstr "Ruční import je pozastavený. Probíhající požadavky se ještě mohou dokončit."
+
+msgid "Manual import resumed."
+msgstr "Ruční import pokračuje."
+
+msgid "Import staging sources retained; safe automatic deletion requires server-bound operation receipts."
+msgstr "Zdrojové soubory importu zůstaly zachovány. K bezpečnému automatickému mazání je potřeba potvrzení operace od serveru."
+
+msgid "Legacy upload cannot verify the destination for ZIP cleanup; the source ZIP is retained."
+msgstr "Původní režim nahrávání nedokáže ověřit cíl potřebný pro odstranění ZIP. Zdrojový ZIP zůstane zachovaný."
+
+msgid "Linked import requires a durable item recovery record."
+msgstr "Import do propojené galerie vyžaduje trvalý záznam pro obnovu položky."
+
+msgid "No manual upload files were selected."
+msgstr "Nebyly vybrány žádné soubory pro ruční nahrání."
+
+msgid "Linked inventory preload incomplete; individual files will be rechecked."
+msgstr "Seznam souborů v propojené galerii se nenačetl celý. Jednotlivé soubory se ověří znovu."
+
+msgid "Local thumbnails are unavailable; falling back to server-side thumbnail generation."
+msgstr "Místní tvorba náhledů je nedostupná. Náhledy vytvoří server."
+
+msgid "Linked recovery marker could not be refreshed."
+msgstr "Záznam pro obnovu propojení se nepodařilo aktualizovat."
+
+msgid "Linked gallery recovery state is unavailable."
+msgstr "Stav obnovy propojené galerie je nedostupný."
+
+msgid "Idle"
+msgstr "Bez práce"
+
+msgid "Detected"
+msgstr "Nalezeno"
+
+msgid "Waiting for the file to settle"
+msgstr "Čeká se, až se soubor přestane měnit"
+
+msgid "Preparing"
+msgstr "Připravuje se"
+
+msgid "Checking the gallery inventory"
+msgstr "Ověřují se soubory v galerii"
+
+msgid "Waiting to retry"
+msgstr "Čeká se na další pokus"
+
+msgid "Gallery access required"
+msgstr "Je potřeba přístup ke galerii"
+
+msgid "Upload outcome uncertain"
+msgstr "Výsledek nahrávání je nejistý"
+
+msgid "Blocked"
+msgstr "Zablokováno"
+
+msgid "Confirmed"
+msgstr "Potvrzeno"
+
+msgid "Unknown state"
+msgstr "Neznámý stav"
+
+msgid "Watching {folder}"
+msgstr "Sleduje se složka: {folder}"
+
+msgid "Already in the gallery: {filename}"
+msgstr "Už je v galerii: {filename}"
+
+msgid "Manual import started. Files: {count}"
+msgstr "Ruční import spuštěn. Soubory: {count}"
+
+msgid "Manual import finished."
+msgstr "Ruční import byl dokončen."
+
+msgid "Manual import stopped."
+msgstr "Ruční import byl zastaven."
+
+msgid "Uploaded file: {filename}"
+msgstr "Nahraný soubor: {filename}"
+
+msgid "Upload in progress"
+msgstr "Probíhá nahrávání"
+
+msgid "Enter a valid scan interval and file stability time."
+msgstr "Zadejte platný interval prohledávání a dobu, po kterou má soubor zůstat beze změny."
+
+msgid "Timing, worker, archive-safety, and AI numeric settings must contain valid numbers."
+msgstr "Časové údaje, počet vláken, limity archivů a číselná nastavení AI musí obsahovat platná čísla."
+
+msgid "Gallery URL must use HTTP or HTTPS and contain a valid host."
+msgstr "URL galerie musí používat HTTP nebo HTTPS a obsahovat platný název hostitele."
+
+msgid "Wait for the Watcher restart checkpoint to finish."
+msgstr "Počkejte, až Sledovátko bezpečně uloží stav pro restart."
+
+msgid "Finish the current Watcher capture before changing its gallery."
+msgstr "Před změnou galerie dokončete právě probíhající relaci Sledovátka."
+
+msgid "Wait for the current Watcher, import or flight work to stop."
+msgstr "Počkejte na zastavení probíhající práce Sledovátka, importu nebo záznamu letu."
+
+msgid "Upload settings could not be verified. Restart WinApp and try again."
+msgstr "Nastavení nahrávání se nepodařilo ověřit. Restartujte WinApp a zkuste to znovu."
+
+msgid "Continue the current uploads in Watcher before changing the upload gallery."
+msgstr "Před změnou galerie pro nahrávání pokračujte v rozpracovaném nahrávání ve Sledovátku."
+
+msgid "Review unfinished imports in Activity before changing the upload target."
+msgstr "Před změnou cíle nahrávání zkontrolujte nedokončené importy v Aktivitě."
+
+msgid "Local upload history exceeds the safe size limit. Review Activity."
+msgstr "Místní historie nahrávání překračuje bezpečný limit velikosti. Zkontrolujte Aktivitu."
+
+msgid "Local upload history could not be verified. Review Activity."
+msgstr "Místní historii nahrávání se nepodařilo ověřit. Zkontrolujte Aktivitu."
+
+msgid "{confirmed} confirmed / {skipped} skipped"
+msgstr "potvrzeno {confirmed} / přeskočeno {skipped}"
+
+msgid "See Support diagnostics for details."
+msgstr "Podrobnosti najdete v Diagnostice pro podporu."
+
+msgid "Select a report language or disable reports."
+msgstr "Vyberte jazyk reportu nebo vypněte tvorbu reportů."
+
+msgid "unknown Python executable"
+msgstr "neznámý soubor Pythonu"
+
+msgid "tray available"
+msgstr "oznamovací oblast je dostupná"
+
+msgid "tray unavailable"
+msgstr "oznamovací oblast je nedostupná"
+
+msgid "Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
+msgstr "Místní tvorba náhledů je dostupná. Python {version}: {executable}. Pillow: {pillow_version}, {tray_status}."
+
+msgid "Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
+msgstr "Tato instalace Pythonu neumí vytvářet náhledy místně: {executable}. Python {version}, {tray_status}."
+
+msgid "Required dependencies are bundled with this application."
+msgstr "Potřebné balíčky jsou součástí aplikace."
+
+msgid "Bundled dependencies are unavailable. Reinstall PHP Gallery Uploader."
+msgstr "Balíčky dodávané s aplikací jsou nedostupné. Přeinstalujte WinApp."
+
+msgid "The standalone installer cannot install Python packages. Use Ollama or an external analyzer, or run the Python source version to use Transformers."
+msgstr "Samostatná instalace neumí přidávat balíčky Pythonu. Použijte Ollama nebo vlastní analyzátor. Pro Transformers spusťte verzi aplikace ze zdrojového kódu."
+
+msgid "Bundled dependencies"
+msgstr "Balíčky dodávané s aplikací"

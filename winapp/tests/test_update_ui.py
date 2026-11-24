@@ -28,6 +28,11 @@ from uploader.update_ui import (
     UpdateController,
     check_due,
 )
+import ast
+from uploader.self_update import (
+    UpdateCancelled, UpdateError, _record_download_file, create_download_session,
+    retire_download_session, validated_release_asset,
+)
 from uploader.self_update import ReleaseAsset, UpdateDiagnostic
 
 
@@ -433,7 +438,6 @@ class UpdateControllerTests(unittest.TestCase):
         Returns:
             None: Confirms cleanup follows successful metadata persistence.
         """
-        from uploader.self_update import _record_download_file, create_download_session
 
         controller = self.controller()
         with tempfile.TemporaryDirectory() as directory:
@@ -467,7 +471,6 @@ class UpdateControllerTests(unittest.TestCase):
         Returns:
             None: Confirms metadata acceptance clears the stale installer reference.
         """
-        from uploader.self_update import _record_download_file, create_download_session
 
         controller = self.controller()
         with tempfile.TemporaryDirectory() as directory:
@@ -583,8 +586,9 @@ class UpdateControllerTests(unittest.TestCase):
                 ttk=ttk_stub,
             )
             with (
-                patch.dict(sys.modules, {'tkinter': tkinter_stub}),
-                patch('uploader.ui_theme.Button', ttk_stub.Button),
+                patch('uploader.update_ui.tk', tkinter_stub),
+                patch('uploader.update_ui.ttk', ttk_stub),
+                patch('uploader.update_ui.Button', ttk_stub.Button),
                 patch('uploader.update_ui.EmbeddedWindow', return_value=window),
             ):
                 controller.open_updates()
@@ -783,7 +787,6 @@ class UpdateControllerTests(unittest.TestCase):
         Returns:
             None: Each entry point checks the update guard before work.
         """
-        import ast
         source = (Path(__file__).resolve().parents[1] / 'gallery_watch_upload.pyw').read_text(encoding='utf-8')
         tree = ast.parse(source)
         app = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'WatcherApp')
@@ -826,8 +829,11 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertTrue(check_due(path, 101))
 
     def test_download_session_preserves_unknown_content_and_unmarked_directory(self) -> None:
-        """Even correctly named directories cannot authorize deletion of unrelated data."""
-        from uploader.self_update import create_download_session, retire_download_session, UpdateError
+        """Keep unrelated data even inside correctly named directories.
+
+        Returns:
+            None: Asserts cleanup refuses unknown ownership and contents.
+        """
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             unknown = root / ('download-' + 'a' * 32)
@@ -846,8 +852,11 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertTrue((owned / 'ownership.json').exists())
 
     def test_owned_download_session_retirement_is_precise(self) -> None:
-        """Only files registered by the download workflow and its marker are removed."""
-        from uploader.self_update import create_download_session, retire_download_session, _record_download_file
+        """Remove only registered download files and the ownership marker.
+
+        Returns:
+            None: Checks exact cleanup effects in the disposable owner.
+        """
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             owned = create_download_session(root)
@@ -859,12 +868,15 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertTrue(root.exists())
 
     def test_reparse_ancestor_refuses_session_cleanup(self) -> None:
-        """Canonical storage inspection protects every ancestor before deletion."""
-        from uploader.self_update import create_download_session, retire_download_session, UpdateError
+        """Check every cleanup ancestor for redirected storage.
+
+        Returns:
+            None: Asserts the redirected storage fails before deletion.
+        """
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             owned = create_download_session(root)
-            with patch('uploader.update_helper.reject_reparse_path', side_effect=ValueError('reparse')):
+            with patch('uploader.self_update.reject_reparse_path', side_effect=ValueError('reparse')):
                 with self.assertRaises(UpdateError):
                     retire_download_session(owned, root)
             self.assertTrue((owned / 'ownership.json').exists())
@@ -873,9 +885,11 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertTrue(owned.exists())
 
     def test_invalid_cached_metadata_is_not_an_offer(self) -> None:
-        """Cached URLs, versions, sizes and missing hashes receive public trust checks."""
-        from uploader.self_update import validated_release_asset, UpdateError
-        from dataclasses import asdict
+        """Apply release trust checks to cached update metadata.
+
+        Returns:
+            None: Rejects invalid URLs, versions, sizes and missing hashes.
+        """
         payload = asdict(ReleaseAsset('1.2.3', 'PHPGalleryUploader-1.2.3-Setup.exe', 'https://github.com/klusik/PHP_gallery/releases/download/v1/PHPGalleryUploader-1.2.3-Setup.exe', 100, 'a' * 64, 1, 1))
         for field, value in (('download_url', 'https://example.invalid/setup.exe'), ('sha256', ''), ('size', float('nan')), ('version', '0.0.1')):
             changed = dict(payload)
@@ -884,8 +898,11 @@ class UpdateControllerTests(unittest.TestCase):
                 validated_release_asset(changed, '1.0.0')
 
     def test_cancel_after_verification_retires_session(self) -> None:
-        """A cancel arriving during verification cannot enqueue installer readiness."""
-        from uploader.self_update import _record_download_file, UpdateCancelled
+        """Cancel a verified download before admitting installer readiness.
+
+        Returns:
+            None: Checks cleanup and the absence of a readiness event.
+        """
         controller = self.controller()
         controller.run_worker = lambda operation: operation()
         def fixture_download(asset: ReleaseAsset, directory: Path, progress: Callable[[int, int], None], cancel: threading.Event) -> Path:
@@ -908,7 +925,6 @@ class UpdateControllerTests(unittest.TestCase):
         Returns:
             None: Confirms cancellation retires the download and retains the offer.
         """
-        from uploader.self_update import create_download_session
         controller = self.controller()
         controller.install = Mock()
         with tempfile.TemporaryDirectory() as directory:
@@ -926,8 +942,11 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertFalse(owned.exists())
 
     def test_ready_handoff_retires_only_its_owned_download(self) -> None:
-        """Successful helper readiness retires the download while keeping its owner root."""
-        from uploader.self_update import create_download_session, _record_download_file
+        """Retire an owned download after helper readiness.
+
+        Returns:
+            None: Checks the expected session is removed within its owner root.
+        """
         controller = self.controller()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

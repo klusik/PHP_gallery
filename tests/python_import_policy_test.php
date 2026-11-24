@@ -43,8 +43,7 @@ foreach ($spellings as $source) {
     python_import_policy_assert(
         count($findings) === 1
             && $findings[0]['line'] === 1
-            && is_string($findings[0]['rule'])
-            && $findings[0]['rule'] !== '',
+            && $findings[0]['rule'] === 'python.future_annotations',
         'Every real forbidden import spelling must produce one located rule.',
     );
 }
@@ -69,10 +68,48 @@ from __future__ import division, print_function
 import concurrent.futures
 from concurrent.futures import Future
 message = "from __future__ import annotations"
+try:
+    import platform_dependency
+except ImportError:
+    from .fallback import platform_dependency
+if TYPE_CHECKING:
+    from typing import Protocol
+class ModuleLevel:
+    import nested_class_dependency
 PY;
 python_import_policy_assert(
     python_import_findings($allowed) === [],
-    'Comments, docstrings, strings and allowed imports must remain inert.',
+    'Comments, strings and imports outside functions remain allowed.',
+);
+
+$local = <<<'PY'
+def run():
+    if ready:
+        import os as platform
+    try:
+        from .helpers import connect
+    except ImportError:
+        import replacement
+    class Nested:
+        from sibling import option
+        async def execute(self):
+            import queue
+
+class ModuleLevel:
+    def execute(self):
+        from helpers import connect
+
+async def open_connection():
+    async with connection:
+        import threading
+PY;
+$localFindings = python_import_findings($local);
+python_import_policy_assert(
+    array_column($localFindings, 'line') === [3, 5, 7, 9, 11, 15, 19]
+        && array_unique(array_column($localFindings, 'rule')) === [
+            'python.function_local_import',
+        ],
+    'Each import lexically inside a callable, including nested and async blocks, must be found.',
 );
 
 $root =
@@ -130,7 +167,9 @@ try {
     file_put_contents($root . '/broken.py', "private_fixture_secret = (\n");
     $blocked = python_import_policy_report($root);
     python_import_policy_assert(
-        $blocked['status'] === 'BLOCKED' && $blocked['blocked'] !== [],
+        $blocked['status'] === 'BLOCKED'
+            && $blocked['blocked'][0]['path'] === 'broken.py'
+            && str_contains($blocked['blocked'][0]['reason'], 'line 1'),
         'Unparseable admitted source must block complete coverage.',
     );
     python_import_policy_assert(
@@ -150,6 +189,20 @@ try {
             && $clean['summary']['finding_count'] === 0
             && $clean['blocked'] === [],
         'Removing prohibited imports must restore a complete PASS without treating excluded imports as findings.',
+    );
+    file_put_contents($root . '/desktop.pyw', $local);
+    $strict = python_import_policy_report($root);
+    python_import_policy_assert(
+        $strict['status'] === 'FAIL'
+            && $strict['summary']['finding_count'] === count($localFindings)
+            && array_unique(array_column($strict['findings'], 'path')) === [
+                'desktop.pyw',
+            ],
+        'The complete gate must reject each local import without a Git base.',
+    );
+    python_import_policy_assert(
+        python_import_policy_report($root) === $strict,
+        'Unchanged local imports must continue to fail every policy pass.',
     );
 } finally {
     foreach ($files as $path) {

@@ -47,6 +47,8 @@ from uploader.flight_jobs import (
 )
 from uploader.flight_recorder import FlightRecorder
 from uploader.game_presence import GamePresence
+from uploader.flight_report_translations import tr
+from uploader.localization import DEFAULT_LANGUAGE, current_language, gettext
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import ImportJob, JsonValue
 from uploader.mode_coordinator import GuiModeOwner, ModeConfigPort
@@ -488,7 +490,7 @@ class FlightUI:
             code: tk.BooleanVar(value=code in self.preferences.languages)
             for code in ("en", "cs", "de", "sv")
         }
-        self.ui_language = tk.StringVar(value=self.preferences.ui_language)
+        self.ui_language = tk.StringVar(value=current_language())
         self.host.root._flight_ui_language = self.ui_language
         self.refresh_dispatch_status()
         self._last_terminal = ""
@@ -791,7 +793,7 @@ class FlightUI:
                 except queue.Empty:
                     break
             self.dispatch_cancelled = False
-        self.host.events.put(("info", self.text("simbrief_loading")))
+        self.host.events.put(("info", tr(DEFAULT_LANGUAGE, "simbrief_loading")))
         self.dispatch_loading = True
         self.dispatch_loading_target = target
         self.refresh_dispatch_status()
@@ -866,7 +868,7 @@ class FlightUI:
             if self.report_dialog is not None and self.report_dialog.winfo_exists():
                 self.select_report()
             status = "simbrief_staged_loaded" if target is None else "simbrief_loaded"
-            self.host.events.put(("info", self.text(status) + "\n"
+            self.host.events.put(("info", tr(DEFAULT_LANGUAGE, status) + "\n"
                 + plan.origin + " → " + plan.destination))
         except (OSError, ValueError) as exc:
             messagebox.showerror("SimBrief", str(exc), parent=self.dialog_owner())
@@ -908,7 +910,7 @@ class FlightUI:
             self.cache_dispatch(plan)
             self.refresh_dispatch_status()
             self.select_report()
-            self.host.events.put(("info", self.text("simbrief_loaded")))
+            self.host.events.put(("info", tr(DEFAULT_LANGUAGE, "simbrief_loaded")))
         except (OSError, ValueError) as exc:
             messagebox.showerror("SimBrief", str(exc), parent=self.dialog_owner())
 
@@ -958,7 +960,7 @@ class FlightUI:
         ).grid(row=0, column=3, sticky="e")
 
     def open_settings(self) -> None:
-        """Open one contextual sheet for automatic reports and language choices.
+        """Open the contextual sheet for automatic reports and PDF editions.
 
         Returns:
             None: Reuses the existing sheet; closing it starts no flight work.
@@ -997,19 +999,8 @@ class FlightUI:
                 editions, text=code.upper(), variable=variable,
                 command=self.save_preferences,
             ).pack(side="left", padx=(0, 8))
-        ttk.Label(
-            panel, text=self.text("ui_language"), style="Muted.TLabel",
-        ).grid(row=4, column=0, sticky="w", pady=(16, 4))
-        language = ttk.Frame(panel, style="Card.TFrame")
-        language.grid(row=5, column=0, columnspan=2, sticky="w")
-        for code in ("en", "cs", "de", "sv"):
-            ttk.Radiobutton(
-                language, text=code.upper(), value=code,
-                variable=self.ui_language, command=self.save_preferences,
-                style="Language.TRadiobutton", takefocus=True,
-            ).pack(side="left", padx=(0, 6))
         actions = ttk.Frame(panel, style="Card.TFrame")
-        actions.grid(row=6, column=0, columnspan=2, sticky="w", pady=(20, 0))
+        actions.grid(row=4, column=0, columnspan=2, sticky="w", pady=(20, 0))
         icon_button(
             actions, "≡", self.show_progress, self.capture_text("flight_progress"),
         ).pack(side="left")
@@ -1021,7 +1012,7 @@ class FlightUI:
         ).pack(side="left", padx=(10, 0))
         Button(
             panel, text=self.text("finish_pdf"), command=self.finish_report,
-        ).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
         dialog.deiconify()
         dialog.focus_set()
@@ -1515,7 +1506,7 @@ class FlightUI:
         if self.load_error or self.lease is None:
             messagebox.showerror(
                 self.text("saved_reports"),
-                self.load_error or "Flight workspace unavailable.",
+                self.load_error or gettext("Flight workspace unavailable."),
                 parent=self.dialog_owner(),
             )
             return
@@ -1640,7 +1631,7 @@ class FlightUI:
         if self.load_error or self.lease is None:
             messagebox.showerror(
                 self.text("saved_reports"),
-                self.load_error or "Flight workspace unavailable.",
+                self.load_error or gettext("Flight workspace unavailable."),
                 parent=self.dialog_owner(),
             )
             return
@@ -1717,7 +1708,7 @@ class FlightUI:
             ):
                 messagebox.showerror(
                     self.text("saved_reports"),
-                    "PDF unavailable; refresh the list.",
+                    gettext("PDF unavailable; refresh the list."),
                     parent=self.dialog_owner(),
                 )
                 return
@@ -1756,7 +1747,7 @@ class FlightUI:
         ):
             messagebox.showerror(
                 self.text("saved_reports"),
-                "Unsafe report directory.",
+                gettext("Unsafe report directory."),
                 parent=self.dialog_owner(),
             )
             return
@@ -1796,15 +1787,11 @@ class FlightUI:
                     code for code, variable in self.language_vars.items()
                     if variable.get()
                 ),
-                ui_language=self.ui_language.get(),
+                ui_language=self.preferences.ui_language,
             )
-            language_changed = preferences.ui_language != self.preferences.ui_language
             preferences.save(self.directory)
             self.preferences = preferences
             self.refresh_dispatch_status()
-            if language_changed:
-                # These controls own their published captions on the host.
-                self.host.refresh_connection_controls()
             if (
                 self.plan is not None and self.recorder is not None
                 and self.recorder.is_alive()
@@ -1822,7 +1809,7 @@ class FlightUI:
             self.restore_preferences()
             messagebox.showerror(
                 self.capture_text("flight_progress"),
-                str(exc),
+                gettext(str(exc)),
                 parent=self.dialog_owner(),
             )
             return False
@@ -1835,7 +1822,6 @@ class FlightUI:
         """
         self.record_var.set(self.preferences.recording)
         self.report_var.set(self.preferences.reports)
-        self.ui_language.set(self.preferences.ui_language)
         self.refresh_dispatch_status()
         for code, variable in self.language_vars.items():
             variable.set(code in self.preferences.languages)

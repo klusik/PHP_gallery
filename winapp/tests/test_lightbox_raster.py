@@ -24,6 +24,11 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    Image = None
+
 from uploader.lightbox_raster import (
     LightboxRasterWorker,
     RasterOwner,
@@ -307,9 +312,7 @@ class LightboxRasterWorkerTests(unittest.TestCase):
             None: Worker execution moves unchanged detector pixel behavior off
                 Tk and retains the same crop coordinates for viewport requests.
         """
-        try:
-            from PIL import Image, ImageDraw
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is optional for portable raster-lane coverage.")
         image = Image.new("RGB", (24, 18), "black")
         ImageDraw.Draw(image).rectangle(
@@ -451,9 +454,7 @@ class LightboxRasterWorkerTests(unittest.TestCase):
             None: The worker passes output size, resampling and source box through
                 unchanged when Pillow is installed for this test environment.
         """
-        try:
-            from PIL import Image
-        except ImportError:
+        if Image is None:
             self.skipTest("Pillow is optional for portable raster-lane coverage.")
 
         source = Image.new("RGB", (8, 6))

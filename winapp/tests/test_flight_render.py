@@ -84,11 +84,11 @@ class FlightRenderTests(unittest.TestCase):
                             for code in ("en", "cs", "de", "sv")}
             callback_threads = []
             with patch("uploader.flight_report.prepare_report_maps",
-                       return_value=(str(len(destinations)).encode("ascii"), b"")) as maps, \
-                    patch.object(flight_render, "_render_language", _probe_render):
+                       return_value=(str(len(destinations)).encode("ascii"), b"")) as maps:
                 outputs = flight_render.render_report_variants(
                     self._analysis(), destinations,
                     on_completed=lambda code, pdf: callback_threads.append(threading.get_ident()),
+                    prepare_maps=maps, render=_probe_render,
                 )
             self.assertEqual(list(destinations), list(outputs))
             pids = {int(pdf.read_text(encoding="ascii")) for pdf in outputs.values()}
@@ -163,14 +163,14 @@ class FlightRenderTests(unittest.TestCase):
                 try:
                     flight_render.render_report_variants(
                         self._analysis(), destinations, cancel, on_completed=retain,
+                        prepare_maps=maps, render=render,
                     )
                 except Exception as exc:
                     errors.append(exc)
                 finally:
                     finished.set()
 
-            with patch("uploader.flight_report.prepare_report_maps", return_value=(b"", b"")), \
-                    patch.object(flight_render, "_render_language", render), \
+            with patch("uploader.flight_report.prepare_report_maps", return_value=(b"", b"")) as maps, \
                     patch.object(flight_render, "ProcessPoolExecutor",
                         side_effect=lambda max_workers, mp_context:
                             ThreadPoolExecutor(max_workers=max_workers)):
@@ -216,6 +216,9 @@ class FlightRenderTests(unittest.TestCase):
                     patch.object(flight_render, "ProcessPoolExecutor") as pool:
                 for destinations in ({}, {"xx": pdf}, {"en": pdf, "cs": pdf}):
                     with self.subTest(destinations=destinations), self.assertRaises(ValueError):
-                        flight_render.render_report_variants(self._analysis(), destinations)
+                        flight_render.render_report_variants(
+                            self._analysis(), destinations,
+                            prepare_maps=maps, render=_probe_render,
+                        )
                 maps.assert_not_called()
                 pool.assert_not_called()
