@@ -251,6 +251,27 @@ class WatchQueueTests(unittest.TestCase):
         self.assertEqual('uncertain', recovered.head().state)
         self.assertTrue(Path(pending_source.path).exists())
 
+    def test_interrupted_initial_scan_can_close_but_cannot_resume(self) -> None:
+        """Keep the startup boundary mandatory for any upload resumption.
+
+        Returns:
+            None: A verified empty startup journal can be closed locally, and
+                normal restore continues to reject its uncaptured boundary.
+        """
+        startup = WatchQueueStore(
+            self.root / 'interrupted' / 'watch-drain.json', self.journal.binding,
+            self.folder, False, clock=lambda: self.now,
+        )
+        startup.initialize(None)
+        with self.assertRaisesRegex(ValueError, 'Original capture boundary'):
+            startup.restore()
+        startup.restore(for_close=True)
+        startup.force_finish(self.now)
+        self.assertTrue(startup.force_finished)
+        self.assertEqual([], startup.items())
+        with self.assertRaisesRegex(ValueError, 'Original capture boundary'):
+            startup.restore()
+
     def test_force_finish_keeps_existing_cutoff_and_blocks_non_ack_transitions(self) -> None:
         """Preserve a prior boundary and reject old-session retry transitions.
 

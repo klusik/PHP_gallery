@@ -29,6 +29,60 @@ from typing import Iterable, Literal, cast
 
 _SECRET_RE = re.compile(r"(?i)(api[_ -]?key|authorization|token|secret|password)\s*[:=]\s*([^\s,;]+)")
 
+
+def format_watch_recovery_diagnostic(
+    stage: str, reason: str, *, error: BaseException | None = None,
+    sessions: int | None = None, pending: int | None = None,
+) -> str:
+    """Format fixed Watcher recovery evidence for the log and support report.
+
+    Args:
+        stage (str): Source-defined recovery phase identifier.
+        reason (str): Source-defined outcome or refusal identifier.
+        error (BaseException | None): Optional error for class, source site and
+            validated HTTP facts. Its message and chained errors stay private.
+        sessions (int | None): Number of matching retained flight plans.
+        pending (int | None): Unresolved photographs in the next plan's journal.
+    Returns:
+        str: Single credential-free line with known phases and available facts.
+    """
+    from .app_linking import LinkingResponseError
+
+    phase = stage if stage.isascii() and stage.isidentifier() else 'unknown'
+    outcome = reason if reason.isascii() and reason.isidentifier() else 'unknown'
+    parts = [f'[watcher-recovery] stage={phase}; reason={outcome}']
+    if sessions is not None:
+        parts.append(f'sessions={sessions}')
+    if pending is not None:
+        parts.append(f'pending={pending}')
+    if error is not None:
+        name = type(error).__name__
+        parts.append(
+            'error_type=' + (name if name.isascii() and name.isidentifier() else 'Exception')
+        )
+        for frame in reversed(traceback.extract_tb(error.__traceback__)):
+            source = Path(frame.filename).name
+            if (source in {
+                    'gallery_watch_upload.pyw', 'flight_jobs.py', 'flight_ui.py',
+                    'watch_queue.py', 'linked_upload.py', 'app_linking.py',
+                } and frame.name.isascii() and frame.name.isidentifier()):
+                parts.append(f'source={source}:{frame.name}:{frame.lineno}')
+                break
+        if isinstance(error, LinkingResponseError):
+            try:
+                response = LinkingResponseError(
+                    error.phase, error.route, error.status, error.content_kind,
+                    error.reason, transport_step=error.transport_step,
+                )
+            except (AttributeError, TypeError, ValueError):
+                pass
+            else:
+                parts.append(f'route={response.route}')
+                parts.append(f'http={response.status or "none"}')
+                parts.append(f'link_reason={response.reason}')
+    return '; '.join(parts)
+
+
 _SAFE_PHOTOS_PHASES = frozenset({
     "page-fetch", "media-fetch", "media-decode", "page-apply",
     "media-apply", "preload-listing", "preload-cache", "preload-fetch",

@@ -2148,6 +2148,13 @@ publication repair and preserved originals.
 `test_watch_recovery_integration.py` uses the actual Watcher, linked history and
 native leases with a synthetic transfer boundary, including first dispatch of
 the blocked new source, receipt mismatch and repair after linked publication.
+Restart recovery fixtures cover the Photos action and queue refresh when the
+worker is absent, coalesced exact-target verification, and local closure under
+the native pipeline and target leases. A failed plan write retains the original
+file and journal and can be retried after the queue marker was already written.
+The diagnostics fixture checks that a later successful inspection leaves the
+earlier fixed HTTP refusal in the support snapshot. Closure fixtures check
+distinct reasons for the blocked pipeline lease and failed plan publication.
 UI coverage in
 `test_watch_recovery_ui.py` distinguishes receipt confirmation, explicit skip,
 earlier-blocker review and cancellation. The native Windows owner requires Tk

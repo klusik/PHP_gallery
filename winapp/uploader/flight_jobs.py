@@ -17,7 +17,7 @@ import os
 import re
 import stat
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Literal
@@ -217,6 +217,23 @@ class SessionPlan:
             "receipts": self.receipts,
             "error": self.error,
         })
+
+    def persist_abandoned(self, lease: "WorkspaceLease") -> None:
+        """Close this plan under the flight workspace's durable owner.
+
+        Args:
+            lease (WorkspaceLease): Exclusive owner of the plan's workspace.
+        Returns:
+            None: Verifies the terminal marker while retaining the plan and files.
+        Raises:
+            OSError: Publication or readback did not establish durable closure.
+        """
+        lease.verify()
+        abandoned = replace(self, abandoned=True, completed=True)
+        abandoned.save()
+        lease.verify()
+        if SessionPlan.load(self.directory) != abandoned:
+            raise OSError('Abandoned flight marker did not read back.')
 
     @classmethod
     def load(cls, directory: Path) -> "SessionPlan":

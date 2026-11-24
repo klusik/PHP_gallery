@@ -2114,6 +2114,80 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(self.pending_photo.is_file())
         app.linking_manager.start_photos_watcher.assert_not_called()
 
+    def test_close_retained_capture_retries_partial_local_publication(self) -> None:
+        """Close a retained capture under the native leases without a live link.
+
+        Returns:
+            None: Refuses a busy pipeline, keeps the original photo and persists
+                local closure on retry after an interrupted parent-plan write.
+        """
+        config_root = self.flight_root.parent
+        app = object.__new__(MAIN.WatcherApp)
+        app.exiting = False
+        app.updates = mock.Mock(blocked=mock.Mock(return_value=False))
+        app._queue_recovery_pending = False
+        app.background_work_active = mock.Mock(return_value=False)
+        app.worker = None
+        app._finish_resume_generation = 0
+        app._cancel_ordinary_restart_for_action = mock.Mock()
+        app.events = queue.Queue()
+        app.flights = SimpleNamespace(
+            is_alive=mock.Mock(return_value=False), lease=self.lease,
+            directory=self.flight_root, resume_workers=[],
+            binding=mock.Mock(return_value=self.binding),
+        )
+        app.linking_manager = mock.Mock(
+            linked_upload_mode_selected=mock.Mock(return_value=True),
+        )
+        callback = mock.Mock()
+        journal_path = self.session_directory / 'watch-drain.json'
+        journal_path.unlink()
+        journal = MAIN.WatchQueueStore(
+            journal_path, self.binding, self.watch_folder, False, scope=UPLOAD_SCOPE,
+        )
+        journal.initialize([])
+        # Admit this fixture generation after the original startup boundary.
+        self.pending_photo.unlink()
+        self.pending_photo.write_bytes(b'accepted before the update')
+        admitted = journal.reconcile([
+            MAIN.observe_watch_source(self.pending_photo, time.time()),
+        ])
+        self.assertEqual(1, admitted)
+        original = journal_path.read_bytes()
+        pipeline = MAIN.UploadPipelineLease(config_root)
+
+        with mock.patch.object(MAIN, 'CONFIG_DIR', config_root):
+            pipeline.acquire()
+            try:
+                app.close_retained_watch(self.plan, callback)
+                refused = wait_for_event_kind(app.events, 'retained_watch_closed')
+            finally:
+                pipeline.release()
+            self.assertTrue(refused['payload']['error_type'])
+            self.assertIn('reason=pipeline_lease_failed', refused['payload']['diagnostic'])
+            self.assertEqual(original, journal_path.read_bytes())
+            with mock.patch.object(SessionPlan, 'persist_abandoned', side_effect=OSError):
+                app.close_retained_watch(self.plan, callback)
+                partial = wait_for_event_kind(app.events, 'retained_watch_closed')
+            self.assertEqual('OSError', partial['payload']['error_type'])
+            self.assertIn('reason=plan_terminal_write_failed', partial['payload']['diagnostic'])
+            self.assertFalse(SessionPlan.load(self.session_directory).completed)
+            with self.assertRaisesRegex(ValueError, 'Finish closing'):
+                app.resume_flight_photos(self.session_directory, continue_retained=True)
+            app.close_retained_watch(self.plan, callback)
+            result = wait_for_event_kind(app.events, 'retained_watch_closed')
+
+        self.assertIs(result['payload']['on_result'], callback)
+        self.assertEqual('', result['payload']['error_type'])
+        saved = SessionPlan.load(self.session_directory)
+        self.assertTrue(saved.completed)
+        self.assertTrue(saved.abandoned)
+        state = journal.read_journal(journal_path)
+        self.assertTrue(state['force_finished'])
+        self.assertFalse(state['completed'])
+        self.assertEqual([str(self.pending_photo)], state['pending'])
+        self.assertEqual(b'accepted before the update', self.pending_photo.read_bytes())
+
     def test_capture_target_admission_runs_off_tk_and_rejects_a_moved_mode(self) -> None:
         """Restore only the captured mode with admission outside the UI thread.
 
@@ -2262,8 +2336,8 @@ class WatcherContinuationTests(unittest.TestCase):
         """Copy safe updater, rendering and host context without API secrets.
 
         Returns:
-            None: Browser, retained updater failure, numeric rendering facts,
-                runtime and Tk summaries are copied with redacted credentials.
+            None: Browser, retained updater and Watcher failures, numeric
+                rendering facts and runtime summaries exclude private data.
                 A failed render-counter getter preserves the media failure.
         """
         app = object.__new__(MAIN.WatcherApp)
@@ -2345,6 +2419,19 @@ class WatcherContinuationTests(unittest.TestCase):
         app.import_activity_var = SimpleNamespace(get=lambda: "Import: idle")
         app.ai_activity_var = SimpleNamespace(get=lambda: "AI: stopped")
         app.write_log = mock.Mock()
+        error_marker = 'private-response-fixture'
+        response = MAIN.LinkingResponseError(
+            'linking', 'app_linking_identity', 403, 'json', 'http_status',
+        )
+        response.args = (f'token={error_marker}',)
+        with self.assertLogs(level='INFO') as records:
+            MAIN.WatcherApp.write_log(app, MAIN.format_watch_recovery_diagnostic(
+                'target', 'gallery_verification_failed', error=response,
+            ), 'warning')
+            MAIN.WatcherApp.write_log(app, MAIN.format_watch_recovery_diagnostic(
+                'inspect', 'retained_queue_read', sessions=1, pending=2,
+            ), 'info')
+        self.assertNotIn(error_marker, '\n'.join(records.output))
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(
             MAIN, "LOG_PATH", Path(directory) / "absent.log",
         ):
@@ -2361,6 +2448,11 @@ class WatcherContinuationTests(unittest.TestCase):
             "shortcut key=f state=0x8",
             render_summary,
             "Update continuation: stage=resume; reason=continuation_unverified",
+            'Watcher recovery: latest=[watcher-recovery] stage=inspect; '
+            'reason=retained_queue_read; sessions=1; pending=2 | '
+            'last_failure=[watcher-recovery] stage=target; '
+            'reason=gallery_verification_failed; error_type=LinkingResponseError; '
+            'route=app_linking_identity; http=403; link_reason=http_status',
             'Finish operation: {"generation": null, "trigger": "none", '
             '"phase": "idle", "error": "", "sessions": [], '
             '"worker_running": false, "automatic_retry_guard": 0, '
@@ -2372,6 +2464,7 @@ class WatcherContinuationTests(unittest.TestCase):
         ):
             self.assertIn(expected, copied)
         self.assertNotIn(api_secret, copied)
+        self.assertNotIn(error_marker, copied)
         photos._viewer._gallery_viewer_controller.render_diagnostics = mock.Mock(
             side_effect=ValueError('token=private-render-fixture'),
         )

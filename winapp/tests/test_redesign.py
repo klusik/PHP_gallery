@@ -652,6 +652,42 @@ class WatcherGalleryDisplayTests(unittest.TestCase):
             app.linking_manager.start_photos_watcher.call_args.args[:2],
         )
 
+    def test_restarted_photos_watcher_and_queue_refresh_open_saved_recovery(self) -> None:
+        """Route both recovery entry points to the retained local session.
+
+        Returns:
+            None: The Photos action clears startup feedback and refresh opens
+                recovery even with no live queue object.
+        """
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.updates = mock.Mock(blocked=mock.Mock(return_value=False))
+        app._watch_start_pending = False
+        app.worker = None
+        app.flights = mock.Mock(
+            session_state=mock.Mock(return_value='pending'),
+            text=mock.Mock(return_value='Uploads are paused.'),
+        )
+        app._set_watch_start_activity = mock.Mock()
+        app.linking_manager = mock.Mock()
+        app.write_log = mock.Mock()
+        session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+        gallery = LinkedGallery(1, None, 'Retained capture gallery')
+
+        app.open_gallery_watcher(session, gallery)
+        app._set_watch_start_activity.assert_called_with(False, 'Uploads are paused.')
+        app.linking_manager.start_photos_watcher.assert_not_called()
+        app.flights.show_recovery.assert_called_once_with()
+        app.flights.show_recovery.reset_mock()
+        app.refresh_upload_queue()
+        app.flights.show_recovery.assert_called_once_with()
+        self.assertEqual(
+            [
+                '[watcher-recovery] stage=photos_watcher; reason=retained_capture_pending',
+                '[watcher-recovery] stage=refresh; reason=inspecting_saved_capture',
+            ],
+            [call.args[0] for call in app.write_log.call_args_list],
+        )
+
     def test_queue_snapshots_count_admitted_photos_after_acknowledgement(self) -> None:
         """Count durable admitted generations before and after head acknowledgement.
 

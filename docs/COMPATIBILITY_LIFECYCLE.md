@@ -387,6 +387,22 @@ the exact owned claims before the worker gate opens, never an admitted run.
 Stop, Finish and unlink cancel this intent;
 stopped, mismatched, expired or uncertain work never becomes fresh capture.
 Unsaved transient grants and forced termination retain explicit recovery.
+In an installed Windows 1.5.4 report, a Watcher started from Photos, the app
+restarted, and a subsequent approval included upload permission. The retained
+capture still showed pending work while the in-memory queue snapshot was empty.
+After an interrupted capture and restart, explicit recovery tries the exact
+saved gallery with the original account's current approval, using the existing
+linked target and FIFO owners. The passive reader supports the current journal
+and the legacy queue format. Local closure uses the same terminal markers and
+also accepts verified empty v2 journals interrupted before their first scan.
+Keep that support for already installed profiles whose persisted captures
+outlive their live worker. Source fixtures cover the reported entry points,
+verified target handoff and partial local publication. The affected installed
+profile's exact journal contents and deployment acceptance remain unknown.
+Recovery diagnostics record the failed phase independently from a successful
+web sign-in and retain its most recent failure in the support snapshot.
+Process markers distinguish controlled shutdown stages from a log that ends
+before teardown.
 Inspection admits no capture before mode readiness. Temporary checkpoint reads
 and original-gallery verification failures retain the same intent for bounded
 retry, while malformed state, changed identity/scope and revoked authorization

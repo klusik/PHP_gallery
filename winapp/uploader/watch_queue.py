@@ -182,6 +182,22 @@ def _queue_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
     return result
 
 
+class WatchRecoveryError(ValueError):
+    """Give a refused Watcher continuation a stable diagnostic reason."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        """Attach the recovery reason separately from the displayed message.
+
+        Args:
+            reason (str): Source-defined diagnostic identifier for this refusal.
+            message (str): User-facing explanation of the refused continuation.
+        Returns:
+            None: Preserves the existing ValueError handling contract.
+        """
+        super().__init__(message)
+        self.reason = reason
+
+
 class WatchQueueStore:
     """Own readback-verified queue transitions under one producer/consumer lock."""
 
@@ -219,9 +235,12 @@ class WatchQueueStore:
         self.last_scan_at = 0.0
         self.scan_generation = 0
 
-    def _read(self) -> dict[str, JsonValue]:
+    @staticmethod
+    def read_journal(path: Path) -> dict[str, JsonValue]:
         """Read a bounded nonredirected complete journal without repairing it.
 
+        Args:
+            path (Path): Owned Watcher journal whose committed state is needed.
         Returns:
             dict[str, JsonValue]: Strict string-keyed persisted queue document.
 
@@ -229,9 +248,9 @@ class WatchQueueStore:
             OSError: The journal cannot be read or uses an unsafe path.
             ValueError: The document is oversized, malformed or not an object.
         """
-        if self.path.is_symlink() or self.path.parent.is_symlink():
+        if path.is_symlink() or path.parent.is_symlink():
             raise OSError('Capture journal is redirected.')
-        with self.path.open('rb') as handle:
+        with path.open('rb') as handle:
             raw = handle.read(WATCH_QUEUE_MAX_BYTES + 1)
         if len(raw) > WATCH_QUEUE_MAX_BYTES:
             raise ValueError('Capture journal exceeds its safe size limit.')
@@ -257,11 +276,11 @@ class WatchQueueStore:
         if len(json.dumps(row).encode('utf-8')) > WATCH_QUEUE_MAX_BYTES:
             raise ValueError('Capture journal is full; source photographs retained.')
         with accepted_work_owner(self.path.parent):
-            current = self._read() if self.path.exists() else None
+            current = self.read_journal(self.path) if self.path.exists() else None
             if current != self._disk_baseline:
                 raise ValueError('Capture journal changed under another owner.')
             atomic_write_json(self.path, row, require_sync=True)
-            if self._read() != row:
+            if self.read_journal(self.path) != row:
                 raise ValueError('Capture journal publication could not be confirmed.')
             self.data = row
             self._disk_baseline = copy.deepcopy(row)
@@ -312,13 +331,16 @@ class WatchQueueStore:
         with self.lock:
             self._publish(self._new_document(initial))
 
-    def restore(self) -> None:
+    def restore(self, *, for_close: bool = False) -> None:
         """Verify target, order and source containment before resuming a journal.
 
         Version-one queues retain their original boundary. Multiple pending
         paths have no recorded arrival order and therefore block for review.
         A zero cutoff stays open; checkpoint time is never invented as Finish.
 
+        Args:
+            for_close (bool): Allow an empty v2 journal interrupted before the
+                initial scan only so it can be closed under its original leases.
         Returns:
             None: Loads verified v2 records or conservatively upgrades v1 data.
 
@@ -327,7 +349,7 @@ class WatchQueueStore:
             OSError: The original journal is unavailable.
         """
         with self.lock:
-            row = self._read()
+            row = self.read_journal(self.path)
             self._disk_baseline = copy.deepcopy(row)
             version = row.get('schema_version', 1)
             if type(version) is not int or version not in (1, 2):
@@ -339,10 +361,18 @@ class WatchQueueStore:
             if os.name == 'nt' and isinstance(stored_folder, str):
                 stored_folder = stored_folder.replace('/', '\\')
                 captured_folder = captured_folder.replace('/', '\\')
+            # v2 records the initial scan decision before any item is admitted.
+            empty_startup = (
+                for_close and version == 2 and row.get('initial_captured') is False
+                and all(row.get(field) == [] for field in (
+                    'initial', 'initial_sources', 'items', 'pending',
+                ))
+            )
             if (not isinstance(stored_folder, str)
                     or stored_folder != captured_folder
                     or row.get('recursive') is not self.recursive
-                    or row.get('initial_captured', True) is not True):
+                    or (row.get('initial_captured', True) is not True
+                        and not empty_startup)):
                 raise ValueError('Original capture boundary could not be verified.')
             if row.get('allowed_paths') != (
                     list(self.allowed_paths) if self.allowed_paths is not None else None):
@@ -555,8 +585,10 @@ class WatchQueueStore:
                 raise ValueError('Approved upload history belongs to another queue context.')
             if approval is not None and not any(entry == approval for entry in history):
                 raise ValueError('Approved upload is missing its durable history.')
+            # An uncaptured startup remains frozen without a Finish cutoff.
+            expected_frozen = bool(cutoff) or empty_startup
             if (any(key not in row['initial'] for key in row['initial_hashes'])
-                    or row['frozen'] != bool(cutoff)
+                    or row['frozen'] != expected_frozen
                     or any(type(row.get(key)) not in (int, float)
                            or not math.isfinite(row[key]) or row[key] < 0
                            for key in ('capture_started_at', 'checkpoint',

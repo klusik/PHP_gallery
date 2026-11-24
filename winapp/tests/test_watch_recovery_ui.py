@@ -697,7 +697,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
 
         Returns:
             None: Checks both applicable actions across locales, retires them
-                during reports, and preserves the backend Force Finish fences.
+                during reports, and verifies retained closure fits the overlay.
         """
         try:
             root = tk.Tk()
@@ -752,6 +752,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui._capture_recovery_restore_attempted = False
         ui._capture_recovery_restore_pending = False
         ui._capture_recovery_retry_at = None
+        ui._retained_capture = None
+        ui._retained_capture_closing = False
         ui._preparing_progress = False
         ui._progress_local_mode = False
         ui._animation_running = False
@@ -788,8 +790,12 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         window.winfo_toplevel().geometry("900x650+10+10")
         root.update()
         capture_actions = {"watch_recovery_resume_pending", "force_stop_watch"}
-        self.assertEqual(capture_actions, set(ui.progress_buttons))
-        self.assertTrue(all(button.winfo_ismapped() for button in ui.progress_buttons.values()))
+        registered_actions = capture_actions | {"watch_recovery_close"}
+        self.assertEqual(registered_actions, set(ui.progress_buttons))
+        self.assertEqual(
+            capture_actions,
+            {key for key, button in ui.progress_buttons.items() if button.winfo_ismapped()},
+        )
         self.assertFalse(ui.task_frame.winfo_manager())
         self.assertEqual(tr("en", "phase_draining"), ui.phase_var.get())
         self.assert_progress_controls_inside(window, ui)
@@ -797,7 +803,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
 
         window.winfo_toplevel().geometry("390x560+10+10")
         root.update()
-        self.assertEqual(capture_actions, set(ui.progress_buttons))
+        self.assertEqual(registered_actions, set(ui.progress_buttons))
         for locale in ("en", "cs", "de", "sv"):
             language.set(locale)
             ui.refresh_progress_actions()
@@ -869,6 +875,21 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             recovery_text("en", "force_finish_transport_active"),
             host.status_var.get(),
         )
+        ui._retained_capture = object()
+        ui.session_state = lambda: "pending"
+        retained_actions = registered_actions - {"force_stop_watch"}
+        for geometry in ('900x650+10+10', '390x560+10+10'):
+            window.winfo_toplevel().geometry(geometry)
+            ui.show_progress()
+            ui.time_var.set(tr('en', 'watch_recovery_counts').format(
+                sessions=1, photos=1,
+            ))
+            root.update()
+            self.assertEqual(
+                retained_actions,
+                {key for key, button in ui.progress_buttons.items() if button.winfo_ismapped()},
+            )
+            self.assert_progress_controls_inside(window, ui)
 
     def cleanup_force_finish_progress_fixture(
         self, ui: FlightUI, root: tk.Tk,
