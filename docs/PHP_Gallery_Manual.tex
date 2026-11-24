@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.5.5}
+\newcommand{\version}{1.5.6}
 \newcommand{\manualdate}{24 November 2026}
 
 \hypersetup{
@@ -2696,6 +2696,15 @@ phase and~a~fixed safe reason without keys, checkpoint contents or~local paths.
 A~securely saved gallery grant or~unchanged saved API key is~required.
 Expired/revoked or~unsaved transient links need normal reconnection;
 uncertain uploads and~forced termination retain explicit recovery.
+
+After an~interrupted capture, \ui{Refresh queue} opens recovery for~the~saved
+session. The~panel shows the~unresolved photo count and~the~first pending file.
+\ui{Continue} verifies the~original site, account and~gallery before resuming
+that work. If~access cannot be~restored, \ui{Close retained capture…} can~close
+the~inactive, verified session locally after confirmation. It~preserves
+screenshots, reports and~upload history. For~unverifiable local state, use
+\ui{Help > Support diagnostics…}. The~report includes the~latest recovery phase
+and~most recent failure, including available HTTP status.
 
 Opening the~app again restores the~existing window and~keeps current work.
 One Windows process owns the~shared app profile, including executable copies;

@@ -121,6 +121,10 @@ class FlightUITests(unittest.TestCase):
         ui._capture_recovery_restore_attempted = False
         ui._capture_recovery_restore_pending = False
         ui._capture_recovery_retry_at = None
+        ui._retained_capture_results = queue.Queue()
+        ui._inspecting_retained_capture = None
+        ui._retained_capture = None
+        ui._retained_capture_closing = False
         ui.text = lambda key: key
         ui.recorder = None
         ui.plan = None
@@ -1298,6 +1302,80 @@ class FlightUITests(unittest.TestCase):
             time.monotonic() + flight_workflow.FINALIZATION_DRAIN_SECONDS,
         )
         host.api_key_request_blockers.assert_not_called()
+
+    def test_continue_uses_the_saved_gallery_before_opening_the_picker(self) -> None:
+        """Recover a restarted Watcher with the original scoped gallery.
+
+        Returns:
+            None: Coalesces clicks, leaves failed work pending, and admits
+                explicit Continue once after a fresh verification.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        host.linking_manager.linked_upload_mode_selected.return_value = True
+        binding = connection_binding('https://gallery.test/api', 'fixture')
+        host.linking_manager.linked_upload_binding.return_value = binding
+        ui.binding = flight_ui.FlightUI.binding.__get__(ui, flight_ui.FlightUI)
+        host.restore_capture_upload_target = Mock()
+        ui.show_recovery = Mock()
+        ui.begin = Mock()
+
+        ui.continue_watch()
+        ui.continue_watch()
+        host.restore_capture_upload_target.assert_called_once()
+        self.assertEqual(binding, host.restore_capture_upload_target.call_args.args[0])
+        verification = host.restore_capture_upload_target.call_args.args[1]
+        verification(False)
+        host.reconnect_upload_gallery.assert_called_once_with()
+        ui.begin.assert_not_called()
+
+        ui.continue_watch()
+        retry = host.restore_capture_upload_target.call_args.args[1]
+        verification(True)
+        ui.begin.assert_not_called()
+        retry(True)
+        retry(True)
+        ui.begin.assert_called_once_with(
+            automatic=True, explicit_retry=True, continue_pending=True,
+        )
+
+    def test_retained_capture_summary_reads_saved_work_passively(self) -> None:
+        """Show a saved queue head without starting a worker or changing data.
+
+        Returns:
+            None: A restart with no worker can inspect the next retained
+                capture and prepare its exact plan for explicit closure.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.show_progress = Mock()
+        ui.pending = flight_ui.FlightUI.pending.__get__(ui, flight_ui.FlightUI)
+        with tempfile.TemporaryDirectory() as directory:
+            ui.directory = Path(directory)
+            session = ui.directory / 'fixture-session'
+            session.mkdir()
+            plan = SessionPlan(session, ui.binding(), (), False)
+            plan.save()
+            journal = session / 'watch-drain.json'
+            # A legacy journal projects paths in its saved pending list.
+            flight_ui.atomic_write_json(journal, {
+                'schema_version': 1, 'pending': [str(session / 'pending.png')],
+            })
+            before = journal.read_bytes()
+            with patch.object(flight_ui.threading, 'Thread') as worker:
+                ui.show_recovery()
+                ui.show_recovery()
+                worker.assert_called_once()
+                read = worker.call_args.kwargs['target']
+            read()
+            ui._accept_retained_capture()
+            capture = ui._retained_capture
+            self.assertIsNotNone(capture)
+            self.assertEqual(plan, capture.plan)
+            self.assertEqual(1, capture.photo_count)
+            self.assertEqual('pending.png', capture.head_name)
+            self.assertEqual(before, journal.read_bytes())
+            self.assertFalse(SessionPlan.load(session).completed)
 
     def test_unavailable_capture_target_keeps_the_original_queue_pending(self) -> None:
         """Keep recoverable work when its original authority is unavailable.

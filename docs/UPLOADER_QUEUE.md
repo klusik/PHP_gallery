@@ -168,6 +168,21 @@ original journal after target/lease validation. Refresh does not clear retry or
 unknown markers, change target/scope, reopen capture after Finish, reset history,
 or upload the initial snapshot.
 
+After restart with no live worker, the same icon opens passive recovery for the
+saved target. The panel reports the next matching session's recorded unresolved
+count and first filename. **Continue** verifies the saved issuer, account and
+gallery before handing the session to the existing scoped drain. Missing access
+leaves recovery available while the user reconnects that account.
+
+An inactive matching session can also be closed locally after confirmation.
+The Watcher owner takes the existing pipeline and target leases, checks the
+flight workspace and persists the terminal journal marker before closing its
+completion plan. It keeps the recorded item states, receipts and local files.
+If the journal closes first and the plan write fails, the next **Continue**
+leaves that plan in recovery and local closure can be retried. An empty v2
+journal interrupted before its initial scan is eligible for closure only.
+Unverifiable ownership or an unreadable plan remains visible for diagnostics.
+
 Version-one recovery preserves the recorded cutoff; zero remains open rather
 than becoming the last checkpoint time. Multiple pending paths in the old set
 format have no provable FIFO order and block for review. A frozen old queue
@@ -188,6 +203,16 @@ Diagnostics retain current head ID/sequence, counts, producer/consumer state,
 last scan/progress, retry deadline and an independent last failure beyond the
 Activity tail. Refresh requests, coalescing and outcomes are recorded without
 credentials or nonce values.
+
+The recovery log distinguishes completion-plan and journal reads, missing
+upload approval, gallery verification, queue admission, local leases and the
+two local closure writes. For example, `initial_scan_incomplete` identifies a
+capture that lacked a verified startup boundary, and
+`plan_terminal_write_failed` identifies failure after the queue closure step.
+The retained support summary includes the latest outcome and the prior
+failure. Source locations contain only module/function/line, and linking HTTP
+facts come from the existing fixed response fields. Process markers provide
+the last recorded launch or intentional teardown stage for each process ID.
 
 ### Explicit uncertain-head review
 

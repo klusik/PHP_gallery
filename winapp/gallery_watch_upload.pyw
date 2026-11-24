@@ -58,6 +58,7 @@ import time
 import uuid
 import webbrowser
 from collections import deque
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import TracebackType
@@ -206,7 +207,7 @@ from uploader.mode_coordinator import (
     CoordinatedWork, GuiModeOwner, ModeConfigPort, ModeCoordinator, ModeCoordinatorError,
     ModeView,
 )
-from uploader.diagnostics import redact_text
+from uploader.diagnostics import format_watch_recovery_diagnostic, redact_text
 from uploader.support_report import build_support_report, save_support_report
 from uploader.linked_upload import (
     LINKED_UPLOAD_CHUNK_BYTES,
@@ -238,6 +239,7 @@ from uploader.discovery import (
     WatchDirectorySignal,
 )
 from uploader.watch_queue import (
+    WatchRecoveryError,
     WatchQueueStore, WatchQueueItem, observe_watch_source,
     WatchSource,
     WATCH_QUEUE_RECONCILE_SECONDS,
@@ -8754,6 +8756,8 @@ class WatcherApp:
         self._force_finished_operations: set[FinalizationWorker] = set()
         self._force_finish_callbacks: dict[int, list[Callable[[str], None]]] = {}
         self._force_finish_failure_type = ''
+        self._watch_recovery_latest = ''
+        self._watch_recovery_last_failure = ''
         self._after_update_nonce = after_update
         self._gui_mode_ready = False
         self._update_resume_attempted = False
@@ -14256,7 +14260,7 @@ class WatcherApp:
 
         Returns:
             None: Requests temporary Watcher authority without changing tabs;
-                existing progress and recovery actions retain their behavior.
+                retained captures open their recovery view with visible status.
         """
         if self.updates.blocked() or getattr(self, "_watch_start_pending", False) is True:
             return
@@ -14267,7 +14271,13 @@ class WatcherApp:
             self.flights.show_progress()
             return
         if state in ("pending", "blocked"):
-            self._set_watch_start_activity(False)
+            self.write_log(format_watch_recovery_diagnostic(
+                'photos_watcher', 'retained_capture_pending' if state == 'pending'
+                else 'local_capture_state_unverified',
+            ), 'info' if state == 'pending' else 'warning')
+            self._set_watch_start_activity(
+                False, self.flights.text('capture_recovery_paused'),
+            )
             self.flights.show_recovery()
             return
         if state != "idle":
@@ -14566,41 +14576,72 @@ class WatcherApp:
                 when no queue exists or its durable session was force-finished.
 
         Raises:
-            ValueError: A durable queue cannot be interpreted safely.
+            WatchRecoveryError: A durable queue or its binding cannot be
+                interpreted safely.
         """
         path = directory / "watch-drain.json"
-        if not path.exists():
+        try:
+            row = WatchQueueStore.read_journal(path)
+        except FileNotFoundError:
             return None
-        row = read_document(path)
+        except (OSError, ValueError) as exc:
+            raise WatchRecoveryError(
+                'journal_read_failed', 'The saved photo journal could not be read.',
+            ) from exc
         pending, frozen = row.get("pending"), row.get("frozen")
         if not isinstance(pending, list) or not isinstance(frozen, bool):
-            raise ValueError("Pending photograph queue is malformed.")
+            raise WatchRecoveryError(
+                'journal_malformed', 'Pending photograph queue is malformed.',
+            )
         if row.get('force_finished') is True:
+            if continue_retained:
+                # The journal may have closed just before a crash prevented
+                # the parent plan write. Keep that plan in explicit recovery.
+                raise WatchRecoveryError(
+                    'local_close_incomplete', 'Finish closing the retained capture locally.',
+                )
             return None
         if not pending and frozen and (row.get('schema_version') == 1
                                       or row.get('completed') is True):
             return None
+        if row.get('initial_captured', True) is not True:
+            raise WatchRecoveryError(
+                'initial_scan_incomplete', 'The original startup scan was interrupted.',
+            )
         # A persisted Stop can precede the final scan while a new screenshot
         # is still being copied. Reconcile that cutoff even with no queued path.
         config = capture_worker_config(self.config)
         config_port = self.config_store.mode_port(config)
         folder, recursive = row.get("folder"), row.get("recursive")
         if not isinstance(folder, str) or not isinstance(recursive, bool):
-            raise ValueError("The original Watcher folder could not be verified.")
+            raise WatchRecoveryError(
+                'folder_boundary_invalid', 'The original Watcher folder could not be verified.',
+            )
         drain_folder = Path(folder)
         if not drain_folder.is_absolute():
-            raise ValueError("The original Watcher folder could not be verified.")
+            raise WatchRecoveryError(
+                'folder_boundary_invalid', 'The original Watcher folder could not be verified.',
+            )
         linked_target = self.capture_linked_target()
         contextual_target = getattr(self, "_contextual_watch_target", None)
         if isinstance(contextual_target, LinkedUploadTarget):
             if (linked_target is None or contextual_target.session is not linked_target.session
                     or contextual_target.binding() != linked_target.binding()):
-                raise ValueError('The accepted Watcher gallery changed before recovery.')
+                raise WatchRecoveryError(
+                    'contextual_target_changed', 'The accepted Watcher gallery changed before recovery.',
+                )
             linked_target = contextual_target
+        if (linked_target is not None and row.get('schema_version') == 2
+                and row.get('scope', '') != linked_target.session.approved_scope()):
+            raise WatchRecoveryError(
+                'approval_scope_changed', 'Reconnect with the original Watcher upload permissions.',
+            )
         # Resume only a queue admitted under the current exact connection.
         if not any(plan.directory.resolve() == directory.resolve()
                    for plan in self.flights.pending()):
-            raise ValueError('Pending photographs belong to another gallery connection.')
+            raise WatchRecoveryError(
+                'binding_changed', 'Pending photographs belong to another gallery connection.',
+            )
         worker = WatcherThread(
             config, self.events, linked_target,
             gui_admission=(self.mode_owner, config_port),
@@ -14926,7 +14967,7 @@ class WatcherApp:
         else:
             action_label = self.flights.text({
                 "progress": "show_upload_progress",
-                "recover": "watch_recovery_resume_pending",
+                "recover": "review_pending_uploads",
                 "reconnect": "reconnect_upload_gallery",
             }.get(action, "show_upload_progress"))
         button = getattr(self, "revoke_button", None)
@@ -15108,37 +15149,67 @@ class WatcherApp:
                 that same approved upload target was restored.
         Returns:
             None: Confirms the unchanged saved API-key binding or checks the
-                existing linked session. Unavailable authority leaves work paused.
+                existing linked session and logs the exact verification phase.
         """
         selected = self.linking_manager.selected_upload_target()
         if selected is not None:
-            on_result(selected.binding() == binding)
+            matches = selected.binding() == binding
+            self.write_log(format_watch_recovery_diagnostic(
+                'target', 'active_target_matches' if matches else 'active_target_changed',
+            ), 'info' if matches else 'warning')
+            on_result(matches)
             return
         try:
             view = self.mode_owner.view()
             if view.state in LEGACY_UPLOAD_STATES:
                 url = normalize_upload_url(self.config.gallery_url)
                 key = self.config.api_key.strip()
-                on_result(bool(url and key and connection_binding(url, key) == binding))
+                matches = bool(url and key and connection_binding(url, key) == binding)
+                self.write_log(format_watch_recovery_diagnostic(
+                    'target', 'legacy_binding_matches' if matches else 'legacy_binding_unavailable',
+                ), 'info' if matches else 'warning')
+                on_result(matches)
                 return
             record = view.record
             if (view.state != 'linked_active' or record is None
-                    or record.mode != 'linked'
-                    or linked_target_binding(record.issuer, record.account_id,
-                                             record.gallery_id) != binding):
+                    or record.mode != 'linked'):
+                self.write_log(format_watch_recovery_diagnostic(
+                    'target', 'saved_upload_mode_unverified',
+                ), 'warning')
+                on_result(False)
+                return
+            if linked_target_binding(record.issuer, record.account_id, record.gallery_id) != binding:
+                self.write_log(format_watch_recovery_diagnostic(
+                    'target', 'saved_gallery_binding_changed',
+                ), 'warning')
                 on_result(False)
                 return
             session = self.linking_manager.resume_upload_session(
                 record.issuer, record.account_id,
             )
             if session is None:
+                browsing = self.linking_manager.photos_session()
+                identity = (self.linking_manager.photos_site_identity(browsing)
+                            if browsing is not None else None)
+                reason = 'original_upload_link_unavailable'
+                if identity == (record.issuer, record.account_id):
+                    reason = 'original_account_lacks_upload_scope'
+                elif identity is not None and identity[0] == record.issuer:
+                    reason = 'different_account_on_original_site'
+                self.write_log(format_watch_recovery_diagnostic('target', reason), 'warning')
                 self.linking_manager.resume_saved_link(record.issuer)
                 on_result(False)
                 return
             scope = session.approved_scope()
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.write_log(format_watch_recovery_diagnostic(
+                'target', 'saved_link_check_failed', error=exc,
+            ), 'warning')
             on_result(False)
             return
+        self.write_log(format_watch_recovery_diagnostic(
+            'target', 'verifying_original_gallery',
+        ), 'info')
 
         def verify() -> None:
             """Check exact gallery access off Tk, preserving the original mode.
@@ -15146,6 +15217,8 @@ class WatcherApp:
             Returns:
                 None: Delivers a target or a fixed failure to the Tk event owner.
             """
+            reason = 'gallery_verification_failed'
+            diagnostic = ''
             try:
                 target = verify_linked_upload_target(
                     session, record.issuer, record.account_id, scope, record.gallery_id,
@@ -15153,22 +15226,27 @@ class WatcherApp:
                 # The normal admission owner takes its own OS-backed work lock.
                 # Do not nest that non-reentrant file lock. Mode publication
                 # separately compares the exact captured view under its mutex.
+                reason = 'local_target_admission_refused'
                 if not self.commit_linked_upload_target(target, expected=view):
                     raise ValueError('Saved upload target changed during recovery.')
                 committed_record = self.mode_owner.view().record
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
                 target = None
                 committed_record = None
+                diagnostic = format_watch_recovery_diagnostic('target', reason, error=exc)
             self.events.put({'kind': 'capture_target_restored', 'payload': {
                 'target': target, 'record': committed_record, 'binding': binding,
-                'scope': scope, 'on_result': on_result,
+                'scope': scope, 'on_result': on_result, 'diagnostic': diagnostic,
             }})
 
         try:
             threading.Thread(
                 target=verify, name='PHPGalleryCaptureTargetRestore', daemon=True,
             ).start()
-        except RuntimeError:
+        except RuntimeError as exc:
+            self.write_log(format_watch_recovery_diagnostic(
+                'target', 'verifier_start_failed', error=exc,
+            ), 'warning')
             on_result(False)
 
     def manage_gallery_link(self) -> None:
@@ -15362,8 +15440,8 @@ class WatcherApp:
         """Run the same lifecycle action shown by Watcher and Import.
 
         Returns:
-            None: Finishes capture, opens progress or recovery, or offers the
-                appropriate connection setup before any work is accepted.
+            None: Finishes capture, opens progress or retained-work review,
+                or offers connection setup before work is accepted.
         """
         if getattr(self, '_ordinary_restart_closing', False) is True:
             return
@@ -15783,6 +15861,7 @@ class WatcherApp:
                 preserves only its exact profile-bound restart consent.
                 Update shutdown requires the pre-handoff checkpoint; its existing
                 immediate exit happens only after accepted writers have settled.
+                Records the process ID and reason before intentional teardown.
         """
         self._save_ui_layout_now()
         if for_update:
@@ -15806,6 +15885,10 @@ class WatcherApp:
             finally:
                 # Exit all threads together, including optional observers and
                 # non-daemon work. Do not enter Python's thread/atexit joins.
+                logging.info(
+                    '[watcher-process] phase=teardown; reason=update_checkpointed; pid=%d',
+                    os.getpid(),
+                )
                 os._exit(0)
         if getattr(self, "updates", None) is not None and self.updates.request_close():
             return
@@ -15862,6 +15945,10 @@ class WatcherApp:
             self.watcher_activity_var.set('Watch: finishing')
             self.status_var.set('Saving the Watcher session before closing…')
             self.refresh_watcher_header()
+            logging.info(
+                '[watcher-process] phase=checkpoint; reason=ordinary_quit; pid=%d',
+                os.getpid(),
+            )
             self._ordinary_restart_thread = threading.Thread(
                 target=self._prepare_ordinary_restart_close,
                 name='PHPGalleryOrdinaryRestartCheckpoint', daemon=True,
@@ -15885,6 +15972,10 @@ class WatcherApp:
         self.exiting = True
         self._cancel_event_ui_callbacks()
         self._set_watcher_recording(False)
+        logging.info(
+            '[watcher-process] phase=shutdown_requested; pid=%d; checkpoint_saved=%s',
+            os.getpid(), ordinary_prepared,
+        )
         self.write_log("Application shutdown requested. Stopping background work safely.", "system")
 
         if self.preflight_worker and self.preflight_worker.is_alive():
@@ -15949,6 +16040,10 @@ class WatcherApp:
                 self._sync_watcher_recording()
                 self._schedule_activity_drawer_refresh()
                 self._schedule_event_drain(WATCHER_EVENT_IDLE_POLL_MS)
+                logging.info(
+                    '[watcher-process] phase=shutdown_deferred; reason=kept_in_tray; pid=%d',
+                    os.getpid(),
+                )
                 return
         writer = getattr(self, "activity_writer", None)
         if writer is not None and not writer.close(max(0.0, deadline - time.monotonic())):
@@ -15962,6 +16057,12 @@ class WatcherApp:
         if history_reader is not None:
             history_reader.close()
         self._cancel_event_ui_callbacks()
+        reason = ('retained_transport' if force_shutdown else
+                  'shutdown_wait_expired' if still_running else 'orderly_shutdown')
+        logging.info(
+            '[watcher-process] phase=teardown; reason=%s; pid=%d; workers_pending=%d',
+            reason, os.getpid(), len(still_running),
+        )
         self.root.destroy()
 
     def _prepare_ordinary_restart_close(self) -> None:
@@ -16250,12 +16351,24 @@ class WatcherApp:
         """Rescan the original queue and safely wake or replace its stopped owner.
 
         Returns:
-            None: Coalesces same-session scans; never starts Finish, clears retry,
-                unknown results or binding, or reopens a force-finished session.
+            None: Coalesces same-session scans, or shows passive saved recovery
+                when a restarted Watcher has no in-memory queue owner.
         """
         original = self.worker
         if original is None or original.drain_manifest is None:
-            self.write_log('No retained Watcher queue is available to refresh.', 'warning')
+            state = self.flights.session_state()
+            if state in ('pending', 'blocked'):
+                self.write_log(format_watch_recovery_diagnostic(
+                    'refresh', 'inspecting_saved_capture',
+                ), 'info')
+                self.flights.show_recovery()
+            else:
+                self.write_log(
+                    format_watch_recovery_diagnostic(
+                        'refresh', 'operation_in_progress' if state == 'working'
+                        else 'no_saved_queue_for_current_binding',
+                    ), 'info',
+                )
             return
         if original._queue is not None and original._queue.force_finished:
             self.write_log(
@@ -16304,6 +16417,8 @@ class WatcherApp:
                     watch_folder_override=folder, watch_recursive_override=recursive,
                 )
                 replacement.configure_drain(directory, (), resume=True)
+                if replacement._queue.force_finished:
+                    raise ValueError('A closed Watcher queue cannot be refreshed.')
                 self.events.put({'kind': 'watch_queue_recovered', 'payload': {
                     'original': original, 'worker': replacement,
                 }})
@@ -16315,6 +16430,122 @@ class WatcherApp:
                 }})
 
         threading.Thread(target=prepare, name='PHPGalleryQueueRecovery', daemon=True).start()
+
+    def close_retained_watch(
+        self, plan: SessionPlan, on_result: Callable[[bool], None],
+    ) -> None:
+        """Close an inactive Watcher capture using its original local ownership.
+
+        Args:
+            plan (SessionPlan): Exact unfinished session confirmed in recovery.
+            on_result (Callable[[bool], None]): Tk callback receiving whether
+                durable journal and plan closure were confirmed.
+        Returns:
+            None: Keeps files and receipts while closing the matching local
+                session and logs the phase of any refused or failed closure.
+        """
+        if (self.exiting or self.updates.blocked() or self._queue_recovery_pending
+                or self.background_work_active() or self.flights.is_alive()
+                or (self.worker is not None and self.worker.is_alive())
+                or any(worker.is_alive() for worker in self.flights.resume_workers)):
+            self.write_log(format_watch_recovery_diagnostic(
+                'local_close', 'work_or_shutdown_in_progress',
+            ), 'warning')
+            on_result(False)
+            return
+        lease = self.flights.lease
+        workspace = self.flights.directory
+        try:
+            if (lease is None or plan.completed or plan.directory.parent != workspace
+                    or self.flights.binding() != plan.binding):
+                self.write_log(format_watch_recovery_diagnostic(
+                    'local_close', 'retained_plan_not_current',
+                ), 'warning')
+                on_result(False)
+                return
+        except ValueError as exc:
+            self.write_log(format_watch_recovery_diagnostic(
+                'local_close', 'saved_binding_unverified', error=exc,
+            ), 'warning')
+            on_result(False)
+            return
+        linked = self.linking_manager.linked_upload_mode_selected()
+        cutoff = time.time()
+        self._finish_resume_generation += 1
+        self._cancel_ordinary_restart_for_action()
+
+        def close() -> None:
+            """Publish the original capture closure under existing writer fences.
+
+            Returns:
+                None: Queues the verified close result for the Tk event owner.
+            """
+            error_type = ''
+            step = 'pipeline_lease'
+            diagnostic = ''
+            try:
+                with ExitStack() as ownership:
+                    pipeline = UploadPipelineLease(CONFIG_DIR)
+                    pipeline.acquire()
+                    ownership.callback(pipeline.release)
+                    if linked:
+                        step = 'target_lease'
+                        target = LinkedTargetLease(CONFIG_DIR, plan.binding)
+                        target.acquire()
+                        ownership.callback(target.release)
+                    step = 'workspace_and_plan'
+                    lease.verify()
+                    if (plan.directory.resolve(strict=True)
+                            != workspace.resolve(strict=True) / plan.session_id
+                            or SessionPlan.load(plan.directory) != plan):
+                        raise ValueError('Retained flight plan changed during review.')
+                    step = 'journal_read'
+                    path = plan.directory / 'watch-drain.json'
+                    try:
+                        row = WatchQueueStore.read_journal(path)
+                    except FileNotFoundError:
+                        # A completion-only plan can exist before queue creation.
+                        pass
+                    else:
+                        step = 'journal_validate'
+                        folder = row.get('folder')
+                        recursive = row.get('recursive')
+                        scope = row.get('scope', '')
+                        if (not isinstance(folder, str) or not Path(folder).is_absolute()
+                                or type(recursive) is not bool or not isinstance(scope, str)
+                                or (row.get('schema_version') == 2 and bool(scope) != linked)):
+                            raise ValueError('Retained capture boundary is unavailable.')
+                        journal = WatchQueueStore(
+                            path, plan.binding, Path(folder), recursive, scope=scope,
+                        )
+                        journal.restore(for_close=True)
+                        step = 'journal_terminal_write'
+                        journal.force_finish(cutoff)
+                    step = 'plan_terminal_write'
+                    plan.persist_abandoned(lease)
+                    step = 'lease_release'
+            except Exception as exc:  # noqa: BLE001
+                error_type = type(exc).__name__
+                diagnostic = format_watch_recovery_diagnostic(
+                    'local_close', f'{step}_failed', error=exc,
+                )
+            self.events.put({
+                'kind': 'retained_watch_closed',
+                'payload': {
+                    'plan': plan, 'error_type': error_type, 'on_result': on_result,
+                    'diagnostic': diagnostic,
+                },
+            })
+
+        try:
+            threading.Thread(
+                target=close, name='PHPGalleryCloseRetainedWatch', daemon=True,
+            ).start()
+        except RuntimeError as exc:
+            self.write_log(format_watch_recovery_diagnostic(
+                'local_close', 'publisher_start_failed', error=exc,
+            ), 'warning')
+            on_result(False)
 
     def dry_run_watch_folder(self) -> None:
         """Inspect a selected watch folder on a background thread.
@@ -16857,25 +17088,11 @@ class WatcherApp:
                         raise ValueError('Force Finish flight identity changed.')
                     if flight_lease is None:
                         raise ValueError('Force Finish flight workspace is not owned.')
-                    flight_lease.verify()
-                    abandoned = replace(plan, abandoned=True, completed=True)
-                    abandoned.save()
-                    flight_lease.verify()
-                    saved = SessionPlan.load(abandoned.directory)
-                    if not saved.abandoned or not saved.completed:
-                        raise OSError('Abandoned flight marker did not read back.')
+                    plan.persist_abandoned(flight_lease)
                 for plan in plan_rows:
                     if flight_lease is None:
                         raise ValueError('Force Finish flight workspace is not owned.')
-                    flight_lease.verify()
-                    abandoned = replace(
-                        plan, abandoned=True, completed=True,
-                    )
-                    abandoned.save()
-                    flight_lease.verify()
-                    saved = SessionPlan.load(abandoned.directory)
-                    if not saved.abandoned or not saved.completed:
-                        raise OSError('Abandoned flight marker did not read back.')
+                    plan.persist_abandoned(flight_lease)
             except Exception as exc:  # noqa: BLE001
                 error = 'Force Finish could not be durably recorded.'
                 error_type = type(exc).__name__
@@ -17674,8 +17891,8 @@ class WatcherApp:
 
         Returns:
             str: Redacted snapshot with live session, scan, dispatch, operation
-                generation and trigger fields, without filesystem reads or
-                network requests.
+                generation, trigger fields and retained recovery outcomes.
+                Collection performs no filesystem reads or network requests.
         """
         view = WatcherApp._selected_import_view(self)
         if view is not None and view.latest is not None:
@@ -17747,6 +17964,10 @@ class WatcherApp:
                 "Updater diagnostics:\n" + updater_diagnostics,
                 "Photos diagnostics:\n" + photos_diagnostics,
                 f"Update continuation: {self._update_resume_status}",
+                "Watcher recovery: latest="
+                + (getattr(self, '_watch_recovery_latest', '') or 'none')
+                + " | last_failure="
+                + (getattr(self, '_watch_recovery_last_failure', '') or 'none'),
                 f"Watcher: {self.watcher_activity_var.get()}",
                 'Upload queue: ' + json.dumps(
                     self._watch_diagnostic_snapshot(), ensure_ascii=False,
@@ -18839,6 +19060,9 @@ class WatcherApp:
                         )
                 elif kind == "saved_linked_mode_ready":
                     self.linked_target_changed()
+                    self.write_log(format_watch_recovery_diagnostic(
+                        'startup', 'saved_linked_mode_waiting_for_live_target',
+                    ), 'info')
                 elif kind == 'capture_target_restored':
                     target = payload.get('target')
                     restored = False
@@ -18854,9 +19078,50 @@ class WatcherApp:
                             )
                     except (OSError, ValueError, RuntimeError):
                         restored = False
+                    diagnostic = payload.get('diagnostic')
+                    if not diagnostic:
+                        diagnostic = format_watch_recovery_diagnostic(
+                            'target',
+                            'original_gallery_restored' if restored else 'verified_result_no_longer_current',
+                        )
+                    self.write_log(diagnostic, 'info' if restored else 'warning')
                     callback = payload.get('on_result')
                     if callable(callback):
                         callback(restored)
+                elif kind == 'retained_watch_closed':
+                    plan = payload.get('plan')
+                    error_type = payload.get('error_type')
+                    persisted = isinstance(plan, SessionPlan) and error_type == ''
+                    if persisted:
+                        worker = self.worker
+                        if (worker is not None and not worker.is_alive()
+                                and worker.drain_manifest is not None
+                                and worker.drain_manifest.parent == plan.directory):
+                            self.worker = None
+                        current_plan = self.flights.plan
+                        if (current_plan is not None
+                                and current_plan.directory == plan.directory):
+                            self.flights.plan = None
+                            self.flights.recorder = None
+                        self.write_log(format_watch_recovery_diagnostic(
+                            'local_close', 'retained_capture_closed',
+                        ), 'info')
+                    else:
+                        diagnostic = payload.get('diagnostic')
+                        self.write_log(diagnostic or format_watch_recovery_diagnostic(
+                            'local_close', 'publication_unconfirmed',
+                        ), 'warning')
+                    callback = payload.get('on_result')
+                    if callable(callback):
+                        callback(persisted)
+                    if persisted:
+                        state = self.flights.session_state()
+                        self.watcher_activity_var.set(
+                            'Watch: uploads pending' if state in ('pending', 'blocked')
+                            else 'Watch: stopped',
+                        )
+                    self.refresh_connection_controls()
+                    self.refresh_watcher_action()
                 elif kind == "linking_resume_startup":
                     payload = event.get("payload", {})
                     issuer = payload.get("issuer") if isinstance(payload, dict) else None
@@ -18918,7 +19183,10 @@ class WatcherApp:
             level, message = str(event[0]), str(event[1])
             log_level = self.classify_log_level(level, message)
             operation = "system"
-            if message.startswith("[simconnect]"):
+            watch_recovery = message.startswith('[watcher-recovery] ')
+            if watch_recovery:
+                operation = 'watcher'
+            elif message.startswith("[simconnect]"):
                 operation = "simconnect"
             elif message.startswith(("Manual ", "Uploading ", "Uploaded ", "Skipped already present", "Generated ", "Local thumbnails")):
                 operation = "import" if (self.manual_worker and self.manual_worker.is_alive()) or message.startswith("Manual ") else "watcher"
@@ -18928,7 +19196,10 @@ class WatcherApp:
                 operation = "ai"
             # Classify the original queue text before removing its routing marker.
             display_message = message[len("[simconnect]"):].lstrip() if operation == "simconnect" else message
-            self.write_log(f"{level.upper()}: {display_message}", log_level)
+            self.write_log(
+                display_message if watch_recovery else f"{level.upper()}: {display_message}",
+                log_level,
+            )
             self.record_activity(log_level if log_level in {"success", "warning", "error"} else level, message, operation, job_id=self.current_job.id if operation == "import" and self.current_job else "")
 
             if message.startswith("Manual upload started"):
@@ -19098,10 +19369,15 @@ class WatcherApp:
             tag (str): Log color tag name.
 
         Returns:
-            None: Retains a bounded inline copy and publishes it when visible.
+            None: Retains the latest Watcher recovery outcome and failure
+                alongside the bounded visible log.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         safe_message = redact_text(message, [secret], redact_paths=False)
+        if safe_message.startswith('[watcher-recovery] '):
+            self._watch_recovery_latest = safe_message
+            if tag in ('warning', 'error'):
+                self._watch_recovery_last_failure = safe_message
         logging.info("UI: %s", redact_text(safe_message, [secret], redact_paths=False))
         if not hasattr(self, "log_text"):
             return
@@ -19248,7 +19524,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         int: Zero after a normal exit, activation or startup reconciliation;
             one if coordination or configuration fails, or --once overlaps a
-            running app.
+            running app. GUI launches record process lifecycle markers.
     """
     args = parse_args(list(argv) if argv is not None else sys.argv[1:])
     instance = WindowsInstance(CONFIG_DIR)
@@ -19271,6 +19547,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.startup and not config.start_with_windows:
             synchronize_startup(False)
             return 0
+        launch = ('update' if args.after_update is not None else
+                  'windows_sign_in' if args.startup else 'manual')
+        logging.info(
+            '[watcher-process] phase=start; reason=%s; pid=%d; version=%s',
+            launch, os.getpid(), APP_VERSION,
+        )
         if args.after_update is None:
             app = WatcherApp(config_store=store, start_minimized=args.startup)
         else:
@@ -19281,15 +19563,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         app.instance = instance
         app.root.after(ACTIVATION_POLL_MS, app.poll_instance_activation)
         app.run()
+        logging.info('[watcher-process] phase=mainloop_returned; pid=%d', os.getpid())
         return 0
     except OSError as exc:
         # Windowed builds may have no stderr. Native coordination failure must
         # never admit a second writer, and needs a visible manual-launch error.
+        logging.error('%s; pid=%d', format_watch_recovery_diagnostic(
+            'process', 'io_error', error=exc,
+        ), os.getpid())
         if not args.configure_startup and not args.once and messagebox is not None:
             messagebox.showerror("Application startup", str(exc))
         elif sys.stderr is not None:
             print("Application startup failed: " + str(exc), file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001
+        logging.error('%s; pid=%d', format_watch_recovery_diagnostic(
+            'process', 'unhandled_exception', error=exc,
+        ), os.getpid())
+        raise
     finally:
         instance.close()
 

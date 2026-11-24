@@ -30,6 +30,29 @@ history, startup exclusions, scope or Finish cutoff. Status and diagnostics show
 the head, count, reason, next retry and progress, retaining the last failure
 separately from the short Activity tail.
 
+After an interrupted capture and restart, **Refresh queue** opens recovery for
+the saved capture even without a live Watcher. The panel shows the number of
+retained sessions, the next session's unresolved count and its first pending
+file. **Review pending uploads…** and the Photos action **Use for Watcher** also
+open this panel while recovery is pending. **Continue** first tries the
+original verified account and gallery.
+If WinApp needs a new grant, reconnect that account with upload permission and
+continue the retained work there.
+
+**Close retained capture…** is available for an inactive, verifiable session
+even when its gallery is unreachable. Confirming the action closes that session
+locally and preserves its screenshots, local reports, upload outcomes and queue
+history. The next capture starts from a fresh boundary. Unverifiable local
+evidence stays pending and the panel directs you to **Help → Support diagnostics…**.
+
+`[watcher-recovery]` records the outcome of saved-plan inspection, exact
+target verification, queue admission and local closure. Entries include fixed
+phase and reason codes, safe error locations, retained counts and available
+HTTP status. Support diagnostics keeps the latest result and the last failure
+separately. `[watcher-process]` uses the process ID to pair a GUI launch with
+its intentional teardown. A process stopped outside WinApp may leave only its
+last recorded step.
+
 Finish persists its first cutoff and continues eligible local reconciliation.
 It completes only after all accepted items and a fresh final scan are durable.
 After restart, verified same-target screenshot Finish intent continues
@@ -2027,11 +2050,12 @@ Installed Windows click-through remains separate.
 
 With upload permission, select an existing gallery and choose **Use for
 uploads**. WinApp verifies the account and gallery on the server before
-storing the choice separately from the saved API key. After restart, reconnect
-to the same account and explicitly select that gallery before resuming pending
-work. Use the gear beside **Upload gallery**, then **Use saved API key**, to
-select the saved key explicitly. Newly recorded linked flight reports are
-automatically attached to that same gallery after its photographs drain.
+storing the choice separately from the saved API key. For retained Watcher work,
+**Continue** verifies and restores that exact gallery when the original account
+has live upload approval. Use the gear beside **Upload gallery**, then **Use
+saved API key**, to select the saved key explicitly. Newly recorded linked
+flight reports are automatically attached to that gallery after its photographs
+drain.
 Each edition requires an exact checksum receipt before completion; errors
 retain local PDFs and pending delivery for Retry. The server must support
 delegated report delivery. Older servers fail visibly rather than silently

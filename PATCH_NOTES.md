@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 1.5.6
+
+PHP Gallery 1.5.6 includes WinApp 1.5.6 with recovery for interrupted Watcher
+captures and more detailed diagnostics for stalled uploads.
+
+### Highlights
+
+#### Watcher recovery
+
+- Opened saved capture recovery from **Refresh queue**, **Review pending
+  uploads…**, and the Photos action **Use for Watcher**. The panel showed
+  the number of retained sessions, the next session's unresolved count, and
+  its first pending filename.
+- Restored the original verified account and upload gallery on **Continue**.
+  When renewed upload permission was required, the session stayed available
+  while the user reconnected the original account.
+- Added **Close retained capture…** for inactive, locally verifiable sessions
+  even when the destination gallery could not be reached. Confirmed closure
+  preserved screenshots, local reports, upload outcomes, and queue history.
+
+### Technical Details
+
+#### Recovery and diagnostics
+
+- Verified the saved target before queue admission. Local closure used the
+  existing pipeline and target leases, checked the flight workspace, and
+  wrote the terminal queue state before closing the completion plan. If
+  that final write failed, the plan stayed available for a closure retry.
+- Added `[watcher-recovery]` entries to `watcher.log` for saved-state reads,
+  upload approval, gallery verification, queue admission, and local
+  closure. Entries recorded fixed phase and reason codes, available HTTP
+  status, and relevant counts. Support diagnostics retained the latest
+  outcome and last failure separately, with error locations limited to
+  module, function, and line.
+- Added `[watcher-process]` markers for startup and intentional teardown
+  with the process ID, and updated the four editions of the user manual.
+
+#### Tests
+
+- Covered saved-gallery recovery, local closure and retry, the Photos and
+  queue refresh entry points, desktop and narrow layouts, and diagnostic
+  redaction.
+
+### User Impact
+
+#### For administrators using WinApp
+
+- Operators could inspect pending uploads and continue or close an
+  interrupted capture from WinApp. Support could locate the failing
+  recovery step even after later activity had scrolled past it.
+
 ## Version 1.5.5
 
 PHP Gallery 1.5.5 includes WinApp 1.5.5 with smoother Watcher, Import and
