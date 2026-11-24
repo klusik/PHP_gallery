@@ -1,5 +1,54 @@
 # Patch notes
 
+## Version 1.5.7
+
+PHP Gallery 1.5.7 includes WinApp 1.5.7 with a factory reset for Watcher.
+Operators can clear a stalled capture and set up a fresh one from the
+Watcher tab.
+
+### Highlights
+
+#### Watcher factory reset
+
+- Added **Watcher factory reset…** with a confirmation that explains which
+  settings and pending work will be removed. An upload already sent may
+  still reach the server.
+- Restored Watcher defaults and cleared the watched folder, Watcher upload
+  destination, capture queues, and restart intent. **Connect Watcher…**
+  or **Use for Watcher** lets the operator select the next gallery explicitly.
+- Preserved screenshots, flight recordings, reports, upload outcome history,
+  logs, and Activity records. Photos, manual Import, and AI keep their
+  shared connections and settings.
+
+### Technical Details
+
+#### Reset persistence and diagnostics
+
+- Saved the confirmed reset before stopping capture. Held admission closed
+  until Watcher writers settled, suppressed late source deletion, and
+  removed the local Watcher and one-scan journals. An interrupted reset
+  can continue after restart.
+- Stored Watcher-only preferences in a dedicated local profile after reset.
+  Retained the existing settings reader for profiles that have never been
+  reset.
+- Recorded confirmation, wait reasons, failures, and the verified final
+  settings and journal counts in `watcher.log`. Support diagnostics showed
+  the latest reset outcome.
+
+#### Tests and manuals
+
+- Covered cancellation, an active transport, retained queues across
+  destinations, preservation of unrelated data, and retry after partial
+  persistence. Updated all four editions of the user manual.
+
+### User Impact
+
+#### For administrators using WinApp
+
+- Operators gained a way to clear Watcher work when a capture could not
+  resume. Support can see which reset step is waiting or failed, or verify
+  that Watcher finished with an empty destination and folder.
+
 ## Version 1.5.6
 
 PHP Gallery 1.5.6 includes WinApp 1.5.6 with recovery for interrupted Watcher
