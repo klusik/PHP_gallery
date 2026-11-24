@@ -51,11 +51,23 @@ else:
 
 
 # Purpose: Exercise the slow-load detail boundary without sleeping.
-# Type: int. Units: elapsed seconds. Scope: one GalleryLoadProgress widget test.
-# Consumers: test_long_load_detail_appears_after_ten_seconds.
+# Type: int. Units: elapsed seconds. Scope: GalleryLoadProgress widget tests.
+# Consumers: GalleryLoadProgressTests timer boundary regressions.
 # Rationale: Ten seconds is the production detail threshold and is advanced by
 # a mocked monotonic clock so the test remains deterministic.
 TEST_LONG_LOAD_DETAIL_SECONDS = 10
+
+# Purpose: Set the fake monotonic clock at an exactly representable reading.
+# Type: float. Units: seconds. Scope: native progress timer assertions.
+# Consumers: GalleryLoadProgressTests timer boundary regressions.
+# Rationale: 100.0 makes whole-second differences exact on every host.
+TEST_PROGRESS_CLOCK_START_SECONDS = 100.0
+
+# Purpose: Give the last real progress a different time from the start.
+# Type: float. Units: elapsed seconds. Scope: repeated-progress regression.
+# Consumers: test_repeated_progress_reuses_widgets_timers_and_real_progress_time.
+# Rationale: Two exact seconds make the elapsed and last-progress labels distinct.
+TEST_FIRST_PROGRESS_OFFSET_SECONDS = 2.0
 
 # Purpose: Bound visual screenshot dimensions to the established native fixture.
 # Type: tuple[int, int]. Units: Tk pixels. Scope: real progress widget root.
@@ -283,14 +295,19 @@ class GalleryLoadProgressTests(unittest.TestCase):
         self.root.update_idletasks()
         self.assertEqual('', self.progress.details.cget('text'))
         self.progress._cancel_tick()
-        with mock.patch.object(
-            progress_module.time, 'monotonic',
-            return_value=self.progress._started_at + TEST_LONG_LOAD_DETAIL_SECONDS,
+        with (
+            mock.patch.object(
+                self.progress, '_started_at', TEST_PROGRESS_CLOCK_START_SECONDS,
+            ),
+            mock.patch.object(
+                progress_module.time, 'monotonic',
+                return_value=TEST_PROGRESS_CLOCK_START_SECONDS + TEST_LONG_LOAD_DETAIL_SECONDS,
+            ),
         ):
             self.progress._tick()
         self.root.update_idletasks()
         self.assertEqual(
-            tr('en', 'linking_media_elapsed').format(seconds=10),
+            tr('en', 'linking_media_elapsed').format(seconds=TEST_LONG_LOAD_DETAIL_SECONDS),
             self.progress.details.cget('text'),
         )
 
@@ -327,19 +344,26 @@ class GalleryLoadProgressTests(unittest.TestCase):
         children = tuple(self.progress.frame.winfo_children())
         timers = self.root.tk.call('after', 'info')
         largest_count = TEST_PROGRESS_CATALOGUE_SIZES[-1]
-        for count in range(1, largest_count + 1):
-            self.progress.metadata(count)
-        self.assertEqual(children, tuple(self.progress.frame.winfo_children()))
-        self.assertEqual(timers, self.root.tk.call('after', 'info'))
-
-        started_at = self.progress._started_at
-        last_progress = self.progress._last_progress_at
-        # A whole ten-second gap proves the age advances without inventing
-        # another confirmed item or depending on wall-clock execution speed.
-        observed_at = last_progress + TEST_LONG_LOAD_DETAIL_SECONDS
-        with mock.patch.object(
-            progress_module.time, 'monotonic', return_value=observed_at,
+        progress_at = TEST_PROGRESS_CLOCK_START_SECONDS + TEST_FIRST_PROGRESS_OFFSET_SECONDS
+        with (
+            mock.patch.object(
+                self.progress, '_started_at', TEST_PROGRESS_CLOCK_START_SECONDS,
+            ),
+            mock.patch.object(
+                progress_module.time, 'monotonic', return_value=progress_at,
+            ) as clock,
         ):
+            for count in range(1, largest_count + 1):
+                self.progress.metadata(count)
+            self.assertEqual(children, tuple(self.progress.frame.winfo_children()))
+            self.assertEqual(timers, self.root.tk.call('after', 'info'))
+
+            started_at = self.progress._started_at
+            last_progress = self.progress._last_progress_at
+            self.assertEqual(progress_at, last_progress)
+            # The exact ten-second gap leaves the confirmed count unchanged.
+            observed_at = last_progress + TEST_LONG_LOAD_DETAIL_SECONDS
+            clock.return_value = observed_at
             self.progress.metadata(largest_count)
             self.progress._cancel_tick()
             self.progress._tick()

@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/issue-361-winapp-functional.yml
 # Module Type: Issue-Scoped Cross-Platform Functional Regression Workflow
-# Purpose: Run authoritative WinApp functional regressions for issue 361.
+# Purpose: Run authoritative WinApp functional regressions for Tk performance work.
 # Responsibilities:
 #   - Bind each regression job to the exact workflow event SHA and immutable main base
 #   - Run the central audit suite on Windows, Linux and advisory macOS
@@ -16,20 +16,22 @@ on:
     branches:
       - feature/361-tk-canvas-performance
       - feature/399-virtualized-canvas-gallery
+      - feature/434-winapp-gui-responsiveness-phase-2
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Superseded feature checks must not hold the single macOS queue indefinitely.
+# Older issues keep branch-scoped cleanup. Phase 2 retains each measured
+# checkpoint's exact-SHA functional evidence when another commit is pushed.
 concurrency:
-  group: issue-361-functional-${{ github.ref }}
+  group: issue-361-functional-${{ github.ref_name == 'feature/434-winapp-gui-responsiveness-phase-2' && github.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
   windows:
     name: Required WinApp regression (Windows)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.ref_name != 'feature/399-virtualized-canvas-gallery' && github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2') || contains(github.event.head_commit.message, '[winapp-full]') }}
     permissions:
       contents: read
       actions: write
@@ -45,6 +47,7 @@ jobs:
       frozen_validation: ${{ steps.frozen-protocol.outputs.enabled }}
     steps:
       - name: Cancel superseded runs of this feature workflow
+        if: github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2'
         # Housekeeping is not source qualification; actual audits still run if
         # GitHub cannot cancel an obsolete queued run. Concurrency owns new runs.
         continue-on-error: true
@@ -136,7 +139,13 @@ jobs:
       - name: Read optional frozen build gate
         id: frozen-protocol
         shell: pwsh
+        env:
+          PHASE2_FINAL_CHECKPOINT: ${{ github.ref_name == 'feature/434-winapp-gui-responsiveness-phase-2' && startsWith(github.event.head_commit.message, '[tk-phase2-final]') }}
         run: |
+          if ($env:GITHUB_REF_NAME -eq 'feature/434-winapp-gui-responsiveness-phase-2') {
+            "enabled=$($env:PHASE2_FINAL_CHECKPOINT)" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
           $config = Get-Content -LiteralPath '.github/issue-361-validation.json' -Raw |
             ConvertFrom-Json
           $property = $config.PSObject.Properties['frozen_validation']
@@ -427,7 +436,7 @@ jobs:
 
   linux:
     name: Required WinApp regression (Linux)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.ref_name != 'feature/399-virtualized-canvas-gallery' && github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2') || contains(github.event.head_commit.message, '[winapp-full]') }}
     runs-on: ubuntu-24.04
     # Type: integer. Units: minutes. Scope: exact-SHA Linux WinApp regression.
     # Consumers: GitHub Actions job timeout.
@@ -575,7 +584,7 @@ jobs:
 
   macos:
     name: Advisory WinApp regression (macOS; real result shown)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.ref_name != 'feature/399-virtualized-canvas-gallery' && github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2') || contains(github.event.head_commit.message, '[winapp-full]') }}
     runs-on: macos-15
     continue-on-error: true
     # Type: integer. Units: minutes. Scope: exact-SHA advisory macOS WinApp regression.
@@ -724,7 +733,7 @@ jobs:
           retention-days: 14
 
   audit-contracts:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.ref_name != 'feature/399-virtualized-canvas-gallery' && github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2') || contains(github.event.head_commit.message, '[winapp-full]') }}
     name: Required audit coordinator contracts (Linux)
     runs-on: ubuntu-24.04
     # Purpose: Bound the existing curated coordinator/source regression owner.
@@ -788,13 +797,14 @@ jobs:
           retention-days: 14
 
   issue-summary:
-    name: Publish aggregate exact-SHA result to issue 361
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]')) }}
+    name: Publish aggregate exact-SHA result to the owning issue
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (github.ref_name != 'feature/399-virtualized-canvas-gallery' && github.ref_name != 'feature/434-winapp-gui-responsiveness-phase-2') || contains(github.event.head_commit.message, '[winapp-full]')) }}
     needs:
       - windows
       - linux
       - macos
       - audit-contracts
+      - frozen-installer
     runs-on: ubuntu-24.04
     # Type: integer. Units: minutes. Scope: one issue progress comment.
     # Consumers: GitHub Actions summary publisher.
@@ -817,14 +827,20 @@ jobs:
           MACOS_STATUS: ${{ needs.macos.outputs.audit_status }}
           MACOS_COUNTS: ${{ needs.macos.outputs.audit_counts }}
           AUDIT_CONTRACTS_RESULT: ${{ needs.audit-contracts.result }}
+          FROZEN_RESULT: ${{ needs.frozen-installer.result }}
         with:
           script: |
             // Purpose: Publish functional evidence to the authorized owning issue.
-            // Type: integer. Units: GitHub issue number. Scope: issue 361 progress.
+            // Type: map of branch to integer. Units: GitHub issue number.
+            // Scope: explicitly owned Tk performance feature branches.
             // Consumers: this aggregate functional-result comment.
-            // Rationale: publish only to the explicitly authorized feature issue.
-            const is399 = context.ref === 'refs/heads/feature/399-virtualized-canvas-gallery';
-            const FUNCTIONAL_ISSUE_NUMBER = is399 ? 399 : 361;
+            // Rationale: preserve issues 361 and 399 and route Phase 2 only to 434.
+            const FUNCTIONAL_ISSUES = new Map([
+              ['refs/heads/feature/361-tk-canvas-performance', 361],
+              ['refs/heads/feature/399-virtualized-canvas-gallery', 399],
+              ['refs/heads/feature/434-winapp-gui-responsiveness-phase-2', 434],
+            ]);
+            const FUNCTIONAL_ISSUE_NUMBER = FUNCTIONAL_ISSUES.get(context.ref) ?? 361;
             // Purpose: Find this run marker without duplicating a rerun comment.
             // Type: integer. Units: comments per page. Scope: matching this run's existing comment.
             // Consumers: GitHub API pagination while preventing duplicate rerun comments.
@@ -854,6 +870,7 @@ jobs:
             }
             lines.push(
               `- Audit coordinator/source contracts required: **${process.env.AUDIT_CONTRACTS_RESULT || "unknown"}** (central php-fast suite)`,
+              `- Isolated frozen executable and installer build: **${process.env.FROZEN_RESULT || "unknown"}**`,
             );
             lines.push(
               "",

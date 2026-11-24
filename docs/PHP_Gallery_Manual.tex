@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.5.4}
-\newcommand{\manualdate}{23 November 2026}
+\newcommand{\version}{1.5.5}
+\newcommand{\manualdate}{24 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -10179,6 +10179,27 @@ user's positive desktop scrolling experience, Canvas became the persisted
 default for new profiles and legacy profiles missing the setting. Explicit
 saved False retains native widgets. Tk proxy metrics do not measure physical
 display presentation or establish screen-reader parity.
+
+The~Phase~2 WinApp responsiveness protocol uses the~central
+\codeword{watcher-tk-performance} suite on~GitHub-hosted Windows. It~records
+an~immutable baseline and~paired runs for~Watcher, Import, Photos, and
+Lightbox with~isolated synthetic profiles. The~workflow retains raw samples,
+software feedback, and~resource measurements alongside failed cells.
+
+The~Watcher retains its monitor indicator and~updates captions and~controls
+when their displayed values change. Activity records keep their order.
+A~batch displays its latest footer entry, and~the Activity table
+synchronizes the~retained records when its panel becomes visible.
+The~inline diagnostic log shows recent lines. Open log file accesses
+the~rotating log.
+
+Import publishes saved progress in~batches and~updates only changed rows
+within the~display limit. Activity prepares job history and~selected import
+details in~the~background. Opening a~pane displays the~current progress.
+
+WinApp Lightbox prepares picture previews on~a~background worker and
+publishes the~settled view at~full resampling quality. The~toolbar and~status
+can update while the~photo stays visible.
 
 Metadata admission, Tk idle feedback, and~settled
 viewports remain separate measurements. Select the~allowlisted

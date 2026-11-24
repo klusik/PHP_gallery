@@ -1792,7 +1792,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.5.4. Release verification uses the
+This guide applies to PHP Gallery Version 1.5.5. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -9829,6 +9829,35 @@ one VM. Raw JSON/CSV and environment metadata remain Actions artifacts. Tk
 callback/update timing is not physical monitor presentation or proof that
 flicker has disappeared. This opt-in experiment does not replace functional
 WinApp qualification or authorize protected integration.
+
+The [Phase 2 protocol](docs/performance/issue_434_tk_responsiveness.md) uses
+the same central suite and paired statistics for Watcher, Import, Photos and
+Lightbox. Its hosted Windows matrix records the exact production and harness
+SHAs, private fixture dimensions, software feedback and resource usage.
+The initial B0 evidence and comparisons use the same measured workload
+definitions. Failed, truncated or missing children remain in the retained
+matrix diagnostics.
+
+The central WinApp regression owner checks retained Watcher monitor artwork,
+contextual visibility transitions, an ordered Activity batch with one
+footer publication and deferred Activity projection when the panel is
+hidden. A focused diagnostic-tail regression checks ordered rotating-log
+writes and a single bounded Tk insert on visibility. Hosted Phase 2
+comparisons also record the number of observed Tk
+mutations during stable idle and Watcher bursts.
+
+The Import regressions cover saved revision ordering, concurrent dirty rows,
+failed persistence, stale worker and history tickets, bounded list hydration,
+and preservation of selected rows, focus and scroll. The paired Import
+workloads use the same queue handoff and progress-text publication probes on
+each source SHA. State reads and history listing remain attributed to the
+thread that performed them.
+
+Lightbox regressions cover bounded latest-wins requests, source ownership,
+revocation, retained Canvas publication, loading and fullscreen controls,
+and final raster equality with Pillow's original resampler. The Phase 2
+comparisons measure Tk Canvas attachment separately for preview and final
+quality. The mounted Windows gallery suite checks the integrated viewer.
 
 The active primary matrix, narrowed by the owner on 2026-11-17, contains
 100, 500 and 2000 photos: 12 pilot processes, 60 repeated baseline processes

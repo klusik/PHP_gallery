@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.5.4}
-\newcommand{\manualdate}{23.~listopadu~2026}
+\newcommand{\version}{1.5.5}
+\newcommand{\manualdate}{24.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -10121,6 +10121,27 @@ nepřeznačuje. Po pozitivní zkušenosti uživatele se scrollováním na deskto
 se Canvas stal uloženým výchozím rendererem pro nové profily a starší profily
 bez klíče nastavení. Výslovné uložené False zachovává nativní widgety. Měření
 Tk proxy neprokazuje fyzické vykreslování ani paritu čteček obrazovky.
+
+Protokol druhé fáze měření odezvy WinApp používá centrální sadu
+\codeword{watcher-tk-performance} na~hostovaném Windows runneru GitHubu.
+Uchovává neměnnou baseline a~párová měření Watcheru, Importu, Photos
+a~Lightboxu se~syntetickými izolovanými profily. Workflow ukládá raw data,
+softwarovou odezvu, využití prostředků a~výsledky neúspěšných měření.
+
+Watcher zachovává stávající indikátor a~mění popisky či~ovládací
+prvky při~změně zobrazované hodnoty. Záznamy Activity si~drží pořadí.
+Dávka zobrazí v~zápatí poslední událost a~tabulka Activity doplní
+uchované záznamy při~zobrazení panelu.
+Diagnostický panel zobrazuje poslední řádky. Volba Open log file zpřístupní
+rotační protokol.
+
+Import zobrazuje uložený průběh po~dávkách a~v~rámci limitu mění pouze
+dotčené řádky. Activity připravuje historii a~detaily vybrané úlohy na~pozadí.
+Při~otevření panelu se~zobrazí aktuální průběh.
+
+Lightbox ve~WinApp připravuje náhledy na~pozadí a~po~ustálení vykreslí
+fotografii v~plné kvalitě převzorkování. Ovládací prvky a~stav se~mohou
+měnit při~zobrazené fotografii.
 
 Přijetí metadat, Tk idle proxy a~ustálení
 viewportu jsou samostatná měření. Povolený soubor

@@ -1,0 +1,434 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-434-tk-performance.yml
+# Module Type: Issue-Scoped Windows Performance Workflow
+# Purpose: Measure WinApp GUI responsiveness at immutable production revisions.
+# Responsibilities:
+#   - Select exact-source scenario/cache cells from the Phase 2 protocol.
+#   - Run independent workload processes via the central Tk performance suite.
+#   - Retain cell diagnostics and aggregate the hosted evidence.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 434 WinApp GUI responsiveness
+
+on:
+  push:
+    branches:
+      - feature/434-winapp-gui-responsiveness-phase-2
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Phase 2 protocol stage
+        required: true
+        type: choice
+        options: [pilot, baseline, compare, final, recover-baseline]
+      original_b0_run:
+        description: Completed B0 run ID for artifact recovery
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Select Phase 2 workload cells
+    if: >-
+      github.ref_name == 'feature/434-winapp-gui-responsiveness-phase-2' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.profile != 'recover-baseline') ||
+       startsWith(github.event.head_commit.message, '[tk-phase2-'))
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: immutable matrix selection.
+    # Consumers: Actions job deadline.
+    # Rationale: five minutes leaves margin for a shallow checkout and selection.
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.cells.outputs.matrix }}
+      stage: ${{ steps.cells.outputs.stage }}
+      profile: ${{ steps.cells.outputs.profile }}
+      runner: ${{ steps.cells.outputs.runner }}
+      candidate-label: ${{ steps.cells.outputs.candidate-label }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read immutable workload plan
+        id: cells
+        shell: pwsh
+        env:
+          PHASE2_REQUESTED_PROFILE: ${{ inputs.profile }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:GITHUB_SHA) {
+            throw 'Workflow checkout does not match the event SHA.'
+          }
+          $profile = $env:PHASE2_REQUESTED_PROFILE
+          if ($env:GITHUB_EVENT_NAME -eq 'push') {
+            $subject = git log -1 --format=%s
+            if ($subject -notmatch '^\[tk-phase2-(pilot|baseline|compare|final)\]') {
+              throw 'Invalid Phase 2 push marker.'
+            }
+            $profile = $Matches[1]
+          }
+          if ($profile -notin @('pilot', 'baseline', 'compare', 'final')) {
+            throw 'Unknown Phase 2 profile.'
+          }
+
+          $protocol = Get-Content -LiteralPath 'tools/perf/issue_434_tk_protocol.json' -Raw |
+            ConvertFrom-Json
+          if ($protocol.baseline_sha -notmatch '^[0-9a-f]{40}$' -or
+              $protocol.runner_image -ne 'windows-2025') {
+            throw 'Invalid immutable baseline or Windows image selection.'
+          }
+          $references = @(@{ label = 'B0'; sha = $protocol.baseline_sha })
+          $stage = $profile
+          $candidateLabel = 'B0'
+          $comparison = $null
+          if ($profile -in @('compare', 'final')) {
+            $stage = 'compare'
+            $comparison = Get-Content -LiteralPath '.github/issue-434-comparison.json' -Raw |
+              ConvertFrom-Json -AsHashtable
+            $expectedLabels = if ($profile -eq 'final') {
+              @('BF')
+            } else {
+              @('B1', 'B2', 'B3', 'B1-followup', 'B1-yield', 'B1-tail',
+                'B1-notify', 'B1-continuation', 'B2-paced', 'B2-compact', 'B3-paced', 'B3-poll')
+            }
+            if ($comparison.candidate_label -notin $expectedLabels) {
+              throw 'Unexpected candidate label for requested profile.'
+            }
+            if ($profile -eq 'compare' -and $comparison.phase -notin @('p1', 'p2', 'p3')) {
+              throw 'Unknown comparison phase.'
+            }
+            $candidateLabel = $comparison.candidate_label
+            if ($candidateLabel -eq 'B2-compact' -and ($comparison.phase -ne 'p2' -or
+                !$comparison.case_ids -or @($comparison.additional_references).Count -ne 1 -or
+                $comparison.additional_references[0].label -ne 'BF')) {
+              throw 'Upload-state tuning must select its cases and the exact final-candidate reference.'
+            }
+            $referenceLabel = @{
+              'B2-paced' = 'B2'
+              'B3-paced' = 'B3'
+              'B3-poll' = 'B1-notify'
+            }[$candidateLabel]
+            if ($null -ne $referenceLabel) {
+              $phase = if ($candidateLabel -eq 'B2-paced') { 'p2' } else { 'p3' }
+              if ($comparison.phase -ne $phase -or !$comparison.case_ids -or
+                  @($comparison.additional_references).Count -ne 1 -or
+                  $comparison.additional_references[0].label -ne $referenceLabel) {
+                throw 'A cadence experiment pairs its selected cases with the corresponding checkpoint.'
+              }
+              $references = @($comparison.additional_references)
+            } else {
+              $references += @($comparison.additional_references)
+            }
+          }
+
+          $matrix = @(
+            foreach ($reference in $references) {
+              if ($null -eq $reference) { continue }
+              if ($reference.label -notin @('B0', 'B1', 'B2', 'B3', 'BF', 'B1-tail', 'B1-notify') -or
+                  $reference.sha -notmatch '^[0-9a-f]{40}$') {
+                throw 'Invalid checkpoint reference.'
+              }
+              foreach ($case in $protocol.cases) {
+                if ($profile -eq 'pilot' -and !$case.pilot) { continue }
+                if ($profile -eq 'compare' -and $comparison.phase -notin $case.phases -and
+                    $candidateLabel -ne 'B2-compact') { continue }
+                if ($comparison -and $comparison.case_ids -and
+                    $case.id -notin $comparison.case_ids) { continue }
+                $caches = @($case.caches)
+                if ($profile -eq 'pilot') {
+                  # Pick warmed Import and media examples and fresh examples elsewhere.
+                  $cache = if ($case.id -in @('import-1000', 'photos-100', 'lightbox-1080p', 'mixed')) {
+                    'warm'
+                  } else { 'cold' }
+                  $caches = @($cache)
+                }
+                foreach ($cache in $caches) {
+                  @{
+                    case = $case.id
+                    cache = $cache
+                    reference = $reference.label
+                    reference_sha = $reference.sha
+                    repetition = if ($comparison.extended) { 'extended' } else { 'primary' }
+                  }
+                }
+              }
+            }
+          )
+          if ($matrix.Count -eq 0) { throw 'No protocol cells selected.' }
+          $ids = @($matrix | ForEach-Object { "$($_.reference)/$($_.case)/$($_.cache)" })
+          if (@($ids | Sort-Object -Unique).Count -ne $ids.Count) {
+            throw 'Duplicate scenario/cache/reference cell.'
+          }
+          "matrix=$(@{ include = $matrix } | ConvertTo-Json -Depth 8 -Compress)" >> $env:GITHUB_OUTPUT
+          "stage=$stage" >> $env:GITHUB_OUTPUT
+          "profile=$profile" >> $env:GITHUB_OUTPUT
+          "runner=$($protocol.runner_image)" >> $env:GITHUB_OUTPUT
+          "candidate-label=$candidateLabel" >> $env:GITHUB_OUTPUT
+
+  cell:
+    name: ${{ matrix.reference }} · ${{ matrix.case }} · ${{ matrix.cache }}
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    # Type: integer. Units: minutes. Scope: one case/reference/cache VM.
+    # Consumers: Actions job deadline.
+    # Rationale: central audit permits 40 minutes and leaves five for I/O and setup.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # Type: integer. Units: jobs. Scope: one Phase 2 run.
+      # Consumers: Actions matrix scheduler.
+      # Rationale: use eight VMs while reserving capacity for exact-SHA BASIC.
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      PHP_GALLERY_TK_PERF_PROTOCOL: issue_434_tk_protocol.json
+      PHP_GALLERY_TK_PERF_STAGE: ${{ needs.plan.outputs.stage }}
+      PHP_GALLERY_TK_PERF_BASELINE: ${{ matrix.reference_sha }}
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_TK_PHASE2_CASE: ${{ matrix.case }}
+      PHP_GALLERY_TK_PHASE2_CACHE: ${{ matrix.cache }}
+      PHP_GALLERY_TK_PHASE2_REFERENCE: ${{ matrix.reference }}
+      PHP_GALLERY_TK_PHASE2_CHECKPOINT: ${{ needs.plan.outputs.candidate-label }}
+      PHP_GALLERY_TK_PHASE2_REPETITION: ${{ matrix.repetition }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Verify checkout, reference and source base
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:GITHUB_SHA) {
+            throw 'Wrong workflow checkout.'
+          }
+          git merge-base --is-ancestor $env:PHP_GALLERY_TK_PERF_BASELINE HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Reference source is outside the feature history.' }
+          git fetch --no-tags origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve source base from origin/main.' }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Invalid immutable main merge base.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" >> $env:GITHUB_ENV
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install pinned Windows benchmark dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check
+          Pillow==12.0.0 psutil==7.1.3 pystray==0.19.5 reportlab==5.0.1 pypdf==6.4.0
+      - name: Run central Tk performance audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: php scripts/audit.php --suite=watcher-tk-performance
+      - name: Retain raw cell and audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-434-cell-${{ matrix.reference }}-${{ matrix.case }}-${{ matrix.cache }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          overwrite: true
+          # Type: integer. Units: days. Scope: original per-cell artifact.
+          # Consumers: hosted evidence and independent review.
+          # Rationale: retain sixty days through staged comparisons and review.
+          retention-days: 60
+
+  evidence:
+    name: Collect Phase 2 benchmark evidence
+    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [plan, cell]
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: one report collection job.
+    # Consumers: Actions job timeout.
+    # Rationale: ten minutes leave room for retained artifact download and ZIP.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-434-cell-*
+          path: phase2-cells
+      - name: Validate the exact run and collect summaries
+        env:
+          PHP_GALLERY_TK_PHASE2_MATRIX: ${{ needs.plan.outputs.matrix }}
+          PHP_GALLERY_TK_PERF_STAGE: ${{ needs.plan.outputs.stage }}
+          PHP_GALLERY_TK_PHASE2_PROFILE: ${{ needs.plan.outputs.profile }}
+          PHP_GALLERY_TK_PHASE2_CHECKPOINT: ${{ needs.plan.outputs.candidate-label }}
+          PHP_GALLERY_TK_PHASE2_CELL_RESULT: ${{ needs.cell.result }}
+        run: >-
+          python tools/perf/issue_434_tk_benchmark.py
+          --collect "$GITHUB_WORKSPACE/phase2-cells"
+          --output "$GITHUB_WORKSPACE/phase2-evidence"
+      - name: Publish Phase 2 run summary
+        if: always()
+        run: |
+          if test -f phase2-evidence/summary.md; then
+            cat phase2-evidence/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain combined evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-434-${{ needs.plan.outputs.profile }}-evidence-${{ github.sha }}
+          path: phase2-evidence/**
+          if-no-files-found: error
+          overwrite: true
+          # Type: integer. Units: days. Scope: aggregated evidence artifact.
+          # Consumers: issue readout and owner review.
+          # Rationale: sixty days match the supporting per-cell artifacts.
+          retention-days: 60
+
+
+  report:
+    name: Assemble the Czech Phase 2 report
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      (needs.plan.outputs.profile == 'final' ||
+      (needs.plan.outputs.profile == 'compare' &&
+      needs.plan.outputs.candidate-label == 'B3'))
+    needs: [plan, evidence]
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    # Type: integer. Units: minutes. Scope: final report assembly and evidence.
+    # Consumers: Actions job deadline.
+    # Rationale: twenty minutes bound artifact transfer and WinApp run readback.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-434-${{ needs.plan.outputs.profile }}-evidence-${{ github.sha }}
+          path: phase2-final-evidence
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-434-cell-*
+          path: phase2-final-cells
+      - name: Build offline report from exact hosted evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python tools/perf/issue_434_tk_report_bundle.py
+          --current "$GITHUB_WORKSPACE/phase2-final-evidence"
+          --raw-cells "$GITHUB_WORKSPACE/phase2-final-cells"
+          --output "$GITHUB_WORKSPACE/phase2-report"
+          --comparison .github/issue-434-comparison.json
+      - name: Render the standalone report at desktop and narrow widths
+        shell: bash
+        run: |
+          report="$GITHUB_WORKSPACE/phase2-report/issue-434-report.html"
+          qa_directory="$GITHUB_WORKSPACE/phase2-report/render-checks"
+          mkdir -p "$qa_directory"
+          test -s "$report"
+          # Type: string. Units: viewport pixels. Scope: one report render.
+          # Consumers: headless Chromium window size.
+          # Rationale: verify wide tables and narrow wrapping on a hosted display.
+          desktop_extent=1440,900
+          narrow_extent=460,860
+          for extent in "$desktop_extent" "$narrow_extent"; do
+            screenshot="$qa_directory/report-$extent.png"
+            google-chrome --headless --no-sandbox --disable-gpu \
+              --disable-background-networking --no-first-run \
+              --user-data-dir="$RUNNER_TEMP/issue434-report-$extent" \
+              --window-size="$extent" --screenshot="$screenshot" "file://$report"
+            test -s "$screenshot"
+          done
+      - name: Retain Czech report, vector figures and evidence ZIP
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-434-${{ needs.plan.outputs.profile == 'final' && 'czech-report' || 'report-preview' }}-${{ github.sha }}
+          path: phase2-report/**
+          if-no-files-found: error
+          overwrite: true
+          # Type: integer. Units: days. Scope: final HTML and evidence bundle.
+          # Consumers: Issue 434 review and report delivery.
+          # Rationale: keep the report through the same sixty-day review window.
+          retention-days: 60
+
+  recover-baseline:
+    name: Recollect existing exact B0 artifacts
+    if: >-
+      github.ref_name == 'feature/434-winapp-gui-responsiveness-phase-2' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.profile == 'recover-baseline'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    # Type: integer. Units: minutes. Scope: B0 artifact readback.
+    # Consumers: Actions job deadline.
+    # Rationale: twelve minutes allow lossless transfer of the Windows matrix.
+    timeout-minutes: 12
+    env:
+      ORIGINAL_B0_RUN: ${{ inputs.original_b0_run }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+      - name: Download original B0 cell artifacts
+        run: |
+          if ! [[ "$ORIGINAL_B0_RUN" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Expected a GitHub Actions run ID." >&2
+            exit 1
+          fi
+          gh run download "$ORIGINAL_B0_RUN" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'issue-434-cell-*' --dir phase2-original-cells
+      - name: Validate and recollect original B0 without rerunning it
+        run: |
+          python tools/perf/issue_434_tk_benchmark.py \
+            --collect "$GITHUB_WORKSPACE/phase2-original-cells" \
+            --recover-baseline "$ORIGINAL_B0_RUN" \
+            --output "$GITHUB_WORKSPACE/phase2-baseline-recovered"
+      - name: Publish recovered matrix summary
+        if: always()
+        run: |
+          if test -f phase2-baseline-recovered/summary.md; then
+            cat phase2-baseline-recovered/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain exact B0 evidence readback
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-434-baseline-recovered-${{ inputs.original_b0_run }}
+          path: phase2-baseline-recovered/**
+          if-no-files-found: error
+          overwrite: true
+          # Type: integer. Units: days. Scope: recovered B0 summary artifacts.
+          # Consumers: report assembly and issue review.
+          # Rationale: preserve the same sixty-day matrix evidence window.
+          retention-days: 60

@@ -2742,21 +2742,45 @@ pystray when available.
 
 ## UI rendering
 
+The Watcher compares its computed captions, widget options and visibility
+against the last values published to the current widgets. The monitor keeps
+one Canvas oval and updates its color on a state transition. Activity
+continues to record and submit every event in order. One drain batch
+publishes its latest footer text, and the Activity table synchronizes
+the retained history when its panel becomes visible.
+The inline Activity log batches its recent lines while visible and keeps a
+bounded tail while hidden. Open log file accesses the existing rotating log.
+Flight telemetry and dispatch controls publish when their readouts change.
+
 Import and Activity tables update changed rows while keeping surviving row
 selection, keyboard focus and scroll state. Their visible limits remain 1,000
 items per item view, 200 durable jobs and 100 filtered recent events. Refreshing
 the tables preserves the existing item fields, event filters and explicit job
 selection/recovery actions.
 
+During an active Import, the worker saves each required state transition and
+verifies the durable readback before publishing a numbered presentation
+snapshot. The active job's counters and changed visible rows reach the
+selected pane in batches. A background reader prepares the newest history
+rows and explicit history selections. Switching panes brings the bounded
+detail tables up to date. Retry still checks saved job and destination
+evidence before dispatch.
+
 A Photos metadata refresh with the same ordered photo IDs retains its tile
 widgets. Changed descriptors still use the existing image invalidation and
 fresh-proof rules; membership or order changes retain full reconciliation.
-Fullscreen exit lays out controls and resolves their geometry before one
-settled-quality repaint. Image quality, cache bounds and foreground/worker
-ownership follow their existing owners.
+The Lightbox prepares the cropped viewport on a single bounded worker.
+It shows BILINEAR previews during interaction and publishes the settled image
+with LANCZOS. Tk owns the attached image and retained Canvas items. Fullscreen
+exit resolves control geometry before the settled repaint. Switching galleries
+or withdrawing access retires the previous source and pending work.
+A slideshow interval begins when the current photo or its error is visible.
 
 The [performance protocol](../docs/performance/issue_361_tk_canvas.md) records
 baseline evidence, frozen workloads and the required paired comparison.
+The [Phase 2 protocol](../docs/performance/issue_434_tk_responsiveness.md)
+extends hosted measurement to Watcher polling, durable Import progress and
+Lightbox interaction while tracking the Photos renderer in mixed workloads.
 
 ### Experimental retained Canvas gallery
 

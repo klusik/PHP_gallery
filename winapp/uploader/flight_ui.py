@@ -391,12 +391,15 @@ class FlightUI:
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
         self.record_button: ttk.Checkbutton | None = None
+        self._contextual_record_caption: tuple[ttk.Checkbutton, str] | None = None
         self.progress_actions: ttk.Frame | None = None
         self.progress_buttons: dict[str, ttk.Button] = {}
         self.progress_detail_label: ttk.Label | None = None
         self.bar: ttk.Progressbar | None = None
         self.activity_bar: ttk.Progressbar | None = None
         self.task_tree: ttk.Treeview | None = None
+        self._contextual_dialog_caption: tuple[OverlayPanel, str] | None = None
+        self._contextual_task_heading: tuple[ttk.Treeview, str] | None = None
         self.task_frame: ttk.Frame | None = None
         self._animation_running = False
         self._preparing_progress = False
@@ -470,20 +473,37 @@ class FlightUI:
         return self.text(key)
 
     def refresh_contextual_labels(self) -> None:
-        """Refresh visible capture labels after cached game detection changes.
+        """Update contextual captions only after their widget or text changes.
 
         Returns:
-            None: Recording preferences and worker state are not modified.
+            None: Refreshes the record control, progress title and optional
+                task heading while preserving preferences and worker state.
         """
-        if self.record_button is not None:
-            self.record_button.configure(
-                text=self.capture_text("record_flight"),
-            )
-        if self.dialog is not None and self.dialog.winfo_exists():
+        record_button = self.record_button
+        if record_button is not None:
+            record_caption = self.capture_text("record_flight")
+            previous_record = self._contextual_record_caption
+            if (previous_record is None or previous_record[0] is not record_button
+                    or previous_record[1] != record_caption):
+                record_button.configure(text=record_caption)
+                self._contextual_record_caption = (record_button, record_caption)
+
+        dialog = self.dialog
+        if dialog is not None and dialog.winfo_exists():
             title = self.capture_text("flight_progress")
-            self.dialog.title(title)
-            if self.task_tree is not None:
-                self.task_tree.heading("#0", text=title)
+            previous_dialog = self._contextual_dialog_caption
+            if (previous_dialog is None or previous_dialog[0] is not dialog
+                    or previous_dialog[1] != title):
+                dialog.title(title)
+                self._contextual_dialog_caption = (dialog, title)
+
+            task_tree = self.task_tree
+            if task_tree is not None:
+                previous_heading = self._contextual_task_heading
+                if (previous_heading is None or previous_heading[0] is not task_tree
+                        or previous_heading[1] != title):
+                    task_tree.heading("#0", text=title)
+                    self._contextual_task_heading = (task_tree, title)
 
     def dialog_owner(self) -> tk.Misc:
         """Find the active panel for a user-invoked related dialog.
@@ -574,7 +594,7 @@ class FlightUI:
         """Describe only the staged or current session's accepted dispatch plan.
 
         Returns:
-            None: Updates shared controls without disk, simulator or network work.
+            None: Publishes changed dispatch text using the latest session state.
         """
         plan = self.dispatch
         if (
@@ -592,16 +612,43 @@ class FlightUI:
                 and self.dispatch_loading_target == self.recorder.directory
             )
         )
-        self.simbrief_button_var.set(self.text(
+        self._publish_readout("simbrief_button_var", self.text(
             "simbrief_loading_short" if loading else
             "simbrief_unload" if plan is not None else "simbrief_load"
         ))
         prefix = self.text(
             "simbrief_next_flight" if self.dispatch is not None else "simbrief_ready"
         ) + ": "
-        self.simbrief_status_var.set(
-            prefix + plan.origin + " → " + plan.destination if plan is not None else ""
+        self._publish_readout(
+            "simbrief_status_var",
+            prefix + plan.origin + " → " + plan.destination if plan is not None else "",
         )
+
+    def _publish_readout(
+        self,
+        name: Literal["simbrief_button_var", "simbrief_status_var", "telemetry_var"],
+        value: str,
+    ) -> None:
+        """Keep periodic Flight readouts quiet while their displayed text is stable.
+
+        Args:
+            name (Literal["simbrief_button_var", "simbrief_status_var", "telemetry_var"]):
+                Flight-owned Tk variable retaining the readout.
+            value (str): Current localized text or rounded telemetry values.
+
+        Returns:
+            None: Sets the variable only on a new rendered value or variable.
+        """
+        variable = getattr(self, name)
+        published = getattr(self, "_published_readouts", None)
+        if published is None:
+            published: dict[str, tuple[tk.StringVar, str]] = {}
+            self._published_readouts = published
+        previous = published.get(name)
+        if previous is not None and previous[0] is variable and previous[1] == value:
+            return
+        variable.set(value)
+        published[name] = (variable, value)
 
     def toggle_simbrief(self) -> None:
         """Load optional dispatch or explicitly detach the displayed flight plan.
@@ -835,11 +882,14 @@ class FlightUI:
         """
         frame = ttk.Frame(parent, style="Card.TFrame")
         frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
-        self.record_button = ttk.Checkbutton(
-            frame, text=self.capture_text("record_flight"), variable=self.record_var,
+        record_caption = self.capture_text("record_flight")
+        record_button = ttk.Checkbutton(
+            frame, text=record_caption, variable=self.record_var,
             command=self.save_preferences,
         )
-        self.record_button.grid(row=0, column=0, sticky="w")
+        self.record_button = record_button
+        self._contextual_record_caption = (record_button, record_caption)
+        record_button.grid(row=0, column=0, sticky="w")
         icon_button(
             frame, "settings", self.open_settings,
             self.capture_text("flight_settings"),
@@ -944,8 +994,9 @@ class FlightUI:
             f"{vertical / METRES_PER_SECOND_PER_FPM:+,.0f}"
             if vertical is not None else "—"
         )
-        self.telemetry_var.set(
-            f"IAS {ias_text} kt · ALT {altitude_text} ft · V/S {vertical_text} fpm"
+        self._publish_readout(
+            "telemetry_var",
+            f"IAS {ias_text} kt · ALT {altitude_text} ft · V/S {vertical_text} fpm",
         )
 
     def finish_report(self, *, revoke: bool = False) -> None:
@@ -1690,9 +1741,13 @@ class FlightUI:
                 ),
                 ui_language=self.ui_language.get(),
             )
+            language_changed = preferences.ui_language != self.preferences.ui_language
             preferences.save(self.directory)
             self.preferences = preferences
             self.refresh_dispatch_status()
+            if language_changed:
+                # These controls own their published captions on the host.
+                self.host.refresh_connection_controls()
             if (
                 self.plan is not None and self.recorder is not None
                 and self.recorder.is_alive()
@@ -2791,8 +2846,11 @@ class FlightUI:
         self._progress_local_mode = mode
         # Background progress must not become a child of an unrelated prompt.
         owner = self.host.root
-        self.dialog = OverlayPanel(owner, self.capture_text("flight_progress"))
-        frame = self.dialog.body
+        progress_title = self.capture_text("flight_progress")
+        dialog = OverlayPanel(owner, progress_title)
+        self.dialog = dialog
+        self._contextual_dialog_caption = (dialog, progress_title)
+        frame = dialog.body
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(3, weight=1)
         ttk.Label(
@@ -2809,10 +2867,12 @@ class FlightUI:
         self.task_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 4))
         self.task_frame.columnconfigure(0, weight=1)
         self.task_frame.rowconfigure(0, weight=1)
-        self.task_tree = ttk.Treeview(
+        task_tree = ttk.Treeview(
             self.task_frame, columns=("state",), show="tree headings", height=PROGRESS_TASK_ROWS
         )
-        self.task_tree.heading("#0", text=self.capture_text("flight_progress"))
+        task_tree.heading("#0", text=progress_title)
+        self.task_tree = task_tree
+        self._contextual_task_heading = (task_tree, progress_title)
         self.task_tree.heading("state", text=self.text("phase_idle"))
         for column, width, minimum in zip(
             ('#0', 'state'), PROGRESS_TASK_WIDTHS, PROGRESS_TASK_MIN_WIDTHS, strict=True,

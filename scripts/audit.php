@@ -1926,7 +1926,7 @@ function audit_run_winapp_partitioned(?array $python): array
 }
 
 /**
- * Run the opt-in issue 361 Tk performance benchmark through the audit runner.
+ * Run the selected opt-in Tk performance protocol through the audit runner.
  *
  * @param list<string>|null $python Resolved Python command, or null if unavailable.
  * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,report_file?:string,report_status?:'PASS'|'FAIL'|'BLOCKED'}} Normalized exact-input benchmark result with its retained report path.
@@ -1935,7 +1935,10 @@ function audit_run_watcher_tk_performance(?array $python): array
 {
     global $root, $runDirectory;
     $id = 'watcher-tk-performance';
-    $label = 'Issue 361 Tk performance benchmark';
+    $phaseTwo = getenv('PHP_GALLERY_TK_PERF_PROTOCOL') === 'issue_434_tk_protocol.json';
+    $label = $phaseTwo
+        ? 'Issue 434 Tk performance benchmark'
+        : 'Issue 361 Tk performance benchmark';
     if ($python === null) {
         return task_result(
             $id,
@@ -1994,10 +1997,11 @@ function audit_run_watcher_tk_performance(?array $python): array
         );
     }
 
-    $outputDirectory = $runDirectory . '/issue-361';
+    $outputDirectory = $runDirectory . ($phaseTwo ? '/issue-434' : '/issue-361');
+    $driver = $phaseTwo ? 'issue_434_tk_benchmark.py' : 'issue_361_tk_benchmark.py';
     $reportPath = $outputDirectory . '/report.json';
     $process = run_process(array_merge($python, [
-        $root . '/tools/perf/issue_361_tk_benchmark.py',
+        $root . '/tools/perf/' . $driver,
         '--output',
         $outputDirectory,
     ]), $root, AUDIT_ISSUE_361_TK_PERFORMANCE_TIMEOUT_SECONDS);

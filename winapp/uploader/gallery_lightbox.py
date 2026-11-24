@@ -4,7 +4,8 @@
 # Module Type: Windows Client UI
 # Purpose: Present one selected gallery photo in a focused native overlay.
 # Responsibilities:
-#   - Fit prepared photos, trim clear black bars, and provide compact controls.
+#   - Discover matte bounds and prepare fitted photos off the Tk owner thread.
+#   - Provide compact photo controls and safe current-session publication.
 #   - Navigate photos, zoom and pan, and reveal an explicit location action.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -12,17 +13,130 @@
 
 import math
 import sys
+import time
 import tkinter as tk
 from tkinter import ttk
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Literal, Protocol
 import webbrowser
 
 from .gallery_hdr_macos import MacHDRSurface
+from .lightbox_raster import (
+    LightboxRasterWorker,
+    RasterOwner,
+    RasterRequest,
+    RasterResult,
+    SourcePreparationResult,
+)
 from .ui_theme import Button, hide_inline_tooltip, icon_button
 from .tk_scroll_input import vertical_scroll_delta
 
 if TYPE_CHECKING:
     from PIL import Image as PillowImage
+
+
+RasterQuality = Literal["preview", "final"]
+RasterAttachment = Literal["create_image", "itemconfigure"]
+
+
+class LightboxPhoto(Protocol):
+    """Describe the Pillow-backed Tk image handle retained by Canvas.
+
+    Returns:
+        None: The protocol exposes native pixel dimensions only.
+    """
+
+    def width(self) -> int:
+        """Return the displayed image width in pixels.
+
+        Returns:
+            int: Current Tk image width.
+        """
+
+    def height(self) -> int:
+        """Return the displayed image height in pixels.
+
+        Returns:
+            int: Current Tk image height.
+        """
+
+
+class LightboxRasterObserver(Protocol):
+    """Observe admitted raster requests and successful Tk publication.
+
+    The optional observer is assigned per Lightbox instance by measurement
+    tooling. Both callbacks run on Tk's owner thread, and neither participates
+    in worker state or image ownership.
+    """
+
+    def on_request(
+        self, request_id: int, quality: RasterQuality, started_ns: int,
+    ) -> None:
+        """Observe a render request after it is admitted to the worker lane.
+
+        Args:
+            request_id (int): Monotonic raster request serial.
+            quality (RasterQuality): Preview or settled render quality.
+            started_ns (int): Monotonic timestamp at render-request entry.
+        Returns:
+            None: Measurement state is updated by the observer.
+        """
+
+    def on_published(
+        self,
+        request_id: int,
+        quality: RasterQuality,
+        photo: LightboxPhoto,
+        canvas_item_id: int,
+        attachment: RasterAttachment,
+        hdr_result: bool | None,
+        attached_ns: int,
+    ) -> None:
+        """Observe a current PhotoImage after Canvas attachment.
+
+        Args:
+            request_id (int): Current raster request serial.
+            quality (RasterQuality): Preview or settled render quality.
+            photo (LightboxPhoto): Pillow-backed Tk photo retained by Canvas.
+            canvas_item_id (int): Stable Canvas item carrying the photo.
+            attachment (RasterAttachment): Canvas create or update operation.
+            hdr_result (bool | None): HDR attach result, or None when unavailable.
+            attached_ns (int): Monotonic time immediately after Canvas attach
+                and positioning, before status/HDR follow-up work. The callback
+                itself runs after those follow-up operations complete.
+        Returns:
+            None: Measurement state is updated by the observer.
+        """
+
+
+def _get_root_raster_worker(root: tk.Misc) -> LightboxRasterWorker:
+    """Reuse one raster lane for every Lightbox in a Tk interpreter.
+
+    Args:
+        root (tk.Misc): Tk root/session that bounds Lightbox lifetimes.
+    Returns:
+        LightboxRasterWorker: Interpreter-root lane reused across overlays.
+    """
+    attribute = "_gallery_lightbox_raster_worker"
+    worker = getattr(root, attribute, None)
+    if isinstance(worker, LightboxRasterWorker):
+        return worker
+    worker = LightboxRasterWorker()
+    setattr(root, attribute, worker)
+
+    def close_on_destroy(event: tk.Event) -> None:
+        """Close the root lane when its owning toplevel is destroyed.
+
+        Args:
+            event (tk.Event): Tk Destroy event sent to the root binding.
+        Returns:
+            None: Worker shutdown is requested without joining the UI thread.
+        """
+        if event.widget is root:
+            worker.close()
+
+    root.bind("<Destroy>", close_on_destroy, add="+")
+    return worker
+
 
 try:
     from PIL import Image, ImageTk
@@ -43,17 +157,32 @@ LIGHTBOX_MAX_PIXELS = 12_000_000
 # Rationale: 3x fit scale allows useful inspection without huge raster copies.
 LIGHTBOX_MAX_ZOOM = 3.0
 
-# Purpose: Coalesce rapid Configure events into one image resampling operation.
-# Type: int; Units: milliseconds; Scope: one lightbox geometry change burst.
-# Consumers: PhotoLightbox._queue_render.
+# Purpose: Coalesce rapid viewport input into one settled resampling operation.
+# Type: int; Units: milliseconds; Scope: one lightbox render-intent burst.
+# Consumers: PhotoLightbox._queue_raster_render.
 # Rationale: 90 ms avoids repeated full bitmap resampling during window drags.
 LIGHTBOX_RESIZE_DEBOUNCE_MS = 90
 
-# Purpose: Bound the interval between low-cost live resize previews.
-# Type: int; Units: milliseconds; Scope: one active window resize gesture.
-# Consumers: PhotoLightbox._queue_render. Rationale: 33 ms targets a responsive
-# 30 Hz preview while the trailing LANCZOS render preserves settled quality.
+# Purpose: Bound the interval between low-cost live raster previews.
+# Type: int; Units: milliseconds; Scope: one active viewport interaction.
+# Consumers: PhotoLightbox._queue_raster_render.
+# Rationale: 33 ms targets a responsive 30 Hz preview while the trailing
+# LANCZOS render preserves settled quality.
 LIGHTBOX_RESIZE_PREVIEW_MS = 33
+
+# Purpose: Poll completed raster output on the Tk owner thread.
+# Type: int. Units: milliseconds. Scope: one active Lightbox raster request.
+# Consumers: PhotoLightbox._schedule_raster_poll.
+# Rationale: an 8 ms active poll shortens preview publication for rapid
+# input. It schedules no continuous callback when the worker is idle.
+LIGHTBOX_RASTER_POLL_MS = 8
+
+# Purpose: Select the established low-cost filter for live resize previews.
+# Type: str. Units: Pillow resampling name. Scope: one Lightbox preview request.
+# Consumers: PhotoLightbox._render_resize_preview and initial photo preparation.
+# Rationale: BILINEAR preserves current preview appearance while cadence can be
+# tuned independently for a bounded performance experiment.
+LIGHTBOX_PREVIEW_RESAMPLING = "BILINEAR"
 
 # Purpose: Reserve room for toolbar and edge breathing space in the photo fit.
 # Type: tuple[int, int]; Units: pixels; Scope: photo viewport fit calculation.
@@ -371,6 +500,10 @@ class PhotoLightbox:
         on_close (Callable[[], None]): Restore the parent viewer after dismissal.
         content_owner (tk.Misc): Root's managed content frame, remapped after
             the root-sized lightbox closes to refresh native drawing.
+        can_publish (Callable[[], bool] | None): Current local permission and
+            viewer-lifecycle check sampled before photo ownership/publication.
+        on_photo_resolved (Callable[[bool], None] | None): Called once after
+            first current photo attachment or a visible current error.
 
     Returns:
         None: The lightbox overlay and its event handlers are initialized.
@@ -379,7 +512,10 @@ class PhotoLightbox:
     def __init__(self, window: tk.Misc, text: Callable[[str], str],
                  on_move: Callable[[int], None],
                  on_close: Callable[[], None],
-                 content_owner: tk.Misc) -> None:
+                 content_owner: tk.Misc,
+                 *, can_publish: Callable[[], bool] | None = None,
+                 on_photo_resolved: Callable[[bool], None] | None = None
+                 ) -> None:
         """Create a hidden overlay beside the root's main content frame.
 
         Args:
@@ -388,6 +524,10 @@ class PhotoLightbox:
             on_move (Callable[[int], None]): Select previous (-1) or next (+1).
             on_close (Callable[[], None]): Restore the grid after dismissal.
             content_owner (tk.Misc): Root's directly managed application frame.
+            can_publish (Callable[[], bool] | None): Local current-read and
+                viewer-open predicate; None preserves standalone Lightbox use.
+            on_photo_resolved (Callable[[bool], None] | None): One-shot outcome
+                callback for this present cycle; bool indicates photo success.
         Returns:
             None: The inline overlay widgets are initialized.
         """
@@ -397,6 +537,9 @@ class PhotoLightbox:
         self.text = text
         self.on_move = on_move
         self.on_close = on_close
+        self._can_publish = can_publish
+        self._on_photo_resolved = on_photo_resolved
+        self._photo_resolution_sent = False
         self.visible = False
         self._active = False
         self._fullscreen = False
@@ -408,14 +551,32 @@ class PhotoLightbox:
         self._fullscreen_center: tuple[float, float] | None = None
         self._source_image = None
         self._crop_box: tuple[int, int, int, int] | None = None
+        self._detected_crop_box: tuple[int, int, int, int] | None = None
         self._content_crop_enabled = True
         self._photo = None
+        self._photo_item_id: int | None = None
+        self._photo_source_box: tuple[int, int, int, int] | None = None
         self._status_message: str | None = None
         self._status_fill = "#AABCCB"
         self._status_label: ttk.Label | None = None
+        self._status_item_id: int | None = None
         self._pending_header: tuple[str, str] | None = None
         self._resize_job: str | None = None
         self._resize_preview_job: str | None = None
+        # Share the lane at the Tk interpreter root so transient viewer
+        # toplevels can close and reopen without accumulating resize threads.
+        self._raster_worker = _get_root_raster_worker(self.window._root())
+        self._raster_owner_token = RasterOwner()
+        self._raster_serial = 0
+        self._raster_poll_job: str | None = None
+        self._raster_quality: RasterQuality = "final"
+        self._raster_last_error: str | None = None
+        self._raster_source_ready = False
+        self._raster_request_inflight = False
+        self._raster_preview_deferred = False
+        self._source_preparation_pending = False
+        self._initial_final_pending = False
+        self._raster_observer: LightboxRasterObserver | None = None
         self._pan_origin: tuple[int, int, float, float] | None = None
         self._wheel_remainder = 0
         self._touchpad_remainder = 0
@@ -572,11 +733,13 @@ class PhotoLightbox:
             self._suspend_content()
         self._active = True
         self.visible = True
+        self._photo_resolution_sent = False
         self._clear_location()
         self._location_panel.place_forget()
         self._zoom = 1.0
         self._fullscreen_center = None
         self._pan_origin = None
+        self._invalidate_raster_requests()
         clipped_title = title
         if len(clipped_title) > LIGHTBOX_TITLE_COLUMNS:
             clipped_title = clipped_title[:LIGHTBOX_TITLE_COLUMNS - 1] + "…"
@@ -647,35 +810,84 @@ class PhotoLightbox:
         location: tuple[float, float] | None = None,
         encoded: bytes | None = None,
     ) -> None:
-        """Take ownership of a worker-prepared RGB image and display it.
+        """Take ownership of an RGB image and queue source preparation.
 
         Args:
             image (PillowImage.Image): Bounded RGB image transferred to the
-                lightbox, which closes it when the selection changes.
+                root-owned lane, which closes it after replacement or release.
             location (tuple[float, float] | None): Admitted latitude/longitude.
             encoded (bytes | None): Original bounded image bytes for native HDR.
         Returns:
-            None: Image is fitted or covered to the active viewport.
+            None: Authorized source enters the root lane for matte discovery.
         """
+        if not self._can_publish_current():
+            image.close()
+            if self._active:
+                self.dismiss()
+            return
         if not self._active or ImageTk is None:
             image.close()
             return
-        self._clear_image()
-        self._status_message = None
+        self._clear_image(clear_status=False, preserve_photo=True)
         self._location = location
         self._zoom = 1.0
         self._fullscreen_center = None
         self._pan_origin = None
-        self._source_image = image
         self._hdr_surface.load(encoded, image.size)
-        detected_crop = self._trim_black_bars(image)
-        self._crop_box = (
-            detected_crop if self._content_crop_enabled
-            else (0, 0, image.width, image.height)
-        )
-        self._apply_pending_header()
-        self._render_image()
+        self._source_image = image
+        self._crop_box = None
+        self._detected_crop_box = None
+        if not self._raster_worker.set_source(
+            self._raster_owner_token,
+            image,
+            detector=detect_black_matte_crop,
+        ):
+            self._source_image = None
+            self._hdr_surface.clear()
+            self.dismiss()
+            return
+        self._raster_source_ready = False
+        self._source_preparation_pending = True
+        self._raster_request_inflight = True
+        self._initial_final_pending = True
         self._refresh_location()
+        self._schedule_raster_poll()
+
+    def _can_publish_current(self) -> bool:
+        """Check the injected local authorization and viewer lifetime guard.
+
+        Returns:
+            bool: True when standalone behavior is allowed or the owner still
+                permits this Lightbox to accept and publish media pixels.
+        """
+        predicate = getattr(self, "_can_publish", None)
+        if predicate is None:
+            return True
+        try:
+            return bool(predicate())
+        except Exception:
+            return False
+
+    def _resolve_photo_presentation(self, succeeded: bool) -> None:
+        """Notify the caller once after visible photo success or failure.
+
+        Args:
+            succeeded (bool): Whether the current photo was attached successfully.
+        Returns:
+            None: The current present cycle is marked resolved before callback.
+        """
+        if (not self._active
+                or getattr(self, "_photo_resolution_sent", False)
+                or not self._can_publish_current()):
+            return
+        self._photo_resolution_sent = True
+        callback = getattr(self, "_on_photo_resolved", None)
+        if callback is None:
+            return
+        try:
+            callback(succeeded)
+        except Exception:
+            pass
 
     def show_error(self, message: str) -> None:
         """Replace the photo with a concise localized retrieval failure.
@@ -685,12 +897,17 @@ class PhotoLightbox:
         Returns:
             None: Error is centered within the photo area.
         """
-        self._clear_image()
+        if not self._can_publish_current():
+            if self._active:
+                self.dismiss()
+            return
+        self._clear_image(clear_status=True)
         self._clear_location()
         self._location_panel.place_forget()
         self._apply_pending_header()
         self._pan_origin = None
         self._show_status(message, "#FF91A2")
+        self._resolve_photo_presentation(False)
 
     def _show_status(self, message: str, fill: str) -> None:
         """Set and draw the centered loading or retrieval status.
@@ -699,7 +916,7 @@ class PhotoLightbox:
             message (str): Localized status text for the current photo.
             fill (str): Theme-compatible text color for the status.
         Returns:
-            None: The canvas status item is replaced at its current center.
+            None: The retained canvas status item is updated at its center.
         """
         self._hdr_surface.hide()
         self._status_message = message
@@ -712,8 +929,10 @@ class PhotoLightbox:
         Returns:
             None: The current status badge is centered over the current raster.
         """
-        self._canvas.delete("status")
         if self._status_message is None:
+            if self._status_item_id is not None:
+                self._canvas.delete(self._status_item_id)
+                self._status_item_id = None
             return
         if self._status_label is None:
             self._status_label = ttk.Label(
@@ -723,12 +942,21 @@ class PhotoLightbox:
             text=self._status_message,
             foreground=self._status_fill,
         )
-        self._canvas.create_window(
+        position = (
             self._canvas.winfo_width() / 2,
             self._canvas.winfo_height() / 2,
-            window=self._status_label,
-            tags="status",
         )
+        if self._status_item_id is None:
+            self._status_item_id = self._canvas.create_window(
+                *position,
+                window=self._status_label,
+                tags="status",
+            )
+        else:
+            self._canvas.itemconfigure(
+                self._status_item_id, window=self._status_label,
+            )
+            self._canvas.coords(self._status_item_id, *position)
 
     def dismiss(self) -> None:
         """Hide the overlay, clear image references and restore viewer focus.
@@ -758,7 +986,7 @@ class PhotoLightbox:
             except tk.TclError:
                 owner_exists = False
         self._fullscreen = False
-        self._clear_image()
+        self._clear_image(clear_status=True)
         if owner_exists:
             self._clear_location()
         self._pan_origin = None
@@ -777,12 +1005,12 @@ class PhotoLightbox:
         """Release pending UI work and remove the inline overlay widget.
 
         Returns:
-            None: No photo, coordinate or resampling reference remains.
+            None: Overlay references release; active root-lane work retires later.
         """
         self.dismiss()
         self._cancel_resize_job()
         self._cancel_resize_preview()
-        self._clear_image()
+        self._clear_image(clear_status=True)
         self._clear_location()
         if self._window_configure_binding is not None:
             try:
@@ -808,7 +1036,8 @@ class PhotoLightbox:
             self._location_panel.place_forget()
             self._map_button.focus_set()
             if self._active and self._source_image is not None:
-                self._render_image()
+                self._overlay.update_idletasks()
+                self._refresh_hdr_controls()
             return True
         if self._fullscreen:
             self._toggle_fullscreen()
@@ -825,13 +1054,30 @@ class PhotoLightbox:
         """
         if not self._active:
             return
+        if self._status_message is not None:
+            self._draw_status()
+        if not getattr(self, "_raster_source_ready", True):
+            return
+        self._pan_origin = None
+        self._queue_raster_render()
+
+    def _queue_raster_render(self) -> None:
+        """Schedule cadence-limited previews and one trailing final raster.
+
+        Returns:
+            None: Repeated input replaces the final timer but keeps one preview
+                cadence callback until the latest intent has a visible raster.
+        """
+        if (not self._active
+                or not getattr(self, "_raster_source_ready", True)
+                or self._source_image is None):
+            return
         if self._resize_job is not None:
             self._cancel_resize_job()
-        self._pan_origin = None
         self._resize_job = self.window.after(
             LIGHTBOX_RESIZE_DEBOUNCE_MS, self._render_after_resize,
         )
-        if self._source_image is not None and self._resize_preview_job is None:
+        if self._resize_preview_job is None:
             self._resize_preview_job = self.window.after(
                 LIGHTBOX_RESIZE_PREVIEW_MS, self._render_resize_preview,
             )
@@ -885,9 +1131,18 @@ class PhotoLightbox:
                 trailing full-quality render callback.
         """
         self._resize_preview_job = None
-        if self._source_image is not None:
+        if (getattr(self, "_raster_source_ready", True)
+                and self._source_image is not None
+                and Image is not None):
+            if self._raster_request_inflight:
+                self._raster_preview_deferred = True
+                return
+            self._raster_preview_deferred = False
+            resampling = getattr(
+                Image.Resampling, LIGHTBOX_PREVIEW_RESAMPLING,
+            )
             self._render_image(
-                resampling=Image.Resampling.BILINEAR,
+                resampling=resampling,
                 preserve_resize_jobs=True,
             )
 
@@ -900,7 +1155,8 @@ class PhotoLightbox:
         self._resize_job = None
         self._cancel_resize_preview()
         self._pan_origin = None
-        if self._source_image is None:
+        if (not getattr(self, "_raster_source_ready", True)
+                or self._source_image is None):
             self._draw_status()
         else:
             self._render_image()
@@ -919,17 +1175,25 @@ class PhotoLightbox:
 
     def _render_image(self, *, resampling: int | None = None,
                       preserve_resize_jobs: bool = False) -> None:
-        """Fit the source crop before creating bounded Tk pixels.
+        """Submit the bounded viewport crop to the latest-wins raster lane.
 
         Args:
-            resampling (int | None): Pillow resampling enum for preview frames;
-                omitted renders at final LANCZOS quality.
+            resampling (int | None): Pillow resampling enum for a preview;
+                omitted requests the established final LANCZOS quality.
             preserve_resize_jobs (bool): Keep callbacks owned by active geometry
                 changes when this is a scheduled preview repaint.
         Returns:
-            None: Canvas image is updated from the retained source crop.
+            None: A current request is admitted for later Tk publication.
         """
-        if self._source_image is None or self._crop_box is None or ImageTk is None:
+        started_ns = time.perf_counter_ns()
+        if not self._can_publish_current():
+            if self._active:
+                self.dismiss()
+            return
+        if (not self._active
+                or not getattr(self, "_raster_source_ready", True)
+                or self._source_image is None
+                or self._crop_box is None or Image is None or ImageTk is None):
             return
         if not preserve_resize_jobs:
             self._cancel_resize_job()
@@ -989,44 +1253,318 @@ class PhotoLightbox:
             cap = math.sqrt(LIGHTBOX_MAX_PIXELS / (out_size[0] * out_size[1]))
             out_size = (max(1, int(out_size[0] * cap)),
                         max(1, int(out_size[1] * cap)))
-        image = self._source_image.resize(
-            out_size,
-            Image.Resampling.LANCZOS if resampling is None else resampling,
-            box=render_box,
+        quality: RasterQuality = "final" if resampling is None else "preview"
+        selected_resampling = (
+            Image.Resampling.LANCZOS if resampling is None else resampling
         )
-        self._photo = ImageTk.PhotoImage(image, master=self._canvas)
-        self._canvas.delete("all")
-        self._canvas.create_image(
-            self._canvas.winfo_width() / 2,
-            self._canvas.winfo_height() / 2,
-            image=self._photo, tags="photo",
+        self._raster_serial += 1
+        request = RasterRequest(
+            serial=self._raster_serial,
+            crop_box=render_box,
+            output_size=out_size,
+            resampling=selected_resampling,
         )
-        self._pan_origin = None
-        self._center_or_constrain()
-        if self._status_message is None:
-            self._render_hdr(render_box)
-        if self._status_message is not None:
-            self._draw_status()
+        if not self._raster_worker.submit(self._raster_owner_token, request):
+            if self._active:
+                self.dismiss()
+            return
+        self._raster_quality = quality
+        self._raster_last_error = None
+        self._raster_request_inflight = True
+        if quality == "final":
+            self._raster_preview_deferred = False
+            self._initial_final_pending = False
+        observer = self._raster_observer
+        if observer is not None:
+            try:
+                observer.on_request(request.serial, quality, started_ns)
+            except Exception:
+                pass
+        self._schedule_raster_poll()
 
-    def _render_hdr(self, box: tuple[int, int, int, int]) -> None:
-        """Align the optional HDR surface with the prepared canvas image.
+    def _schedule_raster_poll(self) -> None:
+        """Schedule one Tk-thread check for a completed worker result.
+
+        Returns:
+            None: At most one polling callback is outstanding for this overlay.
+        """
+        if not self._active or self._raster_poll_job is not None:
+            return
+        self._raster_poll_job = self.window.after(
+            LIGHTBOX_RASTER_POLL_MS, self._poll_raster_result,
+        )
+
+    def _cancel_raster_poll(self) -> None:
+        """Cancel a scheduled result check and clear its callback identity.
+
+        Returns:
+            None: No later poll can publish into a dismissed Lightbox.
+        """
+        job = self._raster_poll_job
+        self._raster_poll_job = None
+        if job is None:
+            return
+        try:
+            self.window.after_cancel(job)
+        except tk.TclError:
+            pass
+
+    def _poll_raster_result(self) -> None:
+        """Transfer only the current worker result onto the Tk owner thread.
+
+        Returns:
+            None: Current source preparation or raster output is consumed;
+                stale output is disposed without publication.
+        """
+        self._raster_poll_job = None
+        if not self._active:
+            return
+        if not self._can_publish_current():
+            self.dismiss()
+            return
+        if self._source_preparation_pending:
+            preparation = self._raster_worker.take_source_preparation(
+                self._raster_owner_token,
+            )
+            if preparation is None:
+                self._raster_request_inflight = (
+                    self._raster_worker.has_pending_work(
+                        self._raster_owner_token,
+                    )
+                )
+                if self._raster_request_inflight:
+                    self._schedule_raster_poll()
+                else:
+                    self.dismiss()
+                return
+            self._source_preparation_pending = False
+            self._raster_request_inflight = False
+            if preparation.error is not None or preparation.crop_box is None:
+                self.show_error(self.text("image_error"))
+                return
+            self._detected_crop_box = preparation.crop_box
+            if self._content_crop_enabled:
+                self._crop_box = preparation.crop_box
+            else:
+                image = self._source_image
+                if image is None:
+                    self.show_error(self.text("image_error"))
+                    return
+                self._crop_box = (0, 0, image.width, image.height)
+            self._raster_source_ready = True
+            if Image is None:
+                self.show_error(self.text("image_error"))
+                return
+            self._render_image(
+                resampling=getattr(
+                    Image.Resampling, LIGHTBOX_PREVIEW_RESAMPLING,
+                ),
+            )
+            return
+        result = self._raster_worker.take_result(self._raster_owner_token)
+        if result is None:
+            self._raster_request_inflight = self._raster_worker.has_pending_work(
+                self._raster_owner_token,
+            )
+            if self._raster_request_inflight:
+                self._schedule_raster_poll()
+            elif not self._raster_source_ready:
+                self.dismiss()
+            else:
+                self._resume_deferred_preview()
+            return
+        self._raster_request_inflight = False
+        if result.serial != self._raster_serial:
+            self._close_raster_result(result)
+            if self._raster_worker.has_pending_work(self._raster_owner_token):
+                self._raster_request_inflight = True
+                self._schedule_raster_poll()
+            else:
+                self._resume_deferred_preview()
+            return
+        if result.raster is None:
+            self._raster_last_error = result.error
+            self.show_error(self.text("image_error"))
+            return
+        self._publish_raster_result(result, self._raster_quality)
+        self._resume_deferred_preview()
+
+    def _resume_deferred_preview(self) -> None:
+        """Render the latest viewport when its previous job has finished.
+
+        Returns:
+            None: One deferred preview is submitted only while input still has
+                a pending settled-render timer.
+        """
+        if not self._raster_preview_deferred:
+            return
+        self._raster_preview_deferred = False
+        if (self._resize_job is not None and self._raster_source_ready
+                and self._source_image is not None
+                and self._resize_preview_job is None):
+            self._render_resize_preview()
+
+    def _publish_raster_result(
+        self, result: RasterResult, quality: RasterQuality,
+    ) -> None:
+        """Attach one current Pillow output and notify its optional observer.
+
+        Args:
+            result (RasterResult): Current worker-owned result to transfer.
+            quality (RasterQuality): Request quality captured for publication.
+        Returns:
+            None: The Tk photo item and native HDR surface share this result.
+        """
+        raster = result.raster
+        if not self._can_publish_current():
+            self._close_raster_result(result)
+            if self._active:
+                self.dismiss()
+            return
+        if (raster is None or not self._active or ImageTk is None
+                or result.serial != self._raster_serial):
+            self._close_raster_result(result)
+            return
+        photo = None
+        attachment: RasterAttachment | None = None
+        item_id = self._photo_item_id
+        hdr_result: bool | None = None
+        attached_ns: int | None = None
+        try:
+            photo = ImageTk.PhotoImage(raster, master=self._canvas)
+            width = self._canvas.winfo_width()
+            height = self._canvas.winfo_height()
+            if not self._can_publish_current():
+                if self._active:
+                    self.dismiss()
+                return
+            if item_id is not None and self._canvas.find_withtag(item_id):
+                self._canvas.itemconfigure(item_id, image=photo)
+                attachment = "itemconfigure"
+            else:
+                item_id = self._canvas.create_image(
+                    width / 2,
+                    height / 2,
+                    image=photo,
+                    tags="photo",
+                )
+                attachment = "create_image"
+            self._canvas.coords(item_id, width / 2, height / 2)
+            self._photo = photo
+            self._photo_item_id = item_id
+            self._photo_source_box = result.crop_box
+            self._pan_origin = None
+            self._center_or_constrain()
+            attached_ns = time.perf_counter_ns()
+            self._apply_pending_header()
+            self._status_message = None
+            self._draw_status()
+            try:
+                hdr_result = self._render_hdr(result.crop_box)
+            except Exception:
+                hdr_result = False
+        except Exception:
+            self._raster_last_error = "publication-error"
+            if self._active and self._can_publish_current():
+                try:
+                    self.show_error(
+                        self.text("image_error"),
+                    )
+                except Exception:
+                    pass
+            return
+        finally:
+            try:
+                raster.close()
+            except Exception:
+                pass
+        if (attachment is None or item_id is None or photo is None
+                or attached_ns is None):
+            return
+        self._raster_last_error = None
+        observer = self._raster_observer
+        if observer is not None:
+            try:
+                observer.on_published(
+                    result.serial,
+                    quality,
+                    photo,
+                    item_id,
+                    attachment,
+                    hdr_result,
+                    attached_ns,
+                )
+            except Exception:
+                pass
+        self._resolve_photo_presentation(True)
+        if quality == "preview" and self._initial_final_pending:
+            self._initial_final_pending = False
+            self._render_image()
+
+    def _close_raster_result(self, result: RasterResult) -> None:
+        """Dispose a result that was not transferred into a Tk PhotoImage.
+
+        Args:
+            result (RasterResult): Worker-owned output rejected by Tk state.
+        Returns:
+            None: The output raster is closed when present.
+        """
+        if result.raster is None:
+            return
+        try:
+            result.raster.close()
+        except Exception:
+            pass
+
+    def _invalidate_raster_requests(self) -> None:
+        """Fence active output after a selection or lifecycle transition.
+
+        Returns:
+            None: Pending and completed old requests cannot be published.
+        """
+        self._raster_serial += 1
+        self._cancel_raster_poll()
+        self._raster_source_ready = False
+        self._raster_request_inflight = False
+        self._raster_preview_deferred = False
+        self._source_preparation_pending = False
+        self._initial_final_pending = False
+        self._raster_worker.invalidate(self._raster_owner_token)
+
+    def _render_hdr(
+        self, box: tuple[int, int, int, int],
+    ) -> bool | None:
+        """Align optional HDR tiles with the retained Canvas photo item.
 
         Args:
             box (tuple[int, int, int, int]): Current source crop bounds.
         Returns:
-            None: Native tiles follow the image or the SDR canvas remains visible.
+            bool | None: Native tile attach result, or None without a photo.
         """
         coords = self._canvas.coords("photo")
         if not coords or self._photo is None:
-            return
+            return None
         width, height = self._photo.width(), self._photo.height()
         x, y = coords
-        self._hdr_surface.render(
+        return self._hdr_surface.render(
             box, (x - width / 2, y - height / 2,
                   x + width / 2, y + height / 2),
             [self._toolbar, self._previous_edge, self._next_edge,
              self._location_panel],
         )
+
+    def _refresh_hdr_controls(self) -> None:
+        """Refresh HDR occlusion after controls move without rerastering.
+
+        Returns:
+            None: Native tiles are realigned with the current controls and photo.
+        """
+        photo = getattr(self, "_photo", None)
+        crop_box = getattr(self, "_photo_source_box", None)
+        if getattr(self, "_status_message", None) is not None:
+            self._hdr_surface.hide()
+        elif photo is not None and crop_box is not None:
+            self._render_hdr(crop_box)
 
     def _change_zoom(self, factor: float) -> None:
         """Adjust zoom by a bounded factor and rerender the current image.
@@ -1036,11 +1574,12 @@ class PhotoLightbox:
         Returns:
             None: The image is resampled to the bounded viewport raster.
         """
-        if self._source_image is not None:
+        if (self._source_image is not None
+                and getattr(self, "_raster_source_ready", True)):
             zoom = min(LIGHTBOX_MAX_ZOOM, max(1.0, self._zoom * factor))
             if zoom != self._zoom:
                 self._zoom = zoom
-                self._render_image()
+                self._queue_raster_render()
 
     def _fit_image(self) -> None:
         """Toggle between detected content and the full original frame.
@@ -1048,7 +1587,8 @@ class PhotoLightbox:
         Returns:
             None: The original frame or detected content bounds are displayed.
         """
-        if self._source_image is None:
+        if (self._source_image is None
+                or not getattr(self, "_raster_source_ready", True)):
             return
         self._content_crop_enabled = not self._content_crop_enabled
         self._fit_tooltip.set(
@@ -1059,7 +1599,11 @@ class PhotoLightbox:
             self._crop_box = (0, 0, self._source_image.width,
                               self._source_image.height)
         else:
-            self._crop_box = self._trim_black_bars(self._source_image)
+            detected_crop = getattr(self, "_detected_crop_box", None)
+            self._crop_box = (
+                detected_crop if detected_crop is not None
+                else self._trim_black_bars(self._source_image)
+            )
         self._reset_zoom()
 
     def _reset_zoom(self) -> None:
@@ -1068,6 +1612,8 @@ class PhotoLightbox:
         Returns:
             None: Zoom and pan return to the active fit mode's initial view.
         """
+        if not getattr(self, "_raster_source_ready", True):
+            return
         self._zoom = 1.0
         self._wheel_remainder = 0
         self._touchpad_remainder = 0
@@ -1082,7 +1628,10 @@ class PhotoLightbox:
         Returns:
             None: The active display mode's pan origin is retained.
         """
-        if self._photo is not None and self._fullscreen:
+        if (not getattr(self, "_raster_source_ready", True)
+                or self._photo is None):
+            return
+        if self._fullscreen:
             if self._crop_box is not None:
                 left, top, right, bottom = self._crop_box
                 self._fullscreen_center = self._fullscreen_center or (
@@ -1107,7 +1656,8 @@ class PhotoLightbox:
         Returns:
             None: The visible image remains bounded by its source crop.
         """
-        if self._pan_origin is None:
+        if (not getattr(self, "_raster_source_ready", True)
+                or self._pan_origin is None):
             return
         x, y, ox, oy = self._pan_origin
         if self._fullscreen and self._crop_box is not None:
@@ -1123,13 +1673,15 @@ class PhotoLightbox:
                 oy - (event.y - y) / scale,
             )
             origin = self._pan_origin
-            self._render_image()
+            self._queue_raster_render()
             self._pan_origin = origin
             return
         self._canvas.coords("photo", ox + event.x - x, oy + event.y - y)
         self._center_or_constrain()
         if self._crop_box is not None:
-            self._render_hdr(self._crop_box)
+            self._render_hdr(
+                self._photo_source_box or self._crop_box,
+            )
 
     def _center_or_constrain(self) -> None:
         """Constrain image movement so no blank gap replaces photo content.
@@ -1191,6 +1743,8 @@ class PhotoLightbox:
         Returns:
             None: At most one raster render is requested per received packet.
         """
+        if not getattr(self, "_raster_source_ready", True):
+            return
         if precise:
             self._touchpad_remainder += delta
             threshold = LIGHTBOX_TOUCHPAD_ZOOM_DELTA_UNITS
@@ -1283,11 +1837,12 @@ class PhotoLightbox:
         """Hide toolbar and edge actions while preserving fullscreen imagery.
 
         Returns:
-            None: The image is rerendered after native surfaces are withdrawn.
+            None: Native tiles are realigned without a redundant image resample.
         """
         self._control_hide_job = None
         if not self._fullscreen or not self._controls_visible:
             return
+        before_size = (self._canvas.winfo_width(), self._canvas.winfo_height())
         self._toolbar.place_forget()
         self._previous_edge.place_forget()
         self._next_edge.place_forget()
@@ -1295,18 +1850,24 @@ class PhotoLightbox:
         self._controls_visible = False
         if (self._fullscreen and self._active
                 and self._source_image is not None):
-            self._render_image()
+            self._overlay.update_idletasks()
+            after_size = (self._canvas.winfo_width(), self._canvas.winfo_height())
+            if after_size != before_size:
+                self._render_image()
+            else:
+                self._refresh_hdr_controls()
 
     def _show_controls(self, *, render: bool = True) -> None:
         """Restore the existing overlay toolbar and edge navigation.
 
         Args:
-            render (bool): Render the photo after laying out controls. Defaults
-                to True. Set false
-                when the caller will render once after its final state changes.
+            render (bool): Request a raster only if mapped controls change the
+                Canvas viewport. Set false when the caller will render after
+                its final geometry change.
         Returns:
-            None: Controls are restored and optional rendering follows geometry.
+            None: Controls are restored and HDR occlusion follows their geometry.
         """
+        before_size = (self._canvas.winfo_width(), self._canvas.winfo_height())
         self._toolbar.place(relx=0.5, rely=0.025, anchor="n")
         self._previous_edge.place(relx=0.025, rely=0.5, anchor="w")
         self._next_edge.place(relx=0.975, rely=0.5, anchor="e")
@@ -1314,8 +1875,11 @@ class PhotoLightbox:
         if self._active and self._source_image is not None:
             # Resolve mapped control geometry before clipping the native tiles.
             self._overlay.update_idletasks()
-            if render:
+            after_size = (self._canvas.winfo_width(), self._canvas.winfo_height())
+            if render and after_size != before_size:
                 self._render_image()
+            else:
+                self._refresh_hdr_controls()
 
     def enter_fullscreen(self) -> None:
         """Enter fullscreen once and leave controls available on pointer motion.
@@ -1396,7 +1960,7 @@ class PhotoLightbox:
             self._map_button.focus_set()
         if self._active and self._source_image is not None:
             self._overlay.update_idletasks()
-            self._render_image()
+            self._refresh_hdr_controls()
 
     def _refresh_location(self) -> None:
         """Update the admitted coordinates and map action availability.
@@ -1412,25 +1976,56 @@ class PhotoLightbox:
                 text=f"{latitude:.5f}, {longitude:.5f}",
             )
 
-    def _clear_image(self) -> None:
-        """Release the decoded image and Tk bitmap for the prior selection.
+    def _clear_image(
+        self,
+        *,
+        clear_status: bool = True,
+        preserve_photo: bool = False,
+    ) -> None:
+        """Retire source ownership and remove the prior retained Canvas photo.
 
+        Args:
+            clear_status (bool): Whether the reusable status item is also
+                removed; prepared-image transitions keep its loading badge.
+            preserve_photo (bool): Keep the authorized displayed Tk photo until
+                its replacement attaches; its old Pillow/HDR sources still retire.
         Returns:
-            None: No prior photo raster remains referenced by the overlay.
+            None: Stale output is fenced and source ownership is retired safely.
         """
+        self._cancel_resize_job()
+        self._cancel_resize_preview()
+        self._raster_serial += 1
+        self._cancel_raster_poll()
+        worker = getattr(self, "_raster_worker", None)
+        owner = getattr(self, "_raster_owner_token", None)
+        if worker is not None and owner is not None:
+            worker.release(owner)
+        else:
+            source = self._source_image
+            if source is not None:
+                try:
+                    source.close()
+                except Exception:
+                    pass
         self._hdr_surface.clear()
-        source = self._source_image
-        if source is not None:
-            try:
-                source.close()
-            except Exception:
-                pass
         self._source_image = None
         self._crop_box = None
-        self._photo = None
+        self._detected_crop_box = None
+        self._raster_source_ready = False
+        self._raster_request_inflight = False
+        self._raster_preview_deferred = False
+        self._source_preparation_pending = False
+        self._initial_final_pending = False
+        self._photo_source_box = None
+        if not preserve_photo:
+            self._photo = None
+            self._photo_item_id = None
         try:
-            self._canvas.delete("photo")
-            self._canvas.delete("status")
+            if not preserve_photo:
+                self._canvas.delete("photo")
+            if clear_status:
+                self._canvas.delete("status")
+                self._status_item_id = None
         except tk.TclError:
             pass
 

@@ -844,6 +844,23 @@ class FlightUITests(unittest.TestCase):
             host.worker.stop.assert_not_called()
             host.worker.request_drain.assert_not_called()
 
+    def test_preference_language_change_refreshes_host_actions_once(self) -> None:
+        """Refresh watcher and import actions when the UI language is saved.
+
+        Returns:
+            None: Saving an unchanged language leaves the host controls alone.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            host = self._host()
+            ui = self._ui(host)
+            ui.directory = Path(tmp)
+            ui.ui_language.get.return_value = "cs"
+
+            self.assertTrue(ui.save_preferences())
+            self.assertTrue(ui.save_preferences())
+
+            host.refresh_connection_controls.assert_called_once_with()
+
     def test_invalid_preferences_restore_switches_without_touching_recorder(self) -> None:
         """Reject reports with no selected language before applying acquisition.
 
@@ -1751,7 +1768,8 @@ class FlightUITests(unittest.TestCase):
 
         Returns:
             None: IAS, feet and signed vertical speed convert correctly; absent
-                snapshots replace every value with a dash.
+                snapshots replace every value with a dash and stable polls
+                leave the readout alone.
         """
         ui = self._ui(self._host())
         ui.recorder = Mock()
@@ -1761,10 +1779,12 @@ class FlightUITests(unittest.TestCase):
             "vertical_speed_mps": -500 * flight_ui.METRES_PER_SECOND_PER_FPM,
         }
         ui.refresh_telemetry()
+        ui.refresh_telemetry()
         self.assertEqual(
             "IAS 100 kt · ALT 10,000 ft · V/S -500 fpm",
             ui.telemetry_var.set.call_args.args[0],
         )
+        ui.telemetry_var.set.assert_called_once()
         ui.recorder.telemetry_snapshot.return_value = None
         ui.refresh_telemetry()
         self.assertEqual(
@@ -2010,8 +2030,9 @@ class FlightUITests(unittest.TestCase):
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
         ui.dispatch = plan
         ui.refresh_dispatch_status()
-        ui.simbrief_button_var.set.assert_called_with("simbrief_unload")
-        ui.simbrief_status_var.set.assert_called_with("simbrief_next_flight: LKPR → EDDF")
+        ui.refresh_dispatch_status()
+        ui.simbrief_button_var.set.assert_called_once_with("simbrief_unload")
+        ui.simbrief_status_var.set.assert_called_once_with("simbrief_next_flight: LKPR → EDDF")
         ui.dispatch_results.put(("123", None, None, "offline"))
         with patch.object(flight_ui.messagebox, "showerror"):
             ui.accept_simbrief()

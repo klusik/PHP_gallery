@@ -1,0 +1,88 @@
+{
+  "phase": "p3",
+  "candidate_label": "BF",
+  "baseline_sha": "072dbf2fb824342c90110891b4612c9a30202c88",
+  "additional_references": [],
+  "issue_url": "https://github.com/klusik/PHP_gallery/issues/434",
+  "evidence_runs": {
+    "B0": 45281238339,
+    "B1": 45284687293,
+    "B2": 45287376241,
+    "B3": 45293381831
+  },
+  "related_runs": {
+    "Původní Windows měření B0": 45277051294,
+    "První párové měření Watcheru": 45283619841,
+    "Úprava skrytého logu a nečinných Flight popisků": 45289245149,
+    "Srovnání kratší dávky Watcheru": 45292689785,
+    "Varianta Importu se 125 ms": 45287540924,
+    "Varianta s kratším plánováním Lightboxu": 45293680458,
+    "Příprava pouze poslední zprávy Activity": 45295094548,
+    "Probouzení Activity writeru při naplnění prázdné fronty": 45296133602,
+    "Pauza po zaplněné dávce Watcheru 16 a 24 ms": 45297429867,
+    "Samostatná kontrola hotového rastru Lightboxu 16 a 8 ms": 45296366184,
+    "První úplné BF před experimentem se zápisem stavu": 45298904409,
+    "Kompaktní zápis stavu proti B0 a prvnímu BF": 45305609104,
+    "Opakované měření s opraveným sledováním Windows cesty": 45306880125,
+    "Ověření přesné hranice stáří progressu na Linuxu": 45309780671
+  },
+  "baseline_context": [
+    "B0 odpovídá WinApp 1.5.4. Watcher přepisoval stejné hodnoty Tk v idle. Import znovu četl trvalý stav při zveřejňování každé aktualizace. Lightbox prováděl převzorkování a obnovu obrazu během zpracování vstupu na vlákně Tk."
+  ],
+  "optimizations": [
+    "P1 porovnává aktuální stav s naposledy publikovanou hodnotou. Monitor má jednu položku Canvasu. Zápatí a viditelný log Activity dostávají dávku změn v původním pořadí. Zápis posledních událostí zachovává trvalé pořadí a budí worker při přechodu z prázdné fronty. Při nasycení dává delší pauza mezi dávkami více času vláknu Tk.",
+    "P2 vytváří neměnné revize po ověřeném uložení. Import a Activity přebírají jen změněné řádky z aktivní generace. Historie se načítá na pozadí a před opakováním se kontrolují uložený stav a cílová galerie.",
+    "P3 připravuje ořez a rastr v jednom Pillow workeru. Tk používá stálou položku Canvasu. BILINEAR zajišťuje interaktivní náhled, po ustálení se zobrazí LANCZOS. Přepnutí fotky dočasně zachová již zobrazený snímek v téže platné relaci. Odebrání přístupu ukončí rozpracované zobrazování a uvolní snímek."
+  ],
+  "variants": [
+    "U Watcheru následovalo po reportu B1 omezení skrytých zápisů a opakovaných popisků Flight. Další varianty oddělily přípravu zápatí, zbytečná probuzení Activity writeru a plánování naplněné fronty.",
+    "Test 24 ms po zaplněné dávce zlepšil warm burst drift vůči 16 ms. Při plné frontě zpracuje méně událostí než kratší varianta a stále podstatně více než B0. Běžný Watcher drží stejnou rychlost zpracování i odezvu.",
+    "U Importu se porovnávaly běžné intervaly 100 a 125 ms. Ve výsledku zůstává 100 ms.",
+    "Lightbox prověřil současnou změnu všech tří intervalů a samostatnou změnu kontroly výsledku. Ve výsledku zůstává náhled 33 ms, trailing LANCZOS 90 ms a kontrola výsledku 8 ms.",
+    "Po prvním úplném BF jsme porovnali kompaktní JSON zápis se stejnými daty, zámkem a readbackem. Původní B0 i první BF zůstaly pevně určené referenční zdroje."
+  ],
+  "reverted": [
+    "Zkrácení jednotlivé Watcher FIFO dávky z 8 na 4 ms zhoršilo p99 v běžném cold scénáři a neposkytlo průkazné zlepšení warm burstu.",
+    "Interval Importu 125 ms neprokázal zlepšení odezvy na platných buňkách. Jedna studená kombinovaná buňka nedokončila úklid syntetického profilu. V kódu zůstává výchozí interval 100 ms.",
+    "Lightbox s intervaly 24/72/8 ms zrychlil část náhledů a finálních snímků. Významně zhoršil drift při pravidelném cold 4K. Samostatná změna pollu neukázala stejnou regresi.",
+    "Kompaktní JSON nepřinesl spolehlivé zlepšení dlouhé souběžné relace proti prvnímu BF. V kratších scénářích měl nejvýše dílčí přínos. Finální runtime používá původní formátování a stejný postup ukládání jako první BF."
+  ],
+  "methodology": [
+    "Každá základní dvojice běží postupně na stejném GitHub-hosted Windows počítači. Pořadí AB a BA se střídá. Běžná buňka má deset samostatných párů a dlouhá zátěž tři.",
+    "Interval spolehlivosti vychází z párových rozdílů hodnot jednotlivých procesů. Cold a warm cache se vyhodnocují odděleně. Rozlišení zdrojového rastru a virtuálního displeje mají samostatná měření.",
+    "Opakování jednotlivé neúspěšné buňky B2 zachovává původní úplné párové buňky a u každé uvádí skutečný pokus.",
+    "Dlouhá relace používá pevné časové okno. Další krok se plánuje až po dokončení aktuálního. Počty skutečných kroků, nabízených a zpracovaných Watcher událostí a potvrzených položek jsou součástí výsledku.",
+    "Při doplňkovém měření persistence měly obě strany stejné probe pro vstup do kontextu accepted-work, práci pod ochranou kontextu a atomický zápis. Vstup zahrnuje čekání na zámek i systémové kontroly.",
+    "Časová řada B3 zahrnuje původní úplné buňky a opakovanou celou cold buňku. U každé je zaznamenaný skutečný pokus. Finální páry používají shodné fixture a stejný harness pro obě strany."
+  ],
+  "known_limits": [
+    "Časovač Tk, feedback a připojení do Canvasu měří software. Fyzická prezentace obrazu, reálné zařízení, produkční média a nainstalovaný klient vyžadují samostatná měření.",
+    "Tray scénář používá skrytí a obnovení okna. Nativní ikona a obsluha uživatelského sandboxu v něm zůstávají mimo měření.",
+    "Přesné čekání všech zámků a stáří každé události nebylo dostupné. Report ukazuje skutečné zaznamenané fronty a přenos latence pouze pro pokryté body.",
+    "MacOS má advisory pokrytí. Původní B0 vykazuje známé chyby v katalogu, cestách aktualizace a SimConnect.",
+    "Shell fixture připojuje WatcherApp přímo. Sleduje práci Tk a úložiště Activity, ale nezahrnuje celý start WinApp ani režii produkčního rotačního logu.",
+    "Kontrola packagingu sestavuje a ověřuje izolovaný výstup. Skutečný průchod instalací a odinstalací, cílový operační systém uživatele, obrazovka a produkční připojení mají samostatný rozsah.",
+    "Tříminutová relace má tři nezávislé páry. Rychlejší odbavení GUI v ní mění množství vykonané souběžné práce. Samotné položky Importu za sekundu proto neoddělují příspěvky jednotlivých částí aplikace."
+  ],
+  "recommendations": [
+    "Při další optimalizaci propustnosti oddělit v diagnostickém scénáři frekvenci nabídnuté práce od rychlosti Tk callbacků. Měřit přijaté položky, množství souběžné práce a čekání na stavový soubor.",
+    "Na fyzickém displeji ověřit skutečnou odezvu zoomu a změn velikosti na více DPI. Samostatně ověřit instalovaný klient a dostupné HDR prostředí."
+  ],
+  "remaining_problems": [
+    "Zveřejnění finálního rastru zahrnuje čekání na Pillow worker a bezpečné připojení na vlákně Tk. B3 ve více scénářích prokázal lepší odezvu na vstup i delší dobu do finálního rastru. Výsledky a intervaly společně ukazuje tabulka výkonu.",
+    "Extrémní burst může nadále vygenerovat více událostí, než se stihne zpracovat v měřeném okně. Odezva a skutečná propustnost mají v reportu samostatná měření.",
+    "V dílčích bězích se objevila občasná chyba Windows při atomické výměně testovacího souboru na referenčním i kandidátním kódu. Dva B0 procesy v cold B3 kombinaci dosáhly limitu životního cyklu Tk. Třetí celý pokus buňku dokončil se stejnými limity.",
+    "V dlouhé relaci má rychlejší GUI zhruba dvojnásobek dokončených kroků. Watcher přebírá větší objem skutečné práce. Počet zpracovaných událostí a latence předání průběhu se výrazně zlepšily, zatímco propustnost Importu při této kombinaci klesla. Doplňková měření ukázala značnou dobu v chráněné části accepted-work a omezený přínos kompaktní serializace.",
+    "Některé přímé buňky doplňkového pokusu na Windows nedokončily úklid syntetického profilu v existujícím limitu. Jedna buňka hlásila odmítnutí atomické výměny. Běhy a dílčí vzorky zůstávají dostupné v historii. Změna formátu byla odmítnuta."
+  ],
+  "architecture": {
+    "gui-pipeline": "FIFO zpracuje autoritativní události ve stejném pořadí. Sloučená projekce mění pouze GUI.",
+    "dirty-rendering": "Skryté panely přebírají datové změny a dohánějí viditelnou projekci po otevření.",
+    "import-progress": "Běžné změny řádků se slučují. Dokončení a jiné důležité přechody se zobrazí bez čekání na interval.",
+    "immutable-snapshots": "Revize vzniká po potvrzeném zápisu jobu. Opožděná generace nemůže přepsat nový výběr.",
+    "persistence-presentation": "Atomický zápis, lock a kontrola změny zůstávají u vlastníka trvalého stavu.",
+    "async-lightbox": "Tk vlastní PhotoImage a Canvas. Pixelová příprava ve workeru drží dosavadní limit a kvalitu.",
+    "latest-wins": "Změna zdroje, relace nebo oprávnění zahodí odpovídající čekající nebo hotový výsledek.",
+    "retained-canvas": "Při změně viewportu může zůstat původní povolený snímek z téže platné relace."
+  }
+}
