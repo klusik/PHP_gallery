@@ -1,5 +1,51 @@
 # Patch notes
 
+## Version 1.7.1
+
+PHP Gallery 1.7.1 includes WinApp 1.7.1 with steadier workspace switching,
+clearer loading feedback and configurable gallery thumbnail batches.
+
+### Highlights
+
+#### WinApp interface
+
+- Preserved the Settings scroll position and reduced repeated layout work
+  when switching between Gallery, Watcher and Settings. Kept the header
+  steady as Watcher started and finished. [#442](https://github.com/klusik/PHP_gallery/issues/442)
+- Added a shared soft shadow to the gallery loading card, updater and other
+  in-window cards. Centered dialogs and dimmed the surrounding workspace
+  when a modal dialog was active.
+- Added a thumbnail batch setting with choices of 8, 16, 24 or 32. The
+  default is 32 for established API reads, with an initial request of up
+  to eight thumbnails for early feedback.
+
+### Technical Details
+
+#### Gallery loading and compatibility
+
+- Used actual metadata counts while the total was unknown, then showed
+  progress based on the thumbnails visible in the viewport. Retained
+  backoff, the response-size limit and the fallback for older servers.
+- Reused the existing gallery widgets and skipped repeated geometry writes.
+  Preferred Segoe UI Variable Text when available on Windows.
+
+#### Verification and documentation
+
+- Added GitHub-hosted Windows and Linux Tk coverage for workspace switching,
+  Watcher transitions, saved thumbnail settings and updater progress. Windows
+  fixtures checked the painted shadow and dimmed backdrop at both widths.
+- Updated the WinApp guide and all four manual editions with the compact
+  link actions, thumbnail setting and loading behavior.
+
+### User Impact
+
+#### WinApp users
+
+- Kept the gallery usable while thumbnails arrived. The loading card
+  showed which phase was active during a slow catalogue read.
+- Applied a saved batch size to subsequent eligible thumbnail requests,
+  so users could tune loading for their connection from Settings.
+
 ## Version 1.7.0
 
 PHP Gallery 1.7.0 includes WinApp 1.7.0 with independent creation and
