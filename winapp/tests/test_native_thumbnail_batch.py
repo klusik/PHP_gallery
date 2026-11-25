@@ -23,6 +23,7 @@ from unittest import mock
 import test_native_gallery_viewer as native_fixture
 from uploader import app_linking as linking
 from uploader import native_gallery_viewer as viewer_module
+from uploader.config import THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE
 
 
 @unittest.skipUnless(
@@ -73,7 +74,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
         """Increase a healthy group and downshift exceptional observations.
 
         Returns:
-            None: Small, slow and exceptional groups retain the initial limit.
+            None: Only healthy framed observations unlock the saved limit.
         """
         stats = linking.ThumbnailBatchStats(
             batch_sizes={viewer_module.MEDIA_HTTP_BATCH_INITIAL_SIZE: 1},
@@ -81,15 +82,50 @@ class NativeThumbnailBatchTests(unittest.TestCase):
         completion = viewer_module._HttpBatchCompletion(
             1, 'ok', (), stats, linking.MediaReadTimings(), 0.0, True, 0,
         )
-        self.assertEqual(viewer_module.MEDIA_HTTP_BATCH_STEADY_SIZE,
-                         viewer_module._next_http_thumbnail_group_limit(completion))
-        self.assertEqual(viewer_module.MEDIA_HTTP_BATCH_INITIAL_SIZE,
-                         viewer_module._next_http_thumbnail_group_limit(replace(
-                             completion, elapsed=viewer_module.MEDIA_HTTP_BATCH_SLOW_SECONDS,
-                         )))
+        self.assertTrue(viewer_module._healthy_http_thumbnail_group(completion))
+        self.assertFalse(viewer_module._healthy_http_thumbnail_group(replace(
+            completion, elapsed=viewer_module.MEDIA_HTTP_BATCH_SLOW_SECONDS,
+        )))
         stats.wire_failures = 1
-        self.assertEqual(viewer_module.MEDIA_HTTP_BATCH_INITIAL_SIZE,
-                         viewer_module._next_http_thumbnail_group_limit(completion))
+        self.assertFalse(viewer_module._healthy_http_thumbnail_group(completion))
+
+    def test_admits_saved_steady_limits_and_keeps_the_initial_probe(self) -> None:
+        """Check the actual descriptors handed to the production batch worker.
+
+        Returns:
+            None: Worker admission uses the small first request, then respects
+                each saved choice and retains the four-item legacy result bound.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        empty = replace(page, photos=())
+        session = self._session(empty, presentation, image_bytes)
+        session.supports_thumbnail_batch.return_value = True
+        session.thumbnail_batch_preferred.return_value = True
+        gallery = linking.LinkedGallery(page.gallery_id, page.parent_id, 'Batches')
+        size = THUMBNAIL_BATCH_DEFAULT_SIZE
+        viewer = self._open_viewer(session, gallery, thumbnail_batch_size=lambda: size)
+        self.addCleanup(viewer.close)
+        self._wait_until(lambda: viewer._worker is None, 'Empty fixture did not settle.')
+        viewer._photos = tuple(
+            replace(page.photos[0], image_id=native_fixture.TEST_FIRST_IMAGE_ID + offset)
+            for offset in range(THUMBNAIL_BATCH_DEFAULT_SIZE)
+        )
+        viewer._thumbnail_pending = list(range(len(viewer._photos)))
+        probe = viewer_module.MEDIA_HTTP_BATCH_INITIAL_SIZE
+        self.assertEqual(4 * probe, THUMBNAIL_BATCH_DEFAULT_SIZE)
+        with mock.patch.object(viewer, '_run_http_thumbnail_batch') as fetch:
+            for healthy, size in ((False, size), *((True, n) for n in THUMBNAIL_BATCH_CHOICES)):
+                with self.subTest(healthy=healthy, size=size):
+                    viewer._http_thumbnail_group_healthy = healthy
+                    viewer._load_next_thumbnail()
+                    worker = viewer._worker
+                    self.assertIsNotNone(worker)
+                    worker.join(native_fixture.TEST_WORKER_JOIN_SECONDS)
+                    self.assertFalse(worker.is_alive())
+                    viewer._worker = None
+                    requested = fetch.call_args.args[3]
+                    self.assertEqual(viewer._photos[:size if healthy else probe], requested)
+        self.assertEqual(viewer_module.MEDIA_THUMBNAIL_BATCH_SIZE, viewer._events.maxsize)
 
     def test_first_batch_tile_is_visible_before_worker_completes(self) -> None:
         """Display a streamed tile while the same operation remains open.
@@ -797,7 +833,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
         page, presentation, image_bytes = self._gallery_data()
         photos = tuple(
             replace(page.photos[0], image_id=native_fixture.TEST_FIRST_IMAGE_ID + index)
-            for index in range(viewer_module.MEDIA_HTTP_BATCH_STEADY_SIZE)
+            for index in range(THUMBNAIL_BATCH_DEFAULT_SIZE)
         )
         body = image_bytes[page.photos[0].image_id]
         image_bytes.update({photo.image_id: body for photo in photos})

@@ -897,9 +897,6 @@ msgstr "Výběr propojené galerie pro nahrávání je dočasně nedostupný. St
 msgid "Linked upload target: "
 msgstr "Propojená galerie pro nahrávání: "
 
-msgid "Linked: "
-msgstr "Propojeno: "
-
 msgid "linking"
 msgstr "propojení"
 
@@ -1406,6 +1403,15 @@ msgstr "pouze server"
 
 msgid "Settings"
 msgstr "Nastavení"
+
+msgid "Server thumbnails per request"
+msgstr "Náhledy ze serveru na požadavek"
+
+msgid "Saves immediately. The first thumbnail request stays small."
+msgstr "Uloží se hned. První požadavek na náhledy zůstane malý."
+
+msgid "Could not save the thumbnail request size."
+msgstr "Velikost požadavku na náhledy se nepodařilo uložit."
 
 msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
 msgstr "Nastavení se uložilo, ale nepodařilo se upravit spouštění s Windows. Uložte nastavení znovu a pokus se zopakuje.\n\n"

@@ -225,6 +225,38 @@ _PANEL_CORNER_RADIUS = 10
 # Rationale: Region APIs must never resolve from the working directory or PATH.
 _LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 
+# Native API constants are the fixed Win32 extended-style index, window
+# flags and SetLayeredWindowAttributes alpha selector.
+_GWL_EXSTYLE = -20
+_WS_EX_LAYERED = 0x00080000
+_WS_EX_TRANSPARENT = 0x00000020
+_LWA_ALPHA = 0x00000002
+
+# Purpose: Subdue the modal background while keeping its context recognizable.
+# Type: int. Units: Win32 alpha byte. Scope: one app-client scrim.
+# Consumers: ModalScrim. Rationale: 104 of 255 gives a moderate dim without
+# touching the opaque dialog, system theme or other windows.
+_MODAL_SCRIM_ALPHA = 104
+
+# Purpose: Give elevated surfaces a soft, directional shadow over the real UI.
+# Type: tuple[tuple[int, int, int], ...]. Units: spread and drop in Tk pixels,
+# followed by the native alpha byte. Scope: one app-owned elevated surface.
+# Consumers: RaisedDialogSurface. Rationale: The 6/3 px outer layer and 3/2 px
+# inner layer use 22/34 alpha to define the edge without a hard outline.
+_RAISED_SHADOW_LAYERS = ((6, 3, 22), (3, 2, 34))
+
+# Purpose: Keep native body text comfortable across ttk and classic Tk.
+# Type: int. Units: points. Scope: default labels, entries and text views.
+# Consumers: _select_ui_font_family. Rationale: 10 points retains the current
+# ttk density and makes classic Tk text match the shared body labels.
+_UI_BODY_POINTS = 10
+
+# Purpose: Make inline progress secondary to the task it describes.
+# Type: int. Units: Tk pixels. Scope: compact gallery and updater tracks.
+# Consumers: configure_theme. Rationale: 5 px differentiates the progress
+# strip from filled action controls while retaining contrast.
+_COMPACT_PROGRESS_THICKNESS = 5
+
 # Purpose: Render antialiased edges for the compact source theme images.
 # Type: int; Units: scale factor; Scope: Pillow artwork generation.
 # Consumers: button and panel resampling before Tk image creation.
@@ -269,14 +301,15 @@ _PANEL_SHADOW_BLUR = 2
 # Rationale: light text and cyan actions remain legible on slate panels;
 #     semantic colors distinguish success, attention and failures.
 _PALETTE = {
-    "background": "#131B26",
-    "surface": "#182330",
-    "surface_alt": "#223344",
+    "background": "#192330",
+    "surface": "#202D3C",
+    "surface_alt": "#283A4C",
     "card_surface": "#253443",
     "card_surface_alt": "#2B3D4D",
     "ink": "#F2F6FA",
-    "muted": "#AABCCB",
+    "muted": "#BAC8D6",
     "line": "#3D5264",
+    "scrim": "#101923",
     "primary": "#08AED0",
     "primary_hover": "#22C3E2",
     "primary_pressed": "#008AA8",
@@ -311,7 +344,7 @@ _ICON_GLYPHS = {
 # Type: tuple[str, ...]; Units: installed Tk family names; Scope: uploader UI.
 # Consumers: configure_theme font-family selection.
 # Rationale: Use the installed text family instead of a symbol font for UI text.
-_UI_FONT_PREFERENCES = ("Segoe UI Variable Text", "Segoe UI")
+_UI_FONT_PREFERENCES = ("Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI")
 
 # Purpose: Keep compact semantic artwork crisp after reduction.
 # Type: int; Units: supersampling factor; Scope: smooth icon generation.
@@ -351,7 +384,7 @@ _SWITCH_IMAGE_SIZE = (38, 22)
 
 
 def _select_ui_font_family(root: tk.Misc) -> str:
-    """Select an installed static UI family and update Tk named fonts.
+    """Select the installed UI face and align the native Tk named fonts.
 
     Args:
         root (tk.Misc): Tk interpreter owning the fonts and option database.
@@ -379,6 +412,8 @@ def _select_ui_font_family(root: tk.Misc) -> str:
             named = tkfont.nametofont(name, root=root)
             if name == "TkHeadingFont":
                 named.configure(family=family, weight="bold")
+            elif name in {"TkDefaultFont", "TkTextFont"}:
+                named.configure(family=family, size=_UI_BODY_POINTS)
             else:
                 named.configure(family=family)
         except tk.TclError:
@@ -1367,7 +1402,7 @@ def configure_theme(root: tk.Misc) -> None:
     root.option_add("*TCombobox*Listbox.background", colors["surface"])
     root.option_add("*TCombobox*Listbox.foreground", colors["ink"])
     style.configure(".", background=colors["background"],
-                    foreground=colors["ink"], font=(_ui_font, 10))
+                    foreground=colors["ink"], font="TkDefaultFont")
     # Unqualified inner frames live inside cards. App/page containers select
     # App.TFrame or Backdrop.TFrame explicitly so toolbars never cut dark strips
     # through an otherwise continuous panel surface.
@@ -1465,6 +1500,10 @@ def configure_theme(root: tk.Misc) -> None:
                     foreground=colors["ink"])
     style.configure("Card.TFrame", background=colors["card_surface"],
                     relief="flat", borderwidth=0, padding=0)
+    style.configure("Shadow.TFrame", background=colors["scrim"],
+                    relief="flat", borderwidth=0, padding=0)
+    style.configure("RaisedFallback.TFrame", background=colors["card_surface"],
+                    bordercolor=colors["line"], relief="solid", borderwidth=1)
     style.map("TButton",
               background=[("pressed", colors["line"]),
                           ("active", colors["surface_alt"])],
@@ -1662,6 +1701,11 @@ def configure_theme(root: tk.Misc) -> None:
                     background=colors["primary"],
                     troughcolor=colors["line"], borderwidth=0,
                     thickness=8)
+    style.configure(
+        "Progress.Horizontal.TProgressbar", thickness=_COMPACT_PROGRESS_THICKNESS,
+        lightcolor=colors["primary"], darkcolor=colors["primary"],
+        bordercolor=colors["line"],
+    )
     style.configure("Vertical.TScrollbar",
                     background=colors["card_surface_alt"],
                     troughcolor=colors["background"],
@@ -1960,9 +2004,9 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         "tab_active": (("#365768", "#2B485C"), _PALETTE["background"],
                        _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                        _BUTTON_IMAGE_SIZE),
-        "panel": ((glass_top, glass_bottom), "#131B26",
+        "panel": ((glass_top, glass_bottom), _PALETTE["background"],
                   _PANEL_BORDER, _PANEL_CORNER_RADIUS, _PANEL_IMAGE_SIZE),
-        "inset": ((inset_top, inset_bottom), "#131B26",
+        "inset": ((inset_top, inset_bottom), _PALETTE["background"],
                   _PANEL_BORDER, _PANEL_CORNER_RADIUS, _PANEL_IMAGE_SIZE),
     }
     for name, (gradient, matte, border, radius, size) in asset_specs.items():
@@ -2358,6 +2402,230 @@ class GlassCard(_RoundedSurface, ttk.Frame):
 
 class DialogSurface(GlassCard):
     """In-window dialog surface inheriting the common card's theme and corners."""
+
+
+@cache
+def _load_scrim_user32() -> ctypes.CDLL | None:
+    """Bind the system compositor interface for the app-owned child only.
+
+    Returns:
+        ctypes.CDLL | None: Configured Windows exports, or None on a host
+            without native child-window alpha support.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        user32 = ctypes.WinDLL("user32.dll", winmode=_LOAD_LIBRARY_SEARCH_SYSTEM32)
+        user32.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.GetWindowLongW.restype = ctypes.c_long
+        user32.SetWindowLongW.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_long,
+        ]
+        user32.SetWindowLongW.restype = ctypes.c_long
+        user32.SetLayeredWindowAttributes.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_ubyte, ctypes.c_uint32,
+        ]
+        user32.SetLayeredWindowAttributes.restype = ctypes.c_int
+        return user32
+    except (AttributeError, OSError):
+        return None
+
+
+def _enable_child_alpha(
+    widget: tk.Misc, alpha: int, *, click_through: bool = False,
+) -> bool:
+    """Apply native alpha to one app-owned backdrop or decorative shadow.
+
+    Args:
+        widget (tk.Misc): Tk child whose native window supplies the layer.
+        alpha (int): Compositor opacity byte.
+        click_through (bool): Give pointer input to the underlying surface.
+    Returns:
+        bool: True after native acceptance, or False with the original style
+            restored when the host cannot composite the child.
+    """
+    user32 = _load_scrim_user32()
+    if user32 is None:
+        return False
+    handle = widget.winfo_id()
+    style = user32.GetWindowLongW(handle, _GWL_EXSTYLE)
+    flags = _WS_EX_LAYERED | (_WS_EX_TRANSPARENT if click_through else 0)
+    user32.SetWindowLongW(handle, _GWL_EXSTYLE, style | flags)
+    if ((user32.GetWindowLongW(handle, _GWL_EXSTYLE) & flags) == flags
+            and user32.SetLayeredWindowAttributes(handle, 0, alpha, _LWA_ALPHA)):
+        return True
+    user32.SetWindowLongW(handle, _GWL_EXSTYLE, style)
+    return False
+
+
+class _ShadowLayer(GlassCard):
+    """Own one rounded, non-interactive native shadow behind a card."""
+
+    def __init__(self, parent: tk.Misc, spread: int, drop: int) -> None:
+        """Create a layer in the same coordinate space as the foreground card.
+
+        Args:
+            parent (tk.Misc): Common parent of the card and its shadow.
+            spread (int): Extra Tk pixels beyond the card on each side.
+            drop (int): Vertical shadow offset in Tk pixels.
+        Returns:
+            None: The layer waits for native alpha and card geometry.
+        """
+        super().__init__(parent, style="Shadow.TFrame", takefocus=False)
+        self._rounded_fallback_style = "Shadow.TFrame"
+        self.configure(style=self._rounded_fallback_style)
+        self.spread = spread
+        self.drop = drop
+        self._released = False
+
+    def destroy(self) -> None:
+        """Release the shadow once during card or shared-parent teardown.
+
+        Returns:
+            None: A parent destroying its already-released child stays safe.
+        """
+        if not self._released:
+            self._released = True
+            super().destroy()
+
+
+class RaisedDialogSurface(DialogSurface):
+    """Provide the shared elevation for cards placed above application content."""
+
+    def __init__(
+        self, parent: tk.Misc,
+        **kwargs: str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage,
+    ) -> None:
+        """Create a normal dialog surface with retained decorative layers.
+
+        Args:
+            parent (tk.Misc): Placement container shared by the card and shadow.
+            **kwargs (str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage):
+                Existing dialog frame options such as style and padding.
+        Returns:
+            None: Shadow creation waits for mapping. A visible edge is used
+                on hosts that cannot composite the shadow.
+        """
+        kwargs.setdefault("style", "Card.TFrame")
+        super().__init__(parent, **kwargs)
+        self._shadow_layers: tuple[_ShadowLayer, ...] | None = (
+            None if _load_scrim_user32() is not None else ()
+        )
+        self._shadow_bounds: tuple[int, int, int, int] | None = None
+        self._rounded_fallback_style = "RaisedFallback.TFrame"
+        if self._shadow_layers == ():
+            self.configure(style=self._rounded_fallback_style)
+        self.bind("<Map>", self._place_shadow, add="+")
+        self.bind("<Configure>", self._place_shadow, add="+")
+        self.bind("<Unmap>", self._hide_shadow, add="+")
+        self.bind("<Destroy>", self._dispose_shadow, add="+")
+
+    def _place_shadow(self, event: tk.Event) -> None:
+        """Keep decorative layers just beneath the card's actual geometry.
+
+        Args:
+            event (tk.Event): Mapping or geometry event from the foreground.
+        Returns:
+            None: Creates and moves shadow windows only for mapped geometry.
+        """
+        if event.widget is not self or not self.winfo_ismapped():
+            return
+        x, y = self.winfo_x(), self.winfo_y()
+        width, height = self.winfo_width(), self.winfo_height()
+        if (x, y, width, height) == self._shadow_bounds or min(width, height) <= 1:
+            return
+        if self._shadow_layers is None:
+            layers: list[_ShadowLayer] = []
+            for spread, drop, alpha in _RAISED_SHADOW_LAYERS:
+                layer = _ShadowLayer(self.master, spread, drop)
+                if _enable_child_alpha(layer, alpha, click_through=True):
+                    layers.append(layer)
+                else:
+                    layer.destroy()
+            self._shadow_layers = tuple(layers)
+            if not layers:
+                self.configure(style=self._rounded_fallback_style)
+        for layer in self._shadow_layers:
+            layer.place(
+                x=x - layer.spread, y=y + layer.drop - layer.spread,
+                width=width + 2 * layer.spread, height=height + 2 * layer.spread,
+                bordermode="outside",
+            )
+            layer.lower(self)
+        self._shadow_bounds = (x, y, width, height)
+
+    def lift(self, aboveThis: tk.Misc | None = None) -> None:
+        """Raise the foreground and retain its shadow in the same stack.
+
+        Args:
+            aboveThis (tk.Misc | None): Optional sibling stacking reference.
+        Returns:
+            None: The shadow stays beneath the card and above its backdrop.
+        """
+        super().lift(aboveThis)
+        for layer in self._shadow_layers or ():
+            if layer.winfo_manager():
+                layer.lower(self)
+
+    def _hide_shadow(self, event: tk.Event) -> None:
+        """Unmap the shadow along with the foreground card.
+
+        Args:
+            event (tk.Event): Unmap event from the elevated card.
+        Returns:
+            None: Retains unmapped layers for the next display of this card.
+        """
+        if event.widget is self:
+            for layer in self._shadow_layers or ():
+                layer.place_forget()
+            self._shadow_bounds = None
+
+    def _dispose_shadow(self, event: tk.Event) -> None:
+        """Release decorative siblings when the foreground is destroyed.
+
+        Args:
+            event (tk.Event): Destroy event from the elevated card.
+        Returns:
+            None: Leaves no shadow widgets or native windows behind.
+        """
+        if event.widget is self:
+            for layer in self._shadow_layers or ():
+                layer.destroy()
+            self._shadow_layers = ()
+
+
+class ModalScrim(tk.Frame):
+    """Dim the existing client behind a modal card with native compositing."""
+
+    def __init__(self, root: tk.Misc) -> None:
+        """Create one initially unmapped, nonfocusable child of the main window.
+
+        Args:
+            root (tk.Misc): Existing window whose client area may be dimmed.
+        Returns:
+            None: The shared shell can place this child beneath its top card.
+        """
+        super().__init__(
+            root, background=_PALETTE["scrim"], takefocus=False,
+            borderwidth=0, highlightthickness=0,
+        )
+        # A host without alpha leaves the scrim unmapped. The centered card
+        # and shell-owned grab remain available on that compatibility path.
+        self.composited = _enable_child_alpha(self, _MODAL_SCRIM_ALPHA)
+
+    def show(self, surface: DialogSurface) -> None:
+        """Dim the client and raise the active card above the dimmed siblings.
+
+        Args:
+            surface (DialogSurface): Active card sharing this frame's parent.
+        Returns:
+            None: The card is raised even on hosts that cannot dim the client.
+        """
+        if self.composited:
+            if not self.winfo_manager():
+                self.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.lift()
+        surface.lift()
 
 
 class MetricCard(GlassCard):

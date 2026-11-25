@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.7.0}
-\newcommand{\manualdate}{24.~November~2026}
+\newcommand{\version}{1.7.1}
+\newcommand{\manualdate}{25.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2226,15 +2226,15 @@ falls erforderlich. Interne Hosting-Verzeichnisse gehören nicht in die
 Verbindungsadresse. Bei internen Pfadumschreibungen prüft PHP Gallery~1.0.1
 den öffentlichen Installationspfad.
 
-Die drei Punkte neben \ui{Website trennen} öffnen die Verbindungsübersicht.
+Die drei Punkte neben der verbundenen Adresse öffnen die Verbindungsübersicht.
 Unter \ui{Aktiv verbunden} wechseln Sie mit der bestehenden Genehmigung.
 Das Profil behält bis zu 20~Einträge unter \ui{Letzte Adressen} über einen
 Neustart hinweg. Wählen Sie eine Adresse für eine neue Genehmigung.
 Das Ein/Aus-Symbol trennt die gewählte Website, das Kreuz entfernt eine
 letzte Adresse. Das Upload-Ziel hat eine eigene Auswahl.
 
-Öffnen Sie \ui{Choose gallery…} neben der Adresse und geben Sie einen
-Suchbegriff in \ui{Galerien suchen} ein. Titel haben Vorrang vor
+Öffnen Sie das Listensymbol \ui{Galerie auswählen…} neben der Adresse und geben
+Sie einen Suchbegriff in \ui{Galerien suchen} ein. Titel haben Vorrang vor
 Beschreibungen und Galerie-Tags. Die Titelsuche toleriert kleine Tippfehler.
 Anführungszeichen und \texttt{AND}/\texttt{OR} funktionieren wie auf der
 Website. Einrückung und übergeordnete Titel der Auswahl zeigen die Hierarchie.
@@ -2248,8 +2248,8 @@ In einem unterstützten lokalen Profil verwendet WinApp die genehmigte
 Upload-Berechtigung automatisch, auch beim Start aus dem Quellcode unter
 macOS. Nach der Prüfung zeigt \ui{Upload gallery} das
 Ziel in Watcher und Import. Die drei Punkte öffnen weitere Galerieaktionen.
-\ui{Website trennen} beendet die aktuelle Verbindung. Verbinden Sie nach einem
-Neustart dasselbe Konto und wählen Sie die Galerie erneut. Erweiterte Rechte
+Das Kreuz \ui{Website trennen} beendet die aktuelle Verbindung. Verbinden Sie
+nach einem Neustart dasselbe Konto und wählen Sie die Galerie erneut. Erweiterte Rechte
 finden Sie in den Einstellungen unter \ui{Manage link…}. Uploads per
 API-Schlüssel verwenden eine eigene \ui{Gallery URL} und einen
 galeriegebundenen Schlüssel.
@@ -2643,9 +2643,12 @@ Antwort ist \texttt{private, no-store}. SHA-256 prüft Bytes, erlaubt aber keine
 Cache-Nutzung. Admin-Vorladen bleibt getrennt. Der Server rechnet N angeforderte
 Fotos auf die bestehenden Grenzen von 600/IP und 3\,600 insgesamt sowie
 600/account je fünf Minuten an. Er hält höchstens ein 4-MiB-Bild gleichzeitig
-im Speicher. WinApp beginnt bei Unterstützung mit Gruppen von acht und nutzt
-nach einer erfolgreichen Gruppe bis zu sechzehn; langsame, große oder besondere
-Gruppen führen zurück zu acht. Unbestätigte Originale behalten Einzelabrufe.
+im Speicher. WinApp beginnt bei Unterstützung mit bis zu acht Fotos. Nach
+einer erfolgreichen Gruppe gilt die Auswahl unter
+\ui{Einstellungen > Server-Vorschaubilder pro Anfrage}. Verfügbar sind 8, 16,
+24 und 32, mit 32 als Standard. Die Auswahl wird sofort gespeichert.
+Langsame, große oder besondere Gruppen führen zurück zur kleinen Anfrage.
+Unbestätigte Originale behalten Einzelabrufe.
 Die Abnahme von FPM, Proxy und HTTPS auf dem Zielserver ist noch offen; der
 Standardwert bestätigt sie nicht. Einzelabrufe bleiben als
 Rückfall für gemischte Versionen und Sonderfälle unterstützt.
@@ -3251,12 +3254,17 @@ weiter. Das Schließen der Einstellungen startet keinen Vorgang. Opake
 RGB-Grafiken sichern die Darstellung unter Windows Tk; ohne Pillow bleiben
 im Quellmodus native Bedienelemente zur Reparatur verfügbar.
 
-Windows bevorzugt die installierte Schrift Segoe UI Variable Text,
-ersatzweise Segoe UI oder die native Tk-Schrift. Gemeinsame Textstile
+Windows bevorzugt die installierte Schrift Segoe UI Variable Text oder
+Segoe UI Variable, ersatzweise Segoe UI oder die native Tk-Schrift. Gemeinsame Textstile
 beachten die Windows-Schriftglättung; Diagnoseanzeigen mit fester
 Zeichenbreite behalten ihre Schrift. Übliche Steuer-, Cache-, Pin- und
 Aufzeichnungssymbole verwenden in höherer Auflösung erzeugte, geglättete
-Grafiken. Ohne Pillow bleiben lesbare native Zeichen verfügbar. Die App
+Grafiken. Ohne Pillow bleiben lesbare native Zeichen verfügbar. Überlagerte
+Karten haben einen weichen Schatten. Modale Dialoge dunkeln auf unterstützten
+Windows-Systemen zusätzlich die Umgebung ab. Der Ladefortschritt bleibt
+in der unteren Ecke und blockiert die Galeriebedienung nicht. Die gemeinsame
+Kopfleiste bleibt beim Wechsel zwischen Fotos und Watcher an Ort und Stelle.
+Die App
 lädt keine Schriften und ändert keine Systemeinstellungen. Vor dem ersten
 Fenster fordert ein nicht DPI-bewusster Windows-Prozess System-DPI-Bewusstsein
 an und bewahrt einen vorhandenen Manifestkontext. Eine automatische
@@ -11214,7 +11222,7 @@ Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal
 Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
 ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte
 Identitätsnachweis und die bisherigen Prozess-/Koordinatorfristen bleiben Pflicht.
-Sieben serielle Gruppen erhalten fünf exklusive Messgruppen und zwei
+Acht serielle Gruppen erhalten fünf exklusive Messgruppen und drei
 deterministische Rest-Shards, die Klassen zusammenhalten. Jeder Prozess erhält
 explizite Quell-/Test-Importpfade.
 

@@ -236,7 +236,15 @@ async function runFirefox(driverDirectory, result) {
             capabilities: {alwaysMatch: {
                 browserName: 'firefox',
                 pageLoadStrategy: 'none',
-                'moz:firefoxOptions': {args: ['-headless']},
+                'moz:firefoxOptions': {
+                    // Start on a blank document. Home and welcome scripts
+                    // otherwise contend with session startup in fresh profiles.
+                    args: ['-headless', '-url', 'about:blank'],
+                    prefs: {
+                        'browser.aboutwelcome.enabled': false,
+                        'browser.newtabpage.enabled': false,
+                    },
+                },
             }},
         }), deadline);
         const {value} = await created.json();

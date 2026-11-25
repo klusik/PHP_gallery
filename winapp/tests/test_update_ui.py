@@ -19,11 +19,12 @@ import threading
 from types import SimpleNamespace
 import unittest
 from typing import Callable
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from uploader.update_ui import (
     UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+    _UPDATE_DIALOG_SIZE,
     InstallGate,
     UpdateController,
     check_due,
@@ -538,9 +539,8 @@ class UpdateControllerTests(unittest.TestCase):
         """A restored offer remains usable after a failed fresh check.
 
         Returns:
-            None: The new notice shows the cached version/action and is placed
-                nonmodally over its invoking window on the secondary monitor,
-                then releases its fixed size for later status changes.
+            None: The centered card shows the cached version and download
+                action without resizing the root or taking its own second grab.
         """
         controller = self.controller()
         controller.installer = None
@@ -569,14 +569,12 @@ class UpdateControllerTests(unittest.TestCase):
             controller.poll()
 
             window = Mock()
-            window.winfo_reqwidth.return_value = 400
-            window.winfo_reqheight.return_value = 200
             status = Mock()
             button = Mock()
             ttk_stub = SimpleNamespace(
                 Label=Mock(return_value=Mock()),
                 Progressbar=Mock(return_value=Mock()),
-                Frame=Mock(return_value=Mock()),
+                Frame=Mock(side_effect=[Mock(), Mock()]),
                 # Update, Cancel and Later are distinct native controls.
                 Button=Mock(side_effect=[button, Mock(), Mock()]),
             )
@@ -589,17 +587,17 @@ class UpdateControllerTests(unittest.TestCase):
                 patch('uploader.update_ui.tk', tkinter_stub),
                 patch('uploader.update_ui.ttk', ttk_stub),
                 patch('uploader.update_ui.Button', ttk_stub.Button),
-                patch('uploader.update_ui.EmbeddedWindow', return_value=window),
+                patch('uploader.update_ui.EmbeddedWindow', return_value=window) as embedded,
             ):
                 controller.open_updates()
             self.assertEqual(len(operations), 1)
             self.assertIs(controller.window, window)
-            window.transient.assert_called_once_with(controller.root)
-            self.assertEqual(window.geometry.call_args_list, [
-                call('400x200+3250+1200'),
-                call(''),
-            ])
+            embedded.assert_called_once_with(controller.root, size=_UPDATE_DIALOG_SIZE)
+            window.withdraw.assert_called_once_with()
+            window.deiconify.assert_called_once_with()
+            window.geometry.assert_not_called()
             window.grab_set.assert_not_called()
+            tkinter_stub.Toplevel.assert_not_called()
             shown_text = str(status.set.call_args.args[0])
             self.assertIn(asset.version, shown_text)
             button.configure.assert_any_call(

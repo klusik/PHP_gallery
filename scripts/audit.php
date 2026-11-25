@@ -180,7 +180,7 @@ const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
  * Units: seconds. Scope: one partitioned WinApp coordinator process.
  * Consumers: audit_run_winapp_partitioned().
  * Rationale: preserve the existing 480-second whole-run ceiling and 90-second
- *     child caps while splitting the canonical remainder into two class-
+ *     child caps while splitting the canonical remainder into three class-
  *     preserving shards beside five isolated measured groups. Incomplete
  *     aggregate coverage remains a failure.
  */
@@ -256,7 +256,7 @@ if ($options['help']) {
       candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
       source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
       portable  Shared full Node and WinApp owners.
-      winapp-partitioned  Complete WinApp inventory in seven serial class-preserving processes.
+      winapp-partitioned  Complete WinApp inventory in eight serial class-preserving processes.
       thumbnail-batch-viewer  Owned exact-SHA Windows Tk thumbnail benchmark.
       issue-362-c1-tree-http Current-SHA disposable gallery tree diagnostics.
       issue-362-c1-photos-workspace Current-SHA Windows PhotosWorkspace diagnostics.
@@ -1814,7 +1814,7 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
 }
 
 /**
- * Run complete WinApp discovery in seven serial, structured child processes.
+ * Run complete WinApp discovery in eight serial, structured child processes.
  *
  * @param list<string>|null $python Python executable and option prefix, or null when unavailable.
  * @return array{id:'winapp-partitioned',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Full-suite outcomes with exact partition and real process evidence.
@@ -1824,7 +1824,7 @@ function audit_run_winapp_partitioned(?array $python): array
     global $root, $runDirectory, $persistReports;
     $started = microtime(true);
     $id = 'winapp-partitioned';
-    $label = 'WinApp complete regression (seven serial class partitions)';
+    $label = 'WinApp complete regression (eight serial class partitions)';
     if (!is_dir($root . '/winapp/tests')) {
         return task_result(
             $id,
@@ -1885,7 +1885,7 @@ function audit_run_winapp_partitioned(?array $python): array
         @unlink($reportPath);
     }
     $counts = $evaluated['counts'];
-    $summary = $counts['total'] . ' tests across seven serial class partitions: '
+    $summary = $counts['total'] . ' tests across eight serial class partitions: '
         . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / '
         . $counts['errors'] . ' error / ' . $counts['skipped'] . ' skip.';
     if (is_array($evaluated['partition_proof'])) {
@@ -3352,7 +3352,7 @@ function audit_suite_console_label(string $suiteId): string
         'browser-map' => 'Chromium browser integration',
         'website' => 'Static project website',
         'winapp' => 'WinApp regression',
-        'winapp-partitioned' => 'WinApp complete regression (seven serial class partitions)',
+        'winapp-partitioned' => 'WinApp complete regression (eight serial class partitions)',
         'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',

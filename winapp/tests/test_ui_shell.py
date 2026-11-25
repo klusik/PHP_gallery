@@ -9,13 +9,17 @@
 # License: MIT License (see LICENSE file in repository)
 """Regression coverage for the root-hosted application panel stack."""
 
+import os
 import sys
+import tempfile
 import tkinter as tk
 from tkinter import ttk
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from types import SimpleNamespace
 from unittest import mock
+from PIL import ImageGrab
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
@@ -26,7 +30,9 @@ import uploader.flight_ui as flight_ui
 from uploader.ui_shell import (
     EmbeddedWindow, active_panel, initialize_shell, messagebox, simpledialog,
 )
-from uploader.ui_theme import Button, DialogSurface
+from uploader import ui_theme
+from uploader.ui_theme import Button, DialogSurface, configure_theme
+from uploader.update_ui import UpdateController
 
 # Purpose: Release synchronous prompts if a regression loses their response.
 # Type: int. Units: milliseconds. Scope: one isolated shell test.
@@ -45,6 +51,18 @@ SHELL_KEY_POLL_MS = 20
 # Consumers: EmbeddedShellTests.setUp. Rationale: 840x500 matches the launcher
 # minimum; Tk's tiny default root can leave the entry unmapped below the text.
 SHELL_TEST_GEOMETRY = '840x500'
+
+# Purpose: Exercise both a typical application width and its compact minimum.
+# Type: tuple[tuple[int, int], ...]. Units: Tk pixels. Scope: modal visual cases.
+# Consumers: EmbeddedShellTests. Rationale: 1024 by 640 fits the hosted desktop;
+# 840 by 500 exercises the launcher minimum and its footer.
+SHELL_VISUAL_SIZES = ((1024, 640), (840, 500))
+
+# Purpose: Retain hosted native visual evidence with the central audit reports.
+# Type: Path. Units: repository-relative directory. Scope: Windows shell fixture.
+# Consumers: EmbeddedShellTests.capture_root.
+# Rationale: Use the existing workflow's uploaded evidence tree.
+SHELL_VISUAL_DIR = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'winapp-shell'
 
 
 class EmbeddedShellTests(unittest.TestCase):
@@ -115,6 +133,126 @@ class EmbeddedShellTests(unittest.TestCase):
         first.destroy()
         self.assertIsNone(active_panel(self.root))
 
+    def capture_root(
+        self, name: str, sample: tuple[int, int] = (8, 8),
+    ) -> tuple[int, int, int]:
+        """Retain a screenshot and sample its unobstructed fixture background.
+
+        Args:
+            name (str): Windows evidence image stem.
+            sample (tuple[int, int]): Client pixel to measure, defaulting to a
+                point just inside its upper-left corner.
+        Returns:
+            tuple[int, int, int]: Captured RGB sample.
+        """
+        self.root.update()
+        x, y = self.root.winfo_rootx(), self.root.winfo_rooty()
+        bounds = (x, y, x + self.root.winfo_width(), y + self.root.winfo_height())
+        SHELL_VISUAL_DIR.mkdir(parents=True, exist_ok=True)
+        with ImageGrab.grab(bbox=bounds).convert('RGB') as image:
+            image.save(SHELL_VISUAL_DIR / f'{name}.png')
+            return image.getpixel(sample)
+
+    def test_centered_panel_keeps_margins_without_compositing(self) -> None:
+        """Keep the centered panel usable on the portable noncomposited path.
+
+        Returns:
+            None: A resize keeps all edges inside the root and closing restores
+                the invoking focus without introducing another native window.
+        """
+        trigger = ttk.Entry(self.root)
+        trigger.pack()
+        self.root.update()
+        trigger.focus_force()
+        with mock.patch.object(ui_theme, '_load_scrim_user32', return_value=None):
+            panel = EmbeddedWindow(trigger)
+        self.addCleanup(panel.destroy)
+        self.assertFalse(self.root._embedded_scrim.winfo_manager())
+        self.assertEqual("RaisedFallback.TFrame", panel._surface.cget('style'))
+        for width, height in SHELL_VISUAL_SIZES:
+            self.root.geometry(f"{width}x{height}")
+            self.root.update()
+            surface = panel._surface
+            self.assertGreater(surface.winfo_x(), 0)
+            self.assertGreater(surface.winfo_y(), 0)
+            self.assertAlmostEqual(self.root.winfo_width() / 2,
+                                   surface.winfo_x() + surface.winfo_width() / 2, delta=1)
+            self.assertAlmostEqual(self.root.winfo_height() / 2,
+                                   surface.winfo_y() + surface.winfo_height() / 2, delta=1)
+        self.assertIs(self.root.grab_current(), panel._surface)
+        panel.destroy()
+        self.root.update()
+        self.assertIs(self.root.focus_get(), trigger)
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Native child alpha requires Windows.')
+    def test_updater_stays_centered_and_dims_the_existing_client(self) -> None:
+        """Exercise updater rendering and ordered phase changes with no downloads.
+
+        Returns:
+            None: Desktop and narrow screenshots show both the window dim and
+                the distinct card shadow. Later restores the background.
+        """
+        configure_theme(self.root)
+        # A uniform fixture surface makes actual alpha measurable at the edge.
+        self.root.configure(background='#6088A8')
+        self.root.lift()
+        host = SimpleNamespace(root=self.root, exiting=False)
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.dict(os.environ, {"LOCALAPPDATA": directory}),
+            mock.patch.object(self.root, 'after'),
+        ):
+            controller = UpdateController(host, '1.7.1')
+        for width, height in SHELL_VISUAL_SIZES:
+            with self.subTest(width=width):
+                self.root.geometry(f'{width}x{height}+0+0')
+                normal = self.capture_root(f'{width}-client')
+                self.assertEqual((96, 136, 168), normal)
+                controller.show()
+                self.root.update()
+                panel = controller.window
+                self.assertIsNotNone(panel)
+                self.assertTrue(self.root._embedded_scrim.composited)
+                self.assertIs(self.root.grab_current(), panel._surface)
+                self.assertGreater(panel._surface.winfo_x(), 0)
+                self.assertGreater(panel._surface.winfo_y(), 0)
+                dimmed = self.capture_root(f'{width}-updater-check')
+                scrim = ui_theme._hex_rgb(ui_theme._PALETTE['scrim'])
+                self.assertLess(sum(scrim), sum(dimmed))
+                self.assertLess(sum(dimmed), sum(normal))
+                surface = panel._surface
+                shadows = surface._shadow_layers
+                self.assertTrue(shadows and all(layer.winfo_ismapped() for layer in shadows))
+                # Sample two pixels outside the right edge, away from corners.
+                shadow_at = (
+                    surface.winfo_x() + surface.winfo_width() + 2,
+                    surface.winfo_y() + surface.winfo_height() // 2,
+                )
+                shaded = self.capture_root(f'{width}-updater-shadow', shadow_at)
+                self.assertLess(sum(shaded), sum(dimmed))
+                with (
+                    mock.patch.object(self.root, 'after'),
+                    mock.patch.object(
+                        controller, '_present_download_progress',
+                        wraps=controller._present_download_progress,
+                    ) as publish,
+                ):
+                    for done in (10, 20, 30):
+                        controller.events.put(('progress', (done, 100)))
+                    controller.poll()
+                    publish.assert_called_once_with(30, 100)
+                self.assertEqual(30, float(controller.progress['value']))
+                self.capture_root(f'{width}-updater-download')
+                body = controller.progress.master
+                status = next(widget for widget in body.winfo_children()
+                              if isinstance(widget, ttk.Label))
+                style = ttk.Style(self.root)
+                self.assertEqual(style.lookup(body.cget('style'), 'background'),
+                                 style.lookup(status.cget('style'), 'background'))
+                controller.later()
+                self.assertEqual(normal, self.capture_root(f'{width}-restored'))
+                self.assertTrue(all(not layer.winfo_ismapped() for layer in shadows))
+
     def test_flight_saved_reports_render_actions_in_embedded_footer(self) -> None:
         """Build the actual report controls inside an embedded application host.
 
@@ -122,14 +260,19 @@ class EmbeddedShellTests(unittest.TestCase):
             None: Saved-report footer actions mount on the root-owned flight
                 panel without relying on native dialog-only attributes.
         """
-        controller = object.__new__(flight_ui.FlightUI)
-        controller.host = SimpleNamespace(
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        host = SimpleNamespace(
             root=self.root,
+            simulator_presence=SimpleNamespace(text=lambda key, _locale: key),
             open_log_file=mock.Mock(),
         )
-        controller.report_dialog = None
-        controller.report_detail_var = tk.StringVar(master=self.root)
-        controller.text = mock.Mock(side_effect=lambda key: key)
+        with mock.patch.object(self.root, "after"):
+            controller = flight_ui.FlightUI(
+                host, Path(directory.name), str, mock.Mock(), mock.Mock(),
+            )
+        self.assertIsNotNone(controller.lease, controller.load_error)
+        self.addCleanup(controller.lease.release)
         controller.refresh_reports = mock.Mock()
 
         controller.show_reports()
@@ -139,15 +282,18 @@ class EmbeddedShellTests(unittest.TestCase):
         self.assertIs(active_panel(self.root), controller.report_dialog)
         self.assertIsNotNone(controller.report_tree)
         self.assertEqual(1, controller.refresh_reports.call_count)
-        pending = [controller.report_dialog]
-        button_labels = []
-        while pending:
-            widget = pending.pop()
-            if isinstance(widget, ttk.Button):
-                button_labels.append(widget.cget("text"))
-            pending.extend(widget.winfo_children())
-        self.assertIn("finish_pdf", button_labels)
-        self.assertIn("open_app_log", button_labels)
+        self.assertEqual("create_local_pdf", controller.report_button.cget("text"))
+        self.assertEqual("report_create_upload", controller.report_upload_button.cget("text"))
+        self.assertTrue(controller.report_button.winfo_viewable())
+        self.assertTrue(controller.report_upload_button.winfo_viewable())
+        menu = controller.report_menu
+        labels = {
+            menu.entrycget(index, "label")
+            for index in range(menu.index("end") + 1)
+            if menu.type(index) == "command"
+        }
+        self.assertIn("finish_pdf", labels)
+        self.assertIn("open_app_log", labels)
         controller.report_dialog.destroy()
 
     def test_confirmation_close_cancels(self) -> None:

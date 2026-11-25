@@ -1253,14 +1253,15 @@ class FlightUI:
         Args:
             width (int): Allocated Treeview width in Tk pixels.
         Returns:
-            None: Sizes the flight-name column around the fixed metadata widths.
+            None: Fits the full metadata set when the minimum name width
+                allows it. Smaller widths prioritize the flight and PDF count.
         """
         minimum, preferred = REPORT_NAME_WIDTHS
         started, _samples, pdfs, *_details = REPORT_COLUMN_WIDTHS
         # Two pixels per edge leave room for the native Treeview border.
         available = max(0, width - 4)
         metadata = sum(REPORT_COLUMN_WIDTHS)
-        if available >= preferred + metadata:
+        if available >= minimum + metadata:
             name_width = available - metadata
         else:
             name_width = max(minimum, min(preferred, available - started - pdfs))

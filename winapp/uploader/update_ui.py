@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Module Type: Windows Tooling
-# Purpose: Coordinate nonmodal self-update UI and external installer handoff.
+# Purpose: Coordinate the self-update interface and external installer handoff.
 # Responsibilities:
 #   - Keep update scheduling separate from gallery credentials and saved settings.
 #   - Stop new work before installer handoff and wait without blocking Tk.
@@ -27,7 +27,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from uploader import self_update, update_helper
-from uploader.ui_theme import Button, place_dialog
+from uploader.ui_theme import Button
 from uploader.localization import gettext, gettext_noop
 from uploader.state_store import atomic_write_json
 from uploader.ui_shell import EmbeddedWindow
@@ -130,6 +130,12 @@ UPDATE_DIAGNOSTIC_RECENT_LIMIT = 24
 # Consumers: read_update_state.
 # Rationale: Preserve the existing 16 KiB metadata cap against malformed local data.
 UPDATE_STATE_MAX_BYTES = 16384
+
+# Purpose: Fit the update status, progress and controls into a centered card.
+# Type: tuple[int, int]. Units: Tk pixels. Scope: one update dialog.
+# Consumers: UpdateController.show.
+# Rationale: 620 by 250 fits the translated installer handoff and action row.
+_UPDATE_DIALOG_SIZE = (620, 250)
 
 
 class InstallGate:
@@ -319,32 +325,52 @@ class UpdateController:
         return True
 
     def show(self) -> None:
-        """Show a reusable, nonmodal notice without a grab or confirmation dialog.
+        """Show a reusable centered update card while background work continues.
 
         Returns:
-            None: Raises the current notice or creates one sized to its current
-                text and controls, including later background status changes.
+            None: Raises the existing card or creates its status and controls.
         """
         if self.window is not None and self.window.winfo_exists():
             self.window.deiconify()
             self.window.lift()
             return
-        self.window = EmbeddedWindow(self.root)
+        self.window = EmbeddedWindow(self.root, size=_UPDATE_DIALOG_SIZE)
         self.window.withdraw()
         self.window.title(gettext("PHP Gallery Uploader updates"))
         self.window.protocol("WM_DELETE_WINDOW", self.later)
         self.status = tk.StringVar(value=gettext("Checking for updates..."))
-        ttk.Label(
-            self.window,
+        body = ttk.Frame(self.window, padding=(18, 8), style="Card.TFrame")
+        body.pack(fill="both", expand=True)
+        status_label = ttk.Label(
+            body,
             textvariable=self.status,
-            style="App.TLabel",
+            style="Card.TLabel",
             justify="left",
-            wraplength=470,
-        ).pack(fill="x", padx=18, pady=14)
-        self.progress = ttk.Progressbar(self.window, length=450, maximum=100)
-        self.progress.pack(padx=18, pady=8)
-        buttons = ttk.Frame(self.window, style="App.TFrame")
-        buttons.pack(pady=12)
+            anchor="nw",
+        )
+        status_label.pack(fill="both", expand=True, pady=(0, 8))
+        wrap_width: int | None = None
+
+        def fit_status(event: tk.Event) -> None:
+            """Wrap the message on actual width changes within the card.
+
+            Args:
+                event (tk.Event): Configure event for the status label.
+            Returns:
+                None: Repeated height-only events leave wrapping unchanged.
+            """
+            nonlocal wrap_width
+            if event.width != wrap_width:
+                status_label.configure(wraplength=event.width)
+                wrap_width = event.width
+
+        status_label.bind("<Configure>", fit_status, add="+")
+        self.progress = ttk.Progressbar(
+            body, style="Progress.Horizontal.TProgressbar", maximum=100,
+        )
+        self.progress.pack(fill="x", pady=8)
+        buttons = ttk.Frame(body, style="Card.TFrame")
+        buttons.pack(anchor="e", pady=(8, 0))
         self.action = Button(
             buttons,
             text=gettext("Update"),
@@ -357,10 +383,6 @@ class UpdateController:
         self.cancel_button.pack(side="left", padx=5)
         Button(buttons, text=gettext("Later"), command=self.later).pack(side="left", padx=5)
         self._restore_notice_state()
-        place_dialog(self.window, self.root)
-        # Center once, then let Tk fit the wrapped status and complete button
-        # row when the asynchronous check replaces the short checking message.
-        self.window.geometry("")
         self.window.deiconify()
 
     def _restore_notice_state(self) -> None:
@@ -831,19 +853,47 @@ class UpdateController:
         )
         return result
 
+    def _present_download_progress(self, done: int, total: int) -> None:
+        """Publish the newest byte count for one contiguous progress burst.
+
+        Args:
+            done (int): Bytes written and hashed by the updater.
+            total (int): Published installer size in bytes.
+        Returns:
+            None: Updates changed display values on the existing card.
+        """
+        percent = 100 * done / total if total else 0  # Standard percentage scale.
+        if percent != float(self.progress["value"]):
+            self.progress["value"] = percent
+        caption = gettext(
+            "Downloading installer: {done:,} / {total:,} bytes",
+        ).format(done=done, total=total)
+        if self.status.get() != caption:
+            self.status.set(caption)
+
     def poll(self) -> None:
         """Apply queued phase transitions and app-wide indicators on Tk only.
 
         Returns:
-            None: Applies available worker events and schedules the next poll.
+            None: Applies ordered phase events and one byte update per
+                intervening progress burst, then schedules the next poll.
         """
         if self.app.exiting:
             return
+        pending_progress: tuple[int, int] | None = None
         while True:
             try:
                 kind, value = self.events.get_nowait()
             except queue.Empty:
+                if pending_progress is not None:
+                    self._present_download_progress(*pending_progress)
                 break
+            if kind == "progress":
+                pending_progress = value
+                continue
+            if pending_progress is not None:
+                self._present_download_progress(*pending_progress)
+                pending_progress = None
             if kind == "checked":
                 self.asset = value
                 self.installer = None
@@ -857,13 +907,6 @@ class UpdateController:
                 elif self.window is not None:
                     self.set_status(gettext_noop("No newer Windows uploader installer is available."))
                     self.action.configure(state="disabled", text=gettext("Update"), command=self.download)
-            elif kind == "progress":
-                done, total = value
-                self.progress["value"] = 100 * done / total if total else 0
-                self.status.set(gettext("Downloading installer: {done:,} / {total:,} bytes").format(
-                    done=done,
-                    total=total,
-                ))
             elif kind == "verifying":
                 self.cancel_button.configure(state="disabled")
                 self.set_status(gettext_noop("Verifying installer size and SHA-256..."))

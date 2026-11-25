@@ -190,8 +190,8 @@ opacity. Source mode without Pillow retains usable native controls for repair.
 Import, Activity, AI and Settings share the same card spacing, continuous
 toolbar surfaces and flat table headings as the Watcher view.
 
-Windows uses the installed Segoe UI Variable Text family when available,
-with Segoe UI and the native Tk font as fallbacks. Shared fonts cover labels,
+Windows prefers the installed Segoe UI Variable Text or Segoe UI Variable
+family, followed by Segoe UI or the native Tk font. Shared fonts cover labels,
 tables, inputs, menus and secondary windows; fixed-width diagnostics keep their
 monospaced font. Native text respects Windows font smoothing/ClearType.
 Known control, cache, pin and recording icons use supersampled artwork rather
@@ -208,6 +208,9 @@ hides first while the version stays visible. The link group uses another row
 only when needed. The full linked address is available on hover. Empty connection
 feedback occupies no row, leaving more height for the gallery. The Watcher screen
 shows the upload gallery, chosen folder and primary Start/Stop control.
+The link address and shared header stay in place when switching between
+Photos and Watcher. Returning to the same gallery viewport reuses its
+already applied Canvas geometry.
 **Choose folder…** is on the Watcher screen; its settings sheet also offers
 the picker and open-folder action. Settings gears sit immediately beside their
 gallery, folder or flight control. Record flight is the only flight preference
@@ -217,6 +220,13 @@ languages, interface language, progress and the report folder. Closing the sheet
 never starts a flight or finalization operation. Interface language uses four
 visible language segments. Tooltips, menus and secondary windows share the dark
 palette; page scrollbars appear only when content exceeds the viewport.
+
+WinApp centers prompts, update progress and larger tool dialogs inside the
+current window. Overlays share the theme's soft shadow. On Windows with
+child-window compositing, modal cards also dim the surrounding client while
+their text and controls stay opaque. Tab and
+Shift+Tab stay with the active dialog. Escape runs its Close action and
+closing restores the invoking control when it is still available.
 
 Existing saved paths, Gallery URL, connection and local options are restored on
 restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
@@ -247,7 +257,9 @@ The adjacent **PDF** shortcut opens saved flights and reports.
 
 ### Photos loading progress
 
-Gallery reads show a compact themed progress bar inside Photos. Newest-first
+Gallery reads show a compact progress strip at the lower right of Photos.
+The strip has the shared shadow and keeps its position when the first
+thumbnail appears. Newest-first
 metadata reads report each confirmed page and the cumulative validated photo
 count; when the server does not provide a total, progress remains indeterminate
 instead of inventing a percentage. Thumbnail progress becomes determinate only
@@ -1191,9 +1203,12 @@ is capped at 32 photos, 8 MiB total and 4 MiB per image and always uses
 authority, and the existing Admin preload opt-in remains separate. The server
 buffers at most one 4 MiB image at once and charges N photos against the shared
 600/IP, 3,600/global and 600/account per-five-minute limits. When advertised,
-WinApp starts with groups of at most eight and uses up to sixteen after a
-healthy group; slow, large or exceptional groups return to eight. Local hits
-stay first and unverified originals retain the individual confirmation path.
+WinApp starts with up to eight photos. After a healthy group it uses
+**Settings > Server thumbnails per request**, which defaults to 32 and offers
+8, 16, 24 and 32. Selection saves immediately and affects the next eligible
+request in an open gallery. Slow, large or exceptional groups return to the
+small probe. Local hits stay first and unverified originals retain individual
+confirmation.
 Target-host FPM, proxy and HTTPS acceptance is currently unknown; this server
 default does not establish it. Individual reads remain the fallback for
 mixed versions and exceptional images.
@@ -1400,7 +1415,7 @@ For connection problems, compare the WinApp browser-linking diagnostics with
 see the request, sign-in, claim and consent results. The exchange reference
 pairs a prepared callback with any token request the server received.
 
-Use the **⋯** beside **Disconnect website** to open the same chooser while
+Use the **⋯** beside the linked address to open the same chooser while
 connected. **Linked now** lists the installations with live access. Select
 one and click **Switch to website** to use its current approval. **Recent
 addresses** keeps up to 20 previously used installation URLs across restarts.
@@ -1432,8 +1447,9 @@ to 15 minutes. Expiry or revocation requires new browser approval. Browser
 linking creates no gallery API keys. Open **Settings** → **Manage link…** for
 separate permissions and saved-link controls.
 
-Open **Choose gallery…** beside the linked address and type in **Search
-galleries**. Suggestions favor names, then descriptions, then gallery tags.
+Open the list icon labeled **Choose gallery…** beside the linked address
+and type in **Search galleries**. Suggestions favor names, then descriptions,
+then gallery tags.
 Names also match a nearby spelling, for example `cyberpnuk` or `cyberpuk`
 for `Cyberpunk`. Use quoted phrases, uppercase `AND` or `OR` as on the
 website. Indented rows show nesting and the selected row shows its parent
@@ -1446,8 +1462,8 @@ upload access for that gallery, including on a fresh profile without an API
 key. After verification the picker closes and **Upload gallery** shows the
 destination in Watcher and Import. Save a folder with **Choose folder…** in
 Watcher or add files in Import. The ellipsis reveals more gallery actions.
-**Disconnect website**
-ends the current link; a destination using that link needs reconnecting.
+The × icon labeled **Disconnect website** ends the current link. A destination
+using that link needs reconnecting.
 API-key uploads have their own **Gallery URL** and gallery-scoped `pgu_` key.
 The gallery installer and updater provision the linking key
 automatically. The server uses its saved website address, including the

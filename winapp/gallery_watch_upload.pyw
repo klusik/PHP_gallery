@@ -109,6 +109,12 @@ WATCH_QUEUE_STATUS_WRAP_PIXELS = 420
 # Consumers: WatcherApp.build_settings_tab.
 # Rationale: 650 logical pixels keeps runtime help inside its settings card.
 WATCHER_RUNTIME_HELP_WRAP_PIXELS = 650
+# Purpose: Keep queue and scan placeholders the same width as live readings.
+# Type: int. Units: character cells. Scope: two Watcher metric labels.
+# Consumers: WatcherApp.build_app_header.
+# Rationale: Five fits HH:MM and ordinary queue sizes without clipping
+# larger values. ttk uses the negative option value as a minimum width.
+WATCHER_HEADER_METRIC_MIN_CELLS = 5
 # Purpose: Bound authorized gallery traversal used only for a recovery preview.
 # Type: int. Units: pages. Scope: one recovery dialog's observation fallback.
 # Consumers: WatcherApp._load_watch_recovery_remote.
@@ -198,10 +204,13 @@ from uploader.config import (
     APP_PROFILE_NAME,
     CONFIG_SCHEMA_VERSION,
     DEFAULTS as REDESIGN_CONFIG_DEFAULTS,
+    THUMBNAIL_BATCH_CHOICES,
+    load_thumbnail_batch_size,
     migrate_config_payload,
     resolve_canvas_gallery_renderer_enabled,
     load_ui_language,
     save_ui_language,
+    save_thumbnail_batch_size,
 )
 from uploader.config_snapshot import ConfigSnapshot, ConfigSnapshotError, ConfigSnapshotStore
 from uploader.credential_store import WindowsUploadModeStore
@@ -8537,6 +8546,9 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.content.bind("<Configure>", self._sync_scrollregion, add="+")
         self.canvas.bind("<Configure>", self._sync_width, add="+")
+        self._scrollbar_range: tuple[str, str] | None = None
+        self._scrollregion: tuple[int, int, int, int] | None = None
+        self._content_width: int | None = None
         self._wheel_remainder = 0
         self._wheel_toplevel = self.winfo_toplevel()
         self._wheel_binding_id = self._wheel_toplevel.bind(
@@ -8554,9 +8566,13 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
             last (str): Tk's normalized final visible vertical fraction.
 
         Returns:
-            None: Updates the thumb and adds or removes its occupied space.
+            None: Publishes changed fractions and maps the scrollbar as needed.
         """
+        fractions = (first, last)
+        if fractions == self._scrollbar_range:
+            return
         self.scrollbar.set(first, last)
+        self._scrollbar_range = fractions
         # Tk's complete viewport is exactly the structural interval [0, 1].
         needed = float(first) > 0.0 or float(last) < 1.0
         visible = bool(self.scrollbar.winfo_manager())
@@ -8626,9 +8642,12 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
                 the embedded content frame.
 
         Returns:
-            None: Updates the canvas scrollable bounds.
+            None: Publishes only changed bounds for the retained window item.
         """
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        bounds = self.canvas.bbox(self.window_id)
+        if bounds is not None and bounds != self._scrollregion:
+            self.canvas.configure(scrollregion=bounds)
+            self._scrollregion = bounds
 
     def _sync_width(self, event: "tk.Event[tk.Misc]") -> None:
         """Keep the embedded content frame at least as wide as the viewport.
@@ -8638,9 +8657,12 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
                 width in pixels.
 
         Returns:
-            None: Resizes the embedded content frame to match the viewport.
+            None: Publishes a changed width once even on height-only events.
         """
-        self.canvas.itemconfigure(self.window_id, width=max(1, int(event.width)))
+        width = max(1, int(event.width))
+        if width != self._content_width:
+            self.canvas.itemconfigure(self.window_id, width=width)
+            self._content_width = width
 
 
 def protected_staging_job_ids(jobs: List[ImportJob]) -> List[str]:
@@ -8888,6 +8910,7 @@ class WatcherApp:
                 coordinators, then starts the read-only game-presence observer.
         """
         self._saved_ui_language = load_ui_language(CONFIG_DIR)
+        self._thumbnail_batch_size = load_thumbnail_batch_size(CONFIG_DIR)
         configure_language(self._saved_ui_language)
         if tk is None or ttk is None or filedialog is None or messagebox is None:
             raise RuntimeError(
@@ -9459,7 +9482,7 @@ class WatcherApp:
             height=16,
             highlightthickness=0,
             bd=0,
-            background="#131B26",
+            background=_PALETTE["background"],
         )
         self.monitor_light.pack(side="left", padx=(0, 6))
         watcher_display = MetricCard(header.actions)
@@ -9483,6 +9506,7 @@ class WatcherApp:
             watcher_display,
             textvariable=self.watcher_header_count_var,
             style="Metric.Card.TLabel",
+            width=-WATCHER_HEADER_METRIC_MIN_CELLS,
         )
         self.watcher_header_count_label.pack(side="left", padx=(0, 8))
         self._watcher_header_clock_image = create_smooth_icon(
@@ -9499,17 +9523,27 @@ class WatcherApp:
             watcher_display,
             textvariable=self.watcher_header_time_var,
             style="Metric.Card.TLabel",
+            width=-WATCHER_HEADER_METRIC_MIN_CELLS,
         )
         self.watcher_header_time_label.pack(side="left")
         self._watcher_header_stop_hint = tk.StringVar(
             self.root,
             tr(self.flights.ui_language.get(), "watcher_header_stop"),
         )
+        stop_slot = ttk.Frame(watcher_display, style="Card.TFrame")
         self._watcher_header_stop_button = icon_button(
-            watcher_display, "stop", self.stop,
+            stop_slot, "stop", self.stop,
             self._watcher_header_stop_hint, tooltip_surface=outer,
             style_override="Header.Metric.Icon.TButton",
         )
+        # Keep the action's measured footprint through every Watcher state.
+        # The empty slot has no focusable child while Stop is unavailable.
+        stop_slot.configure(
+            width=self._watcher_header_stop_button.winfo_reqwidth() + 8,
+            height=self._watcher_header_stop_button.winfo_reqheight(),
+        )
+        stop_slot.pack_propagate(False)
+        stop_slot.pack(side="left")
         self._watcher_header_hint = tk.StringVar(self.root)
         for trigger in (
             self._watcher_header_status_icon,
@@ -9722,18 +9756,26 @@ class WatcherApp:
         address = ttk.Label(
             bar, style="App.Status.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         )
-        choose = Button(
-            bar, text=gettext("Choose gallery…"), command=self.choose_linked_gallery,
-            style="Accent.Compact.TButton",
+        choose = icon_button(
+            bar, "≡", self.choose_linked_gallery, gettext("Choose gallery…"),
+            tooltip_surface=self._storage_context_surface,
         )
-        link = Button(
-            bar, command=self.link_gallery, style="Compact.TButton",
+        disconnect_hint = tk.StringVar(bar)
+        disconnect = icon_button(
+            bar, "close", self.link_gallery, disconnect_hint,
+            tooltip_surface=self._storage_context_surface,
         )
-        link.grid(row=0, column=2, sticky="w")
+        connect = Button(bar, command=self.link_gallery, style="Compact.TButton")
         links = icon_button(
             bar, "⋯", self.open_gallery_links,
             tr(self.flights.ui_language.get(), "linking_address_manager"),
         )
+        # One set of cells keeps global controls anchored through tab changes.
+        address.grid(row=0, column=0, sticky="w", padx=(0, 8))
+        links.grid(row=0, column=1, sticky="w", padx=(2, 6))
+        choose.grid(row=0, column=2, sticky="w", padx=(0, 6))
+        disconnect.grid(row=0, column=3, sticky="w")
+        connect.grid(row=0, column=2, columnspan=2, sticky="w")
         linked_address = self.linking_manager.linked_address
         status = self.linking_manager.status
         attach_inline_tooltip(address, linked_address, self._storage_context_surface)
@@ -9741,6 +9783,31 @@ class WatcherApp:
             bar, textvariable=status, style="App.Status.TLabel",
             wraplength=WINDOW_SUMMARY_WRAP,
         )
+        previous: tuple[str, bool, str, bool] | None = None
+        reserve_after: str | None = None
+
+        def reserve_actions() -> None:
+            """Retain the measured action footprint after ttk applies text.
+
+            Returns:
+                None: Each contextual action occupies the same cell when hidden.
+            """
+            nonlocal reserve_after
+            reserve_after = None
+            linked = bool(linked_address.get())
+            # Reserve only the compact controls belonging to this link state.
+            # The choice cell includes its six-pixel right padding.
+            bar.columnconfigure(
+                2, minsize=choose.winfo_reqwidth() + 6 if linked else connect.winfo_reqwidth(),
+            )
+            bar.columnconfigure(3, minsize=disconnect.winfo_reqwidth() if linked else 0)
+            bar.rowconfigure(0, minsize=max(
+                connect.winfo_reqheight(), choose.winfo_reqheight(),
+                disconnect.winfo_reqheight(),
+            ))
+            app_header = getattr(self, '_app_header', None)
+            if app_header is not None:
+                app_header.request_layout()
 
         def refresh(*_trace_info: str) -> None:
             """Show only the controls and feedback for the live link state.
@@ -9749,55 +9816,87 @@ class WatcherApp:
                 *_trace_info (str): Tk variable name, index and write operation.
 
             Returns:
-                None: Shows website connection, site management and gallery choice.
+                None: Maps contextual actions in their reserved cells without
+                    rearranging the linked address or header on a tab change.
             """
+            nonlocal previous, reserve_after
             issuer = linked_address.get()
-            link.configure(text=tr(
-                self.flights.ui_language.get(),
-                'linking_disconnect_website' if issuer else 'linking_connect_website',
-            ))
             notebook = getattr(self, "notebook", None)
             tab_indices = getattr(self, "tab_indices", {})
             photos_selected = bool(
                 notebook is not None
                 and notebook.index("current") == tab_indices.get("photos")
             )
-            if issuer:
-                address.configure(text=gettext("Linked: ") + issuer)
-                address.grid(row=0, column=0, sticky="w", padx=(0, 8))
-                if photos_selected:
-                    link.grid_remove()
+            language = self.flights.ui_language.get()
+            show_feedback = bool(status.get())
+            current = (issuer, photos_selected, language, show_feedback)
+            if previous == current:
+                return
+            remeasure = (
+                previous is None
+                or (issuer, language) != (previous[0], previous[2])
+            )
+            if remeasure:
+                connect.configure(text=tr(language, 'linking_connect_website'))
+                disconnect_hint.set(tr(language, 'linking_disconnect_website'))
+                if issuer:
+                    # Keep the host and installation path in the header.
+                    # The hover/focus description retains the complete URL.
+                    address.configure(
+                        text=issuer.removeprefix("https://").removeprefix("http://"),
+                    )
+                if reserve_after is None:
+                    reserve_after = bar.after_idle(reserve_actions)
+            if previous is None or bool(issuer) != bool(previous[0]):
+                if issuer:
+                    address.grid()
+                    links.grid()
+                else:
+                    address.grid_remove()
+                    links.grid_remove()
+            if (previous is None or (bool(issuer), photos_selected)
+                    != (bool(previous[0]), previous[1])):
+                if issuer and not photos_selected:
+                    choose.grid()
+                    disconnect.grid()
+                else:
                     choose.grid_remove()
-                    links.grid(row=0, column=1, sticky="w", padx=(2, 0))
+                    disconnect.grid_remove()
+                if not issuer and not photos_selected:
+                    connect.grid()
                 else:
-                    link.grid()
-                    choose.grid(row=0, column=1, sticky="w", padx=(0, 6))
-                    links.grid(row=0, column=3, sticky="w", padx=(2, 0))
-            else:
-                if photos_selected:
-                    link.grid_remove()
-                else:
-                    link.grid()
-                address.grid_remove()
-                choose.grid_remove()
-                links.grid_remove()
-            if status.get():
+                    connect.grid_remove()
+            feedback_changed = previous is None or show_feedback != previous[3]
+            if show_feedback and (previous is None or not previous[3]):
                 feedback.grid(
                     row=1, column=0, columnspan=4, sticky="w", pady=(4, 0),
                 )
-            else:
+            elif not show_feedback and previous is not None and previous[3]:
                 feedback.grid_remove()
+            previous = current
             app_header = getattr(self, '_app_header', None)
-            if app_header is not None:
+            if app_header is not None and feedback_changed:
                 app_header.request_layout()
 
         self._gallery_link_refresh = refresh
         address_trace = linked_address.trace_add("write", refresh)
         status_trace = status.trace_add("write", refresh)
-        bar.bind("<Destroy>", lambda event: (
-            linked_address.trace_remove("write", address_trace),
-            status.trace_remove("write", status_trace),
-        ) if event.widget is bar else None, add="+")
+
+        def release(event: "tk.Event") -> None:
+            """Release the link bar's retained layout and variable callbacks.
+
+            Args:
+                event (tk.Event): Destroy event from the bar or a child.
+            Returns:
+                None: Cancels only this bar's pending reservation and traces.
+            """
+            if event.widget is bar:
+                if reserve_after is not None:
+                    bar.after_cancel(reserve_after)
+                linked_address.trace_remove("write", address_trace)
+                status.trace_remove("write", status_trace)
+
+        bar.bind("<Destroy>", release, add="+")
         refresh()
 
     def set_update_available(self, version: Optional[str]) -> None:
@@ -9889,11 +9988,15 @@ class WatcherApp:
                 when needed, and updates contextual link actions.
         """
         selected = self.notebook.index("current")
+        if selected == getattr(self, "_selected_navigation_index", None):
+            return
+        self._selected_navigation_index = selected
         self._activity_tab_selected = self.tab_indices.get("activity") == selected
         self._import_tab_selected = self.tab_indices.get("import") == selected
         if self._activity_tab_selected:
             WatcherApp._flush_visible_log(self)
-        if hasattr(self, "_import_presentation_after"):
+        if ((self._activity_tab_selected or self._import_tab_selected)
+                and hasattr(self, "_import_presentation_after")):
             self._flush_import_presentation(force=True)
         if (
             self._activity_tab_selected
@@ -9901,12 +10004,16 @@ class WatcherApp:
         ):
             self._schedule_activity_drawer_refresh()
         for key, button in self.navigation_buttons.items():
-            button.configure(style=(
-                "Primary.Icon.TButton"
-                if self.tab_indices[key] == selected else "App.Icon.TButton"
-            ))
-        if getattr(self, "_watcher_recording_active", False):
-            self._render_watcher_recording()
+            if key == "watch" and getattr(self, "_watcher_recording_active", False):
+                continue
+            style = (
+                "Primary.Icon.TButton" if self.tab_indices[key] == selected
+                else "App.Icon.TButton"
+            )
+            _publish_watcher_value(
+                self, "navigation_" + key, button, style,
+                lambda: button.configure(style=style),
+            )
         refresh_gallery_link = getattr(self, "_gallery_link_refresh", None)
         if refresh_gallery_link is not None:
             refresh_gallery_link()
@@ -10131,11 +10238,11 @@ class WatcherApp:
         button = getattr(self, "navigation_buttons", {}).get("watch")
         if button is not None:
             if self._watcher_recording_active:
-                button.configure(style=(
+                style = (
                     "Watcher.RecordingBright.Icon.TButton"
                     if self._watcher_recording_pulse
                     else "Watcher.RecordingDim.Icon.TButton"
-                ))
+                )
             else:
                 notebook = getattr(self, "notebook", None)
                 try:
@@ -10146,9 +10253,13 @@ class WatcherApp:
                     )
                 except (AttributeError, tk.TclError):
                     selected = False
-                button.configure(style=(
+                style = (
                     "Primary.Icon.TButton" if selected else "App.Icon.TButton"
-                ))
+                )
+            _publish_watcher_value(
+                self, "navigation_watch", button, style,
+                lambda: button.configure(style=style),
+            )
         workspace = getattr(self, "photos_workspace", None)
         callback = getattr(workspace, "set_watcher_recording", None)
         if callback is not None:
@@ -10659,6 +10770,7 @@ class WatcherApp:
                 ('warning', '[Photos] ' + message),
             ),
             canvas_grid_enabled=self._canvas_grid_enabled_at_startup,
+            thumbnail_batch_size=lambda: self._thumbnail_batch_size,
         )
         self.photos_workspace.grid(row=0, column=0, sticky="nsew")
         self._sync_watcher_recording()
@@ -11816,7 +11928,8 @@ class WatcherApp:
             parent (tk.Misc): Scrollable Settings page receiving the controls.
 
         Returns:
-            None: Creates connection, interface, runtime and advanced controls.
+            None: Creates connection, interface, runtime and advanced controls
+                including the independently saved gallery download setting.
         """
         parent.columnconfigure(0, weight=1)
         connection = GlassCard(parent, padding=(14, 10))
@@ -11885,17 +11998,36 @@ class WatcherApp:
             command=lambda: self.close(restart=True),
         ).pack(side="left", padx=(8, 0))
         self.refresh_interface_restart()
+        ttk.Label(runtime, text=gettext("Server thumbnails per request")).grid(
+            row=3, column=0, sticky="w", pady=5,
+        )
+        self.thumbnail_batch_size_var = tk.StringVar(
+            self.root, value=str(self._thumbnail_batch_size),
+        )
+        thumbnail_batch_picker = ttk.Combobox(
+            runtime, state="readonly", textvariable=self.thumbnail_batch_size_var,
+            values=THUMBNAIL_BATCH_CHOICES, width=8,
+        )
+        thumbnail_batch_picker.grid(row=3, column=1, sticky="w", padx=8, pady=5)
+        thumbnail_batch_picker.bind(
+            "<<ComboboxSelected>>", self.save_gallery_thumbnail_batch_size,
+        )
+        ttk.Label(
+            runtime,
+            text=gettext("Saves immediately. The first thumbnail request stays small."),
+            style="Muted.TLabel", wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS,
+        ).grid(row=4, column=1, columnspan=2, sticky="w", padx=8)
         ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=5
+            row=5, column=0, columnspan=2, sticky="w", pady=5
         )
-        Button(runtime, text=gettext("Repair dependencies"), command=self.repair_dependencies).grid(row=3, column=2, padx=(8, 0), pady=5)
+        Button(runtime, text=gettext("Repair dependencies"), command=self.repair_dependencies).grid(row=5, column=2, padx=(8, 0), pady=5)
         ttk.Label(runtime, text=gettext("Custom SimConnect.dll")).grid(
-            row=4, column=0, sticky="w", pady=5,
+            row=6, column=0, sticky="w", pady=5,
         )
-        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=4, column=1, sticky="ew", padx=8, pady=5)
-        Button(runtime, text=gettext("Choose"), command=self.browse_simconnect_dll).grid(row=4, column=2, pady=5)
+        ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=6, column=1, sticky="ew", padx=8, pady=5)
+        Button(runtime, text=gettext("Choose"), command=self.browse_simconnect_dll).grid(row=6, column=2, pady=5)
         ttk.Checkbutton(runtime, text=gettext("Keep working in the system tray when the window closes"), variable=self.close_to_tray_var).grid(
-            row=5, column=1, columnspan=2, sticky="w", pady=(5, 0)
+            row=7, column=1, columnspan=2, sticky="w", pady=(5, 0)
         )
         startup_switch = ttk.Checkbutton(
             runtime,
@@ -11904,7 +12036,7 @@ class WatcherApp:
             command=self.save_startup_preference,
         )
         startup_switch.grid(
-            row=6, column=1, columnspan=2, sticky="w", pady=(5, 0),
+            row=8, column=1, columnspan=2, sticky="w", pady=(5, 0),
         )
         if not startup_supported():
             startup_switch.state(["disabled"])
@@ -11912,7 +12044,7 @@ class WatcherApp:
             runtime,
             text=gettext("Installed Windows app only. This switch saves immediately."),
             style="Muted.TLabel",
-        ).grid(row=7, column=1, columnspan=2, sticky="w", pady=(3, 0))
+        ).grid(row=9, column=1, columnspan=2, sticky="w", pady=(3, 0))
         # Grid row indices keep the immediate option, its help, save and
         # advanced controls in that order inside the runtime preferences card.
         ttk.Checkbutton(
@@ -11920,7 +12052,7 @@ class WatcherApp:
             text=gettext("Experimental Canvas gallery renderer"),
             variable=self.experimental_canvas_gallery_renderer_var,
             command=self.save_canvas_renderer_preference,
-        ).grid(row=8, column=1, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=10, column=1, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(
             runtime,
             text=(
@@ -11931,13 +12063,13 @@ class WatcherApp:
             ),
             style="Muted.TLabel",
             wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS,
-        ).grid(row=9, column=1, columnspan=2, sticky="w", pady=(2, 0))
+        ).grid(row=11, column=1, columnspan=2, sticky="w", pady=(2, 0))
         Button(
             runtime,
             text=gettext("✓  Save settings"),
             command=self.save_config,
             style="Primary.TButton",
-        ).grid(row=10, column=1, sticky="w", pady=(10, 0))
+        ).grid(row=12, column=1, sticky="w", pady=(10, 0))
 
         advanced_toggle = ttk.Checkbutton(
             runtime,
@@ -11946,7 +12078,7 @@ class WatcherApp:
             command=self.toggle_settings_advanced,
         )
         advanced_toggle.grid(
-            row=11, column=0, columnspan=3, sticky="w", pady=(8, 0),
+            row=13, column=0, columnspan=3, sticky="w", pady=(8, 0),
         )
         advanced = GlassCard(parent, padding=(14, 10))
         self.settings_advanced_frame = advanced
@@ -14945,6 +15077,29 @@ class WatcherApp:
             self.interface_language_pending.grid()
         else:
             self.interface_language_pending.grid_remove()
+
+    def save_gallery_thumbnail_batch_size(self, _event: "tk.Event") -> None:
+        """Apply a persisted thumbnail request limit to upcoming viewer work.
+
+        Args:
+            _event (tk.Event): Settings combobox selection event.
+        Returns:
+            None: Publishes the new value after persistence or restores the
+                last saved choice and shows a warning if saving failed.
+        """
+        try:
+            size = int(self.thumbnail_batch_size_var.get())
+            if size == self._thumbnail_batch_size:
+                return
+            save_thumbnail_batch_size(CONFIG_DIR, size)
+        except (OSError, ValueError):
+            self.thumbnail_batch_size_var.set(str(self._thumbnail_batch_size))
+            messagebox.showwarning(
+                gettext("Settings"), gettext("Could not save the thumbnail request size."),
+                parent=self.root,
+            )
+            return
+        self._thumbnail_batch_size = size
 
     def save_startup_preference(self) -> None:
         """Save the startup switch without admitting unrelated unsaved fields.

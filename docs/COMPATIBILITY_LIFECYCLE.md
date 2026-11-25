@@ -1488,13 +1488,28 @@ resource bound. Native Windows logs identified the formerly immediate busy
 refusal before any media request; delayed DNS/cancellation regressions cover the
 handoff and once-only cleanup.
 
-The shared theme selects an installed UI family rather than installing fonts.
-Windows prefers Segoe UI Variable Text, then Segoe UI; a native Tk family remains
-available on other platforms. Windows text retains its native GDI smoothing
-policy. Supersampled control/cache/recording artwork avoids emoji substitution;
+The shared theme selects an installed UI family. It tries Segoe UI Variable
+Text, Segoe UI Variable and Segoe UI in order, followed by the native Tk family.
+Shared text uses the native Windows GDI smoothing policy. Supersampled
+control/cache/recording artwork avoids emoji substitution;
 Pillow-free source launches retain usable glyph controls. The theme owns these
 permanent fallbacks because dependencies and installed fonts vary across source
 and packaged runtimes. Installed prevalence is unknown.
+
+The shell centers and bounds app-owned dialogs. The theme applies alpha to
+separate Windows children for the shared overlay shadow and modal backdrop.
+Shadow layers give pointer input to the application below. If the host
+rejects layered children or uses another platform, a visible card edge retains
+separation and local modal focus remains usable. The theme and shell retain
+this fallback for source and packaged hosts. Installed compositing support
+and physical-display behavior are unmeasured.
+
+Photos stores the steady thumbnail limit separately from upload settings.
+The config owner uses the factory 32-item limit for a missing or damaged
+preference and retains legacy profiles. The viewer keeps its eight-item
+initial and downshift limit. The existing optional protocol and single-read
+fallback preserve mixed-version server support. Target-server timing and
+preference adoption are unknown.
 
 The Windows display bootstrap requests system awareness only for an unaware
 process before creating Tk windows. An existing manifest/host context is never

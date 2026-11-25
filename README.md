@@ -11,7 +11,7 @@ folders, give collections their own look, and decide who can see them.
 · [Windows uploader](#windows-uploader)
 · [Manuals](#manuals)
 
-**Current Version:** 1.7.0
+**Current Version:** 1.7.1
 
 [![PHP Gallery showing a collection of nested photo galleries](https://raw.githubusercontent.com/klusik/PHP_gallery/main/website/assets/real-gallery.jpg)](https://phpgallery.site/)
 

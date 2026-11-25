@@ -61,9 +61,9 @@ child loads only its owned local test modules, validates every requested identit
 against standard discovery in those modules, and retains normal module/class
 fixtures and the selected-subset report marker. This removes repeated unrelated
 imports without narrowing parent coverage, adding a parallel registry or changing
-the existing 90-second child and 480-second whole-run limits. Seven serial groups
+the existing 90-second child and 480-second whole-run limits. Eight serial groups
 keep the viewer and four measured classes exclusive, then split only the canonical
-remainder into two deterministic, class-preserving shards. Source/test imports
+remainder into three deterministic, class-preserving shards. Source/test imports
 are bootstrapped explicitly in every independent process. Unknown, unsafe,
 duplicate or missing IDs and incomplete process/report evidence remain failures.
 

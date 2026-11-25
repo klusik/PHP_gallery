@@ -897,9 +897,6 @@ msgstr "Valet av länkat uppladdningsgalleri är tillfälligt otillgängligt. De
 msgid "Linked upload target: "
 msgstr "Länkat uppladdningsgalleri: "
 
-msgid "Linked: "
-msgstr "Länkat: "
-
 msgid "linking"
 msgstr "länkning"
 
@@ -1406,6 +1403,15 @@ msgstr "endast server"
 
 msgid "Settings"
 msgstr "Inställningar"
+
+msgid "Server thumbnails per request"
+msgstr "Miniatyrer från servern per begäran"
+
+msgid "Saves immediately. The first thumbnail request stays small."
+msgstr "Sparas direkt. Den första begäran om miniatyrer förblir liten."
+
+msgid "Could not save the thumbnail request size."
+msgstr "Det gick inte att spara antalet miniatyrer per begäran."
 
 msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
 msgstr "Inställningarna sparades, men autostarten i Windows kunde inte uppdateras. Spara inställningarna igen för att göra ett nytt försök.\n\n"

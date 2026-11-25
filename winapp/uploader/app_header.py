@@ -51,6 +51,7 @@ class CompactAppHeader(ttk.Frame):
         self._after_id: str | None = None
         self._closed = False
         self._mode: tuple[str, bool] | None = None
+        self._widths: dict[tk.Misc, tuple[int, int]] = {}
         self.columnconfigure(1, weight=1)
         self.identity = ttk.Frame(self, style='App.TFrame')
         self.brand = ttk.Label(self.identity, text='PHP Gallery', style='Brand.TLabel')
@@ -83,14 +84,18 @@ class CompactAppHeader(ttk.Frame):
             self._after_id = self.after_idle(self._layout)
 
     def _on_configure(self, event: tk.Event) -> None:
-        """Schedule measured reflow when the header or a control group changes.
+        """Schedule reflow only when available or requested width changes.
 
         Args:
             event (tk.Event): Native geometry event from an owned header group.
         Returns:
-            None: Repeated events share the same pending idle callback.
+            None: Height-only updates cannot cause a new layout pass.
         """
-        self.request_layout()
+        widget = event.widget
+        widths = (event.width, widget.winfo_reqwidth())
+        if widths != self._widths.get(widget):
+            self._widths[widget] = widths
+            self.request_layout()
 
     def _layout(self) -> None:
         """Choose the smallest fitting row arrangement without width feedback.

@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.7.0}
-\newcommand{\manualdate}{24 November 2026}
+\newcommand{\version}{1.7.1}
+\newcommand{\manualdate}{25 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2012,13 +2012,14 @@ Use the~public website URL, including its~public subdirectory when needed.
 Internal hosting directories do~not~belong in~the~link address. Servers with
 internal path rewriting need PHP Gallery~1.0.1 for~public-mount verification.
 
-Use the~ellipsis beside \ui{Disconnect website} to~open the~links chooser.
+Use the~ellipsis beside the~linked address to~open the~links chooser.
 Select an~entry under \ui{Linked now} to~switch using its current approval.
 The~profile keeps up~to~20 \ui{Recent addresses} across restarts. Select one
 to~start a~new approval. The~power icon unlinks the~selected site and~the
 cross removes a~recent address. The~upload destination has its own selection.
 
-Open \ui{Choose gallery…} beside the~address and type in~\ui{Search galleries}.
+Open the~list icon labeled \ui{Choose gallery…} beside the~address and type
+in~\ui{Search galleries}.
 Suggestions favor names, then descriptions and~gallery tags. Names tolerate
 a~small typo. Quoted phrases and~\texttt{AND}/\texttt{OR} work as on~the website.
 Indentation and~the selected row's parent titles show the~hierarchy.
@@ -2030,7 +2031,8 @@ On~a~supported local profile,
 including a~source run on~macOS, WinApp uses the~approved upload access
 automatically. After verification,
 \ui{Upload gallery} shows the~destination in~Watcher and~Import. The~ellipsis
-reveals more gallery actions. \ui{Disconnect website} ends the~current link.
+reveals more gallery actions. The~cross labeled \ui{Disconnect website}
+ends the~current link.
 After restart, reconnect to~the~same account and~select the~gallery again.
 Use \ui{Manage link…} in~Settings for~advanced access. API-key uploads use
 their own \ui{Gallery URL} and~gallery-scoped key.
@@ -2220,8 +2222,10 @@ read-only request of~up~to~32~photos, 8~MiB total and~4~MiB per~image. Responses
 authority; Admin preload remains separate. The~server buffers at~most one
 4~MiB image at~a~time. It~charges N requested photos against the~existing
 600/IP and~3,600/global limits and~the~600/account limit per~five minutes.
-When negotiated, WinApp starts with groups of~eight and~uses up~to~sixteen
-after a~healthy group; slow, large or~exceptional groups return to~eight.
+When negotiated, WinApp starts with up~to~eight photos. After a~healthy
+group, \ui{Settings > Server thumbnails per request} selects 8, 16, 24 or~32,
+with 32 as~the~default. The~choice saves immediately. Slow, large or~
+exceptional groups return to~the~small probe.
 Unverified originals retain individual confirmation. Target FPM, proxy and~HTTPS
 acceptance remains unverified; the~default does not establish host acceptance.
 Existing single reads remain the~fallback for~mixed versions and~exceptional
@@ -2639,11 +2643,15 @@ no~whole-window
 opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
-Windows prefers the~installed Segoe UI Variable Text font, with Segoe UI
-and~the~native Tk font as~fallbacks. Shared text styles preserve Windows
+Windows prefers the~installed Segoe UI Variable Text or~Segoe UI Variable
+font, with Segoe UI and~the~native Tk font as~fallbacks. Shared text styles preserve Windows
 font smoothing; fixed-width diagnostics stay monospaced. Common control,
 cache, pin and~recording icons use supersampled artwork; without Pillow,
-readable native glyphs remain. The~app downloads no~fonts and~changes
+readable native glyphs remain. Overlays share a~soft shadow. Centered modal
+dialogs also dim the~surrounding client when Windows supports compositing.
+Photos shows its loading strip at~a~fixed lower corner with~no~input grab.
+The~header stays in~place when switching between Photos and~Watcher.
+The~app downloads no~fonts and~changes
 no~system preferences. Before creating windows, an~unaware Windows process
 requests system DPI awareness and~preserves an~existing manifest context.
 This does not~add per-monitor layout reflow. Restart on~the~destination
@@ -10270,7 +10278,7 @@ The~WinApp partition coordinator discovers the~complete test inventory once.
 Each child loads only its~assigned local modules and~must report every selected
 identity. Module/class fixtures, the~complete disjoint identity proof and~the
 existing child/coordinator deadlines remain required.
-Seven serial groups retain five exclusive measured groups and~two
+Eight serial groups retain five exclusive measured groups and~three
 deterministic, class-preserving remainder shards. Each process receives
 explicit source/test import roots.
 

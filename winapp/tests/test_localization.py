@@ -29,7 +29,10 @@ import polib
 
 from test_application_shell import MAIN, WINAPP_DIR, descendants
 from test_ui_shell import SHELL_TEST_DEADLINE_MS
-from uploader.config import load_ui_language
+from uploader.config import (
+    THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE, THUMBNAIL_BATCH_FILE,
+    load_thumbnail_batch_size, load_ui_language,
+)
 from uploader.flight_jobs import FlightPreferences
 from uploader.flight_report_translations import tr
 from uploader.flight_ui import FlightUI
@@ -104,6 +107,25 @@ class LocalizationTests(unittest.TestCase):
             None: Registers restoration even after an assertion fails.
         """
         self.addCleanup(configure_language, current_language())
+
+    def test_legacy_and_invalid_thumbnail_preferences_use_default(self) -> None:
+        """Restore a usable request limit from old and damaged local profiles.
+
+        Returns:
+            None: Invalid bytes remain untouched and no unrelated file is read.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory)
+            preference = profile / THUMBNAIL_BATCH_FILE
+            self.assertEqual(THUMBNAIL_BATCH_DEFAULT_SIZE, load_thumbnail_batch_size(profile))
+            for invalid in ('{', '{"batch_size": true}', '{"batch_size": "16"}',
+                            '{"batch_size": 33}'):
+                with self.subTest(invalid=invalid):
+                    preference.write_text(invalid, encoding="utf-8")
+                    self.assertEqual(
+                        THUMBNAIL_BATCH_DEFAULT_SIZE, load_thumbnail_batch_size(profile),
+                    )
+                    self.assertEqual(invalid, preference.read_text(encoding="utf-8"))
 
     def test_retries_a_pending_change_and_clears_it_on_reversion(self) -> None:
         """Keep the restart action after Later or refusal in any locale.
@@ -392,6 +414,7 @@ class NativeLocalizationTests(unittest.TestCase):
         app.root = self.root
         app.exiting = False
         app._saved_ui_language = locale
+        app._thumbnail_batch_size = load_thumbnail_batch_size(profile)
         app.updates = SimpleNamespace(check=mock.Mock())
         app.select_tab = mock.Mock()
         callbacks = (
@@ -437,6 +460,17 @@ class NativeLocalizationTests(unittest.TestCase):
                 app.build_settings_tab(surface.content)
                 self.root.update()
                 self._click_settings_controls(app, surface.content, icon)
+                batch = next(
+                    widget for widget in descendants(surface)
+                    if isinstance(widget, ttk.Combobox)
+                    and tuple(widget.cget("values")) == tuple(map(str, THUMBNAIL_BATCH_CHOICES))
+                )
+                self.assertEqual(str(THUMBNAIL_BATCH_DEFAULT_SIZE), batch.get())
+                for size in THUMBNAIL_BATCH_CHOICES:
+                    batch.set(str(size))
+                    batch.event_generate("<<ComboboxSelected>>")
+                    self.assertEqual(size, app._thumbnail_batch_size)
+                    self.assertEqual(size, load_thumbnail_batch_size(profile))
                 pending = app.interface_language_pending
                 language = next(
                     widget for widget in descendants(surface)
