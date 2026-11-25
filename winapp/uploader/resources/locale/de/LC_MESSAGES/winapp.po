@@ -897,9 +897,6 @@ msgstr "Die Auswahl der verknüpften Uploadgalerie ist vorübergehend nicht verf
 msgid "Linked upload target: "
 msgstr "Verknüpfte Uploadgalerie: "
 
-msgid "Linked: "
-msgstr "Verknüpft: "
-
 msgid "linking"
 msgstr "Verknüpfung"
 
@@ -1406,6 +1403,15 @@ msgstr "nur Server"
 
 msgid "Settings"
 msgstr "Einstellungen"
+
+msgid "Server thumbnails per request"
+msgstr "Server-Vorschaubilder pro Anfrage"
+
+msgid "Saves immediately. The first thumbnail request stays small."
+msgstr "Wird sofort gespeichert. Die erste Anfrage bleibt klein."
+
+msgid "Could not save the thumbnail request size."
+msgstr "Die Anzahl der Vorschaubilder pro Anfrage konnte nicht gespeichert werden."
 
 msgid "Settings were saved, but Windows startup could not be updated. Save settings again to retry.\n\n"
 msgstr "Die Einstellungen wurden gespeichert, aber der Windows-Autostart konnte nicht aktualisiert werden. Speichern Sie die Einstellungen erneut.\n\n"

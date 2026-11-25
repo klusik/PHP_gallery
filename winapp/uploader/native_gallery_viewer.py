@@ -73,12 +73,15 @@ from .gallery_lightbox import (
 )
 from .canvas_gallery_grid import CanvasGalleryGrid, CanvasTileProxy, TooltipValue
 from .ui_theme import (
-    Button, GALLERY_TILE_BORDER_INSET, _attach_tooltip,
+    Button, GALLERY_TILE_BORDER_INSET, RaisedDialogSurface, _attach_tooltip,
     ensure_component_theme, gallery_grid_theme, icon_button,
 )
 from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
-from .config import resolve_canvas_gallery_renderer_enabled
+from .config import (
+    THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE,
+    resolve_canvas_gallery_renderer_enabled,
+)
 from .gallery_view_order import GalleryViewOrder
 from .gallery_load_progress import GalleryLoadProgress
 
@@ -105,12 +108,6 @@ MEDIA_THUMBNAIL_SIZE = (144, 144)
 # Consumers: _NativeGalleryViewer._load_next_thumbnail. Rationale: Eight
 # limits first-turn occupancy before a host proves the framed path healthy.
 MEDIA_HTTP_BATCH_INITIAL_SIZE = 8
-
-# Purpose: Raise throughput after a healthy bounded thumbnail group.
-# Type: int. Units: images. Scope: steady-state network group.
-# Consumers: _NativeGalleryViewer._load_next_thumbnail. Rationale: Sixteen
-# remains below the 32-item wire cap and does not change GUI queue limits.
-MEDIA_HTTP_BATCH_STEADY_SIZE = 16
 
 # Purpose: Downshift a slow group before admitting subsequent network work.
 # Type: float. Units: seconds. Scope: one completed thumbnail group.
@@ -487,17 +484,17 @@ class _HttpBatchCompletion:
     prior_operation_finished: threading.Event | None = None
 
 
-def _next_http_thumbnail_group_limit(completion: _HttpBatchCompletion) -> int:
-    """Choose the next safe HTTP group after one completed worker turn.
+def _healthy_http_thumbnail_group(completion: _HttpBatchCompletion) -> bool:
+    """Decide whether the completed worker turn permits the steady limit.
 
     Args:
         completion (_HttpBatchCompletion): Bounded numeric result of the turn.
 
     Returns:
-        int: Sixteen after a healthy initial group; otherwise eight.
+        bool: True after a healthy framed transfer of at least the probe size.
     """
     stats = completion.stats
-    healthy = (
+    return (
         completion.physical_complete and completion.outcome == 'ok'
         and any(size >= MEDIA_HTTP_BATCH_INITIAL_SIZE for size in stats.batch_sizes)
         and completion.elapsed < MEDIA_HTTP_BATCH_SLOW_SECONDS
@@ -507,7 +504,6 @@ def _next_http_thumbnail_group_limit(completion: _HttpBatchCompletion) -> int:
                  or stats.fallback_wire_disabled or stats.fallback_restricted
                  or stats.fallback_exceptional or stats.operation_failures)
     )
-    return MEDIA_HTTP_BATCH_STEADY_SIZE if healthy else MEDIA_HTTP_BATCH_INITIAL_SIZE
 
 
 class _ThumbnailDiskLane:
@@ -842,6 +838,7 @@ class _NativeGalleryViewer:
         observation_callback: Callable[[str], None] | None = None,
         newest_first: bool = False,
         canvas_grid_enabled: bool | None = None,
+        thumbnail_batch_size: Callable[[], int] | None = None,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -866,6 +863,8 @@ class _NativeGalleryViewer:
             newest_first (bool): Reverse the complete metadata sequence locally.
             canvas_grid_enabled (bool | None): Resolved renderer preference;
                 None uses the configured factory default and environment choice.
+            thumbnail_batch_size (Callable[[], int] | None): Reader for the
+                current saved steady request size, or None for the default.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -894,6 +893,7 @@ class _NativeGalleryViewer:
         )
         self._canvas_grid: CanvasGalleryGrid | None = None
         self._grid_content_height: int = 0
+        self._native_grid_width: int | None = None
         self._diagnostic_callback = diagnostic_callback
         self._on_photo_selected = photo_selected
         self._observation_callback = observation_callback
@@ -1047,7 +1047,8 @@ class _NativeGalleryViewer:
         self._thumbnail_warm_cache_hit_count = 0
         self._thumbnail_batch_count = 0
         self._thumbnail_batch_indices: tuple[int, ...] = ()
-        self._http_thumbnail_group_limit = MEDIA_HTTP_BATCH_INITIAL_SIZE
+        self._thumbnail_batch_size = thumbnail_batch_size
+        self._http_thumbnail_group_healthy = False
         self._http_batch_completion: _HttpBatchCompletion | None = None
         self._http_batch_requests = 0
         self._http_batch_frames = 0
@@ -1165,9 +1166,6 @@ class _NativeGalleryViewer:
         self.grid_canvas = tk.Canvas(
             right, highlightthickness=0, background=surface,
         )
-        self._load_progress = GalleryLoadProgress(
-            self.grid_canvas, self._text,
-        )
         self.grid_scrollbar = ttk.Scrollbar(
             right, orient='vertical', command=self.grid_canvas.yview,
         )
@@ -1216,6 +1214,9 @@ class _NativeGalleryViewer:
                 self.grid_canvas.bind(sequence, self._on_empty_context, add='+')
                 self.grid_frame.bind(sequence, self._on_empty_context, add='+')
 
+        # Attach after the renderer bindings and native grid child. The
+        # progress geometry listener must survive alongside grid Configure.
+        self._load_progress = GalleryLoadProgress(self.grid_canvas, self._text)
 
         actions = ttk.Frame(shell, style='Card.TFrame')
         actions.pack(fill='x', pady=(10, 0))
@@ -2018,7 +2019,9 @@ class _NativeGalleryViewer:
             )
             self._on_grid_viewport(event)
             return
-        self.grid_canvas.itemconfigure(self.grid_window, width=event.width)
+        if event.width != self._native_grid_width:
+            self.grid_canvas.itemconfigure(self.grid_window, width=event.width)
+            self._native_grid_width = event.width
         tile_width, tile_height = self._card_dimensions()
         columns = max(1, event.width
                       // (tile_width + MEDIA_GRID_GUTTER
@@ -2573,12 +2576,10 @@ class _NativeGalleryViewer:
         )
         self._grid_columns = max(1, columns)
         self._grid_content_height = max(0, content_height)
-        self.grid_canvas.configure(scrollregion=(
-            0, 0, canvas_width, self._grid_content_height,
-        ))
-        if self._grid_content_height <= canvas_height:
+        scrollbar_visible = bool(self.grid_scrollbar.winfo_manager())
+        if self._grid_content_height <= canvas_height and scrollbar_visible:
             self.grid_scrollbar.pack_forget()
-        elif not self.grid_scrollbar.winfo_manager():
+        elif self._grid_content_height > canvas_height and not scrollbar_visible:
             self.grid_scrollbar.pack(side='right', fill='y')
 
     def _on_empty_context(self, event: tk.Event) -> str | None:
@@ -2607,7 +2608,7 @@ class _NativeGalleryViewer:
         padding = 8
         parent_width = self.frame.winfo_width()
         width = max(1, min(MEDIA_MUSIC_PANEL_WIDTH, parent_width))
-        panel = ttk.Frame(self.frame, style='Glass.TFrame', padding=padding)
+        panel = RaisedDialogSurface(self.frame, padding=padding)
         self._music_panel = panel
         ttk.Label(
             panel,
@@ -4091,14 +4092,12 @@ class _NativeGalleryViewer:
             with self._thumbnail_result_lock:
                 self._http_batch_completion = completion
 
-    def _load_next_thumbnail(
-        self, limit: int = MEDIA_THUMBNAIL_BATCH_SIZE,
-    ) -> None:
+    def _load_next_thumbnail(self, limit: int | None = None) -> None:
         """Fetch a bounded visible-first batch on the serialized worker.
 
         Args:
-            limit (int): Maximum admitted items for this turn, capped by the
-                batch policy and any remaining initial revision budget.
+            limit (int | None): Remaining initial priority budget when one
+                applies. None uses the current transport limit.
 
         Returns:
             None: One worker serially publishes up to the batch limit.
@@ -4138,9 +4137,20 @@ class _NativeGalleryViewer:
                 return
         # Keep the in-flight index queued until it resolves. Configure events
         # can otherwise enqueue the same visible tile again during a download.
-        size_limit = (self._http_thumbnail_group_limit if use_http_batch
-                      else MEDIA_THUMBNAIL_BATCH_SIZE)
-        selected = self._thumbnail_pending[:max(0, min(limit, size_limit))]
+        size_limit = MEDIA_THUMBNAIL_BATCH_SIZE
+        if use_http_batch:
+            size_limit = MEDIA_HTTP_BATCH_INITIAL_SIZE
+            if self._http_thumbnail_group_healthy:
+                read_size = self._thumbnail_batch_size
+                size_limit = (
+                    read_size() if read_size is not None
+                    else THUMBNAIL_BATCH_DEFAULT_SIZE
+                )
+                if type(size_limit) is not int or size_limit not in THUMBNAIL_BATCH_CHOICES:
+                    size_limit = THUMBNAIL_BATCH_DEFAULT_SIZE
+        if limit is not None:
+            size_limit = min(limit, size_limit)
+        selected = self._thumbnail_pending[:max(0, size_limit)]
         if use_http_batch:
             eligible: list[int] = []
             for index in selected:
@@ -4793,10 +4803,10 @@ class _NativeGalleryViewer:
                             self._http_batch_first_frame_ms = completion.stats.first_frame_ms
                     elif not zero_http_defer and not completion.physical_complete:
                         self._http_batch_incomplete += 1
-                self._http_thumbnail_group_limit = _next_http_thumbnail_group_limit(
-                    completion,
-                )
                 if completion.generation == self._generation:
+                    self._http_thumbnail_group_healthy = (
+                        _healthy_http_thumbnail_group(completion)
+                    )
                     if completion.outcome == 'proof_changed':
                         now = time.monotonic()
                         if (self._thumbnail_proof_refresh_attempt_at is None
@@ -4974,9 +4984,7 @@ class _NativeGalleryViewer:
             remaining = (
                 MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT
                 - self._initial_thumbnail_priority_count
-                if priority_due else self._http_thumbnail_group_limit
-                if self.session.supports_thumbnail_batch() is True
-                else MEDIA_THUMBNAIL_BATCH_SIZE
+                if priority_due else None
             )
             self._load_next_thumbnail(remaining)
             if self._worker is not None and self._worker is not previous_worker:
@@ -5012,11 +5020,7 @@ class _NativeGalleryViewer:
             return
         if self._thumbnail_pending:
             self._thumbnail_cancelled.clear()
-            self._load_next_thumbnail(
-                self._http_thumbnail_group_limit
-                if self.session.supports_thumbnail_batch() is True
-                else MEDIA_THUMBNAIL_BATCH_SIZE,
-            )
+            self._load_next_thumbnail()
             if self._worker is not None:
                 return
 
@@ -5360,7 +5364,6 @@ class _NativeGalleryViewer:
         if presented_on_tk and index in self._visible_thumbnail_indices:
             indicator = getattr(self, '_load_progress', None)
             if indicator is not None and indicator.active:
-                indicator.compact()
                 indicator.thumbnails(
                     sum(
                         visible_index < len(self._photo_images)
@@ -6804,6 +6807,7 @@ def mount_native_gallery_view(
     observation_callback: Callable[[str], None] | None = None,
     newest_first: bool = False,
     canvas_grid_enabled: bool | None = None,
+    thumbnail_batch_size: Callable[[], int] | None = None,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -6828,6 +6832,8 @@ def mount_native_gallery_view(
         newest_first (bool): Apply a local reverse order on all metadata refreshes.
         canvas_grid_enabled (bool | None): Resolved renderer preference;
             None uses the configured factory default and environment choice.
+        thumbnail_batch_size (Callable[[], int] | None): Reader for the saved
+            steady request size, or None for the default.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -6846,5 +6852,6 @@ def mount_native_gallery_view(
         observation_callback=observation_callback,
         newest_first=newest_first,
         canvas_grid_enabled=canvas_grid_enabled,
+        thumbnail_batch_size=thumbnail_batch_size,
     )
     return viewer.frame

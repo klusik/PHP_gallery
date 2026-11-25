@@ -1998,14 +1998,15 @@ Použijte veřejnou URL webu, případně s~jeho veřejným podadresářem.
 Interní složky hostingu do adresy propojení nepatří. Servery s~interním
 přepisem cest potřebují PHP Gallery~1.0.1 pro ověření veřejné cesty.
 
-Tři tečky vedle \ui{Odpojit web} otevřou přehled propojení.
+Tři tečky vedle propojené adresy otevřou přehled propojení.
 V~části \ui{Aktivní propojení} lze přepnout na jiný web s~platným
 schválením. Profil uchová až 20~položek v~části \ui{Nedávné adresy}
 i~po restartu. Výběrem adresy předvyplníte nové schválení.
 Ikona vypnutí odpojí vybraný web a~křížek odebere nedávnou adresu.
 Cíl pro nahrávání se vybírá samostatně.
 
-Otevřete \ui{Choose gallery…} vedle adresy a~pište do pole \ui{Hledat galerie}.
+Otevřete ikonu seznamu \ui{Vybrat galerii…} vedle adresy a~pište do pole
+\ui{Hledat galerie}.
 Návrhy upřednostňují názvy, potom popisy a~štítky galerií. Názvy snesou
 drobný překlep. Uvozovky a~\texttt{AND}/\texttt{OR} fungují jako na webu.
 Odsazení a~nadřazené názvy u~vybraného výsledku ukazují vnoření. Šipka načte
@@ -2016,9 +2017,9 @@ Se schváleným přístupem k~uploadu vyberte galerii a~klikněte na
 \ui{Použít pro nahrávání}. Na
 podporovaném místním profilu WinApp použije schválený přístup automaticky,
 i~při spuštění ze zdrojů na macOS. Po ověření se cíl zobrazí pod \ui{Upload gallery}
-ve Watcher i~Importu. Tři tečky ukážou další možnosti. \ui{Odpojit web}
-ukončí aktuální propojení. Po restartu se připojte ke stejnému účtu
-a~galerii znovu vyberte. Rozšířená oprávnění najdete v~Nastavení pod
+ve Watcher i~Importu. Tři tečky ukážou další možnosti. Křížek
+\ui{Odpojit web} ukončí aktuální propojení. Po restartu se připojte ke stejnému
+účtu a~galerii znovu vyberte. Rozšířená oprávnění najdete v~Nastavení pod
 \ui{Manage link…}. Upload přes API používá vlastní \ui{Gallery URL}
 a~klíč omezený na galerii.
 
@@ -2361,8 +2362,10 @@ až 32~fotek, celkem 8~MiB a nejvýše 4~MiB na snímek; odpověď má
 ukládání do cache. Admin preload zůstává oddělený. Server účtuje N požadovaných
 fotek do~stávajícího limitu 600/IP a 3~600 globálně a~do limitu 600/account
 za pět minut. V paměti drží nejvýše jeden 4~MiB snímek. WinApp při podpoře
-začíná skupinami po osmi, po úspěšné skupině používá až šestnáct a při pomalé,
-velké či výjimečné skupině se vrací k~osmi. Neověřené originály si zachovávají
+začíná nejvýše osmi snímky. Po úspěšné skupině použije volbu
+\ui{Nastavení > Náhledy ze serveru na požadavek}. Nabízí 8, 16, 24 a~32,
+výchozí hodnota je~32 a~volba se ukládá hned. Při pomalé, velké či výjimečné
+skupině se vrací k~malé dávce. Neověřené originály si zachovávají
 samostatné potvrzení. FPM, proxy a HTTPS na~cílovém hostiteli zatím nebyly
 ověřeny; výchozí zapnutí jejich přijetí nepotvrzuje.
 Jednotlivé čtení zůstává podporovaným záložním řešením pro smíšené verze a
@@ -2893,12 +2896,16 @@ nepřipojuje. Fotografie se nahrávají nezávisle. Zavření nastavení nezahaj
 spolehlivosti Windows Tk; zdrojový režim bez Pillow ponechává funkční
 nativní ovládání pro opravu závislostí.
 
-Windows přednostně používá nainstalované písmo Segoe UI Variable Text,
-případně Segoe UI nebo nativní písmo Tk. Společné textové styly respektují
+Windows přednostně používá nainstalované písmo Segoe UI Variable Text nebo
+Segoe UI Variable, případně Segoe UI nebo nativní písmo Tk. Společné textové styly respektují
 systémové vyhlazování; neproporcionální diagnostika zachovává své písmo.
 Běžné ovládací ikony, stav cache, připnutí a~záznam používají vyhlazené
 obrázky vytvořené ve vyšším rozlišení. Bez Pillow zůstávají čitelné nativní
-symboly. Aplikace nestahuje písma ani nemění systémové předvolby.
+symboly. Překryvné panely mají společný jemný stín. V~podporovaném prostředí
+Windows modální dialogy navíc ztmaví okolí. Průběh načítání galerie zůstává
+v~dolním rohu a~neblokuje ovládání. Při přepnutí mezi galerií a~Watcherem
+zůstává společná lišta na místě. Aplikace nestahuje písma ani
+nemění systémové předvolby.
 Proces ve Windows si před vytvořením oken vyžádá systémovou podporu DPI;
 existující kontext z~manifestu zachová. Nepřidává tím automatické
 přeskupování mezi monitory. Při přesunu mezi monitory s~odlišným měřítkem
@@ -10215,7 +10222,7 @@ Koordinátor částí WinApp jednou zjistí úplný seznam testů. Každý díl�
 načte pouze přidělené místní moduly a~musí vykázat každou vybranou identitu.
 Zůstávají zachovány fixtures modulů a~tříd, úplný důkaz nepřekrývajícího se
 pokrytí i~dosavadní časové limity procesů a~koordinátoru.
-Sedm sériových skupin zachovává pět výhradních měřených skupin a~dva
+Osm sériových skupin zachovává pět výhradních měřených skupin a~tři
 deterministické shardy zbývajících tříd. Každý proces má výslovně připravené
 importy zdrojů a~testů.
 

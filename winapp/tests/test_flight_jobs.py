@@ -20,6 +20,7 @@ import time
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from uploader import flight_jobs
 from uploader.app_linking import UPLOAD_SCOPE
 
 from uploader.flight_jobs import (
@@ -697,7 +698,10 @@ class FlightJobsTests(unittest.TestCase):
             (metadata / (report.name + ".manifest.json")).write_text(
                 '{"created_utc":"2026-10-18T09:46:05+00:00"}', encoding="utf-8",
             )
-            with patch.dict("sys.modules", {"pypdf": None, "reportlab": None}):
+            # The catalog resolves this optional dependency at module import.
+            # Exercise its actual missing-reader branch without altering other
+            # test modules or relying on pypdf's lazy submodule load order.
+            with patch.object(flight_jobs, "pypdf", None):
                 details = report_file_details(report)
             self.assertIsNone(details.pages)
             self.assertEqual("2026-10-18T09:46:05+00:00", details.created_utc)

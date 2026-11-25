@@ -695,10 +695,11 @@ class CanvasGalleryGridTests(CanvasGridTestCase):
                 captured_image.close()
 
     def test_identical_reconcile_skips_canvas_updates(self) -> None:
-        """Skip redundant Canvas writes but render a real selection state change.
+        """Skip repeated remap geometry and still render a new selection.
 
         Returns:
-            None: Stable admission is inert; selecting one tile updates its rim.
+            None: Stable layout and admission are inert. Selecting a tile
+                still updates its rim.
         """
         proxies = self._append_catalogue(TEST_INPUT_CATALOGUE_SIZE)
         visible = self._settle(TEST_VIEWPORT_WIDTHS[0])
@@ -720,8 +721,13 @@ class CanvasGalleryGridTests(CanvasGridTestCase):
                 self.canvas, 'itemconfigure',
                 wraps=self.canvas.itemconfigure,
             ) as configure_spy,
+            mock.patch.object(
+                self.canvas, 'configure', wraps=self.canvas.configure,
+            ) as scrollregion_spy,
         ):
+            self.grid.layout(TEST_VIEWPORT_WIDTHS[0], TEST_CANVAS_HEIGHT, TEST_TILE_SIZE_PAIR)
             self.grid.reconcile(visible)
+            scrollregion_spy.assert_not_called()
             self.assertEqual(0, coords_spy.call_count)
             self.assertEqual(0, configure_spy.call_count)
 

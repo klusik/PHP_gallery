@@ -17,6 +17,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 
+from .ui_theme import RaisedDialogSurface
+
 
 # Purpose: Delay secondary elapsed details until a load is visibly prolonged.
 # Type: int. Units: seconds. Scope: one gallery load overlay.
@@ -36,12 +38,11 @@ _TICK_INTERVAL_MS = 1000
 # Rationale: 50 ms keeps native animation perceptible during a blocked request.
 _BAR_ANIMATION_INTERVAL_MS = 50
 
-# Purpose: Fit the loading surface inside either renderer's existing viewport.
-# Type: tuple[float, float]. Units: fraction of parent width.
-# Scope: one gallery indicator before and after its first visible photograph.
-# Consumers: GalleryLoadProgress._show and compact.
-# Rationale: 0.72 leaves canvas edges visible; 0.45 moves progress aside for photos.
-_OVERLAY_WIDTH_FRACTIONS = (0.72, 0.45)
+# Purpose: Keep the inline status out of the viewport's primary photo area.
+# Type: int. Units: Tk pixels. Scope: one gallery progress surface.
+# Consumers: GalleryLoadProgress._fit_overlay.
+# Rationale: 352 px fits common captions without covering the full gallery.
+_OVERLAY_MAX_WIDTH = 352
 
 # Purpose: Keep progress text and artwork clear of their containing edges.
 # Type: tuple[int, int]. Units: Tk pixels. Scope: one progress surface.
@@ -54,6 +55,19 @@ _OVERLAY_PADDING = (12, 9)
 # Consumers: GalleryLoadProgress._show and compact.
 # Rationale: Ten pixels separates feedback from the canvas and scrollbar edges.
 _OVERLAY_MARGIN = 10
+
+
+def _set_label_text(label: ttk.Label, text: str) -> None:
+    """Publish a changed progress caption without invalidating stable geometry.
+
+    Args:
+        label (ttk.Label): Existing primary or secondary progress label.
+        text (str): Latest localized caption for the label.
+    Returns:
+        None: Identical text produces no widget write.
+    """
+    if label.cget('text') != text:
+        label.configure(text=text)
 
 
 class GalleryLoadProgress:
@@ -87,21 +101,21 @@ class GalleryLoadProgress:
         self._metadata_count = 0
         self._last_real_count = 0
         self._thumbnail_count = 0
-        self._compact = False
+        self._placed_width: int | None = None
+        self._text_wrap_width: int | None = None
         self.phase = 'connecting'
         self.active = True
         self.visible = False
 
-        self.frame = ttk.Frame(
-            parent, padding=_OVERLAY_PADDING, style='Card.TFrame',
-        )
+        self.frame = RaisedDialogSurface(parent, padding=_OVERLAY_PADDING)
         self.label = ttk.Label(
             self.frame, text=text('linking_media_connecting'),
             style='TLabel',
         )
         self.label.pack(fill='x')
         self.bar = ttk.Progressbar(
-            self.frame, mode='indeterminate', style='Horizontal.TProgressbar',
+            self.frame, mode='indeterminate',
+            style='Progress.Horizontal.TProgressbar',
         )
         # Six pixels separate the phase from its bar; four pixels distinguish
         # secondary details. Both gaps are internal layout, not polling policy.
@@ -111,7 +125,32 @@ class GalleryLoadProgress:
         self.label.configure(justify='left')
         self.details.configure(justify='left')
         self.frame.bind('<Configure>', self._fit_text, add='+')
+        self.frame.bind('<Map>', self._visibility_changed, add='+')
+        self.frame.bind('<Unmap>', self._visibility_changed, add='+')
+        self._parent_resize_binding = parent.bind(
+            '<Configure>', self._fit_overlay, add='+',
+        )
         self._show()
+
+    def _fit_overlay(self, _event: tk.Event | None = None) -> None:
+        """Keep the progress surface fixed at the lower viewport edge.
+
+        Args:
+            _event (tk.Event | None): Optional parent resize notification.
+        Returns:
+            None: Only a changed usable width updates placement.
+        """
+        if self._closed or not self.visible:
+            return
+        width = max(1, min(
+            _OVERLAY_MAX_WIDTH, self._parent.winfo_width() - 2 * _OVERLAY_MARGIN,
+        ))
+        if width != self._placed_width:
+            self.frame.place(
+                relx=1, rely=1, anchor='se', width=width,
+                x=-_OVERLAY_MARGIN, y=-_OVERLAY_MARGIN,
+            )
+            self._placed_width = width
 
     def _fit_text(self, event: tk.Event) -> None:
         """Wrap translated labels to the actual overlay width after layout.
@@ -126,29 +165,38 @@ class GalleryLoadProgress:
         # Two equal padding edges surround the text; one pixel is Tk's
         # smallest usable wrap width while an initially unmapped frame settles.
         wrap = max(1, event.width - 2 * _OVERLAY_PADDING[0])
-        self.label.configure(wraplength=wrap)
-        self.details.configure(wraplength=wrap)
+        if wrap != self._text_wrap_width:
+            self.label.configure(wraplength=wrap)
+            self.details.configure(wraplength=wrap)
+            self._text_wrap_width = wrap
+
+    def _visibility_changed(self, event: tk.Event) -> None:
+        """Pause visual work while the gallery page is unmapped.
+
+        Args:
+            event (tk.Event): Map or unmap event on the progress surface.
+        Returns:
+            None: Animates and schedules detail only while visible to the user.
+        """
+        if self._closed or event.widget is not self.frame:
+            return
+        if self.visible and self.frame.winfo_viewable():
+            self._start_bar()
+            self._schedule_tick()
+        else:
+            self._stop_bar()
+            self._cancel_tick()
 
     def _show(self) -> None:
         """Place the existing overlay over the canvas without changing layout.
 
         Returns:
-            None: The same widgets become visible at the lower center.
+            None: The same widgets appear at their fixed viewport edge.
         """
         if not self.active or self.visible:
             return
-        if self._compact:
-            self.frame.place(
-                relx=1.0, rely=1.0, anchor='se',
-                x=-_OVERLAY_MARGIN, y=-_OVERLAY_MARGIN,
-                relwidth=_OVERLAY_WIDTH_FRACTIONS[1],
-            )
-        else:
-            self.frame.place(
-                relx=0.5, rely=1.0, anchor='s', y=-_OVERLAY_MARGIN,
-                relwidth=_OVERLAY_WIDTH_FRACTIONS[0],
-            )
         self.visible = True
+        self._fit_overlay()
         self._start_bar()
         self._schedule_tick()
 
@@ -158,9 +206,21 @@ class GalleryLoadProgress:
         Returns:
             None: Repeated metadata updates reuse the current animation.
         """
-        if not self._bar_running:
+        if (not self._bar_running and self.phase != 'error'
+                and self.frame.winfo_viewable()
+                and str(self.bar['mode']) == 'indeterminate'):
             self.bar.start(_BAR_ANIMATION_INTERVAL_MS)
             self._bar_running = True
+
+    def _stop_bar(self) -> None:
+        """Stop the native animation only when this indicator started it.
+
+        Returns:
+            None: Determinate progress updates cannot restart the Tk timer.
+        """
+        if self._bar_running:
+            self.bar.stop()
+            self._bar_running = False
 
     def _schedule_tick(self) -> None:
         """Own at most one bounded elapsed or countdown update.
@@ -169,7 +229,7 @@ class GalleryLoadProgress:
             None: Hidden or inactive overlays own no pending callback.
         """
         if (self.active and self.visible and self.phase != 'error'
-                and self._tick_id is None):
+                and self._tick_id is None and self.frame.winfo_viewable()):
             try:
                 self._tick_id = self._parent.after(
                     _TICK_INTERVAL_MS, self._tick,
@@ -194,7 +254,7 @@ class GalleryLoadProgress:
                     'linking_media_retrying' if self._wait_automatic
                     else 'linking_media_throttled'
                 )
-                self.label.configure(text=self._text(key))
+                _set_label_text(self.label, self._text(key))
             else:
                 remaining = max(0.0, self._wait_deadline - now)
                 key = (
@@ -203,8 +263,8 @@ class GalleryLoadProgress:
                     else 'linking_media_wait_retry' if self._wait_automatic
                     else 'linking_media_wait_manual'
                 )
-                self.label.configure(
-                    text=self._text(key).format(seconds=math.ceil(remaining)),
+                _set_label_text(
+                    self.label, self._text(key).format(seconds=math.ceil(remaining)),
                 )
         if elapsed >= _DETAILS_AFTER_SECONDS:
             detail_lines = [self._text('linking_media_elapsed').format(
@@ -219,7 +279,7 @@ class GalleryLoadProgress:
                         seconds=since_progress, count=self._last_real_count,
                     ),
                 )
-            self.details.configure(text='\n'.join(detail_lines))
+            _set_label_text(self.details, '\n'.join(detail_lines))
         self._schedule_tick()
 
     def metadata(self, confirmed: int) -> None:
@@ -248,10 +308,8 @@ class GalleryLoadProgress:
         message = self._text(key)
         if self._metadata_count:
             message = message.format(count=f'{self._metadata_count:,}')
-        self.label.configure(text=message)
+        _set_label_text(self.label, message)
         if str(self.bar['mode']) != 'indeterminate':
-            self.bar.stop()
-            self._bar_running = False
             self.bar.configure(mode='indeterminate')
         self._start_bar()
 
@@ -279,15 +337,18 @@ class GalleryLoadProgress:
             self._last_real_count = self._completed
         self._thumbnail_count = self._completed
         self._show()
-        self.label.configure(
-            text=self._text('linking_media_preparing').format(
+        _set_label_text(
+            self.label, self._text('linking_media_preparing').format(
                 done=self._completed, total=self._total,
             ),
         )
-        self.bar.stop()
-        self._bar_running = False
-        self.bar.configure(mode='determinate', maximum=max(1, self._total))
-        self.bar['value'] = min(self._completed, self._total)
+        maximum = max(1, self._total)
+        value = min(self._completed, self._total)
+        if (str(self.bar['mode']) != 'determinate'
+                or maximum != float(self.bar['maximum'])
+                or value != float(self.bar['value'])):
+            self._stop_bar()
+            self.bar.configure(mode='determinate', maximum=maximum, value=value)
 
     def waiting(self, seconds: int | None, automatic: bool) -> None:
         """Reflect an existing automatic or manual retry wait.
@@ -307,17 +368,15 @@ class GalleryLoadProgress:
         )
         self._show()
         if str(self.bar['mode']) != 'indeterminate':
-            self.bar.stop()
-            self._bar_running = False
             self.bar.configure(mode='indeterminate')
         self._start_bar()
         if seconds is None:
             key = 'linking_media_retrying' if automatic else 'linking_media_throttled'
-            self.label.configure(text=self._text(key))
+            _set_label_text(self.label, self._text(key))
         else:
             key = 'linking_media_wait_retry' if automatic else 'linking_media_wait_manual'
-            self.label.configure(
-                text=self._text(key).format(seconds=max(0, seconds)),
+            _set_label_text(
+                self.label, self._text(key).format(seconds=max(0, seconds)),
             )
 
     def resume(self) -> None:
@@ -336,23 +395,6 @@ class GalleryLoadProgress:
         else:
             self.metadata(self._metadata_count)
 
-    def compact(self) -> None:
-        """Move the overlay aside after a real thumbnail becomes visible.
-
-        Returns:
-            None: The same widgets occupy a smaller corner surface.
-        """
-        if self._compact:
-            return
-        self._compact = True
-        if not self.active or not self.visible:
-            return
-        self.frame.place(
-            relx=1.0, rely=1.0, anchor='se',
-            x=-_OVERLAY_MARGIN, y=-_OVERLAY_MARGIN,
-            relwidth=_OVERLAY_WIDTH_FRACTIONS[1],
-        )
-
     def rearm(self) -> None:
         """Restart a failed, still-unresolved load using the same widgets.
 
@@ -363,9 +405,8 @@ class GalleryLoadProgress:
                 and not (self.phase == 'waiting' and not self._wait_automatic)):
             return
         self._cancel_tick()
-        self.bar.stop()
+        self._stop_bar()
         self.active = True
-        self.visible = False
         self.phase = 'connecting'
         # Retry continues this gallery opening. Preserve its elapsed time and
         # last real progress rather than presenting retry dispatch as progress.
@@ -374,10 +415,11 @@ class GalleryLoadProgress:
         self._wait_deadline = None
         self.bar.pack(fill='x', pady=(6, 0), before=self.details)
         self.bar.configure(mode='indeterminate')
-        self._bar_running = False
-        self.label.configure(text=self._text('linking_media_connecting'))
-        self.details.configure(text='')
+        _set_label_text(self.label, self._text('linking_media_connecting'))
+        _set_label_text(self.details, '')
         self._show()
+        self._start_bar()
+        self._schedule_tick()
 
     def fail(self, message: str) -> None:
         """Show a terminal load failure without implying successful progress.
@@ -391,11 +433,10 @@ class GalleryLoadProgress:
             return
         self.phase = 'error'
         self._show()
-        self.bar.stop()
-        self._bar_running = False
+        self._stop_bar()
         self.bar.pack_forget()
-        self.details.configure(text='')
-        self.label.configure(text=message)
+        _set_label_text(self.details, '')
+        _set_label_text(self.label, message)
         self._cancel_tick()
 
     def _cancel_tick(self) -> None:
@@ -424,9 +465,9 @@ class GalleryLoadProgress:
         self.phase = 'hidden'
         self._cancel_tick()
         try:
-            self.bar.stop()
-            self._bar_running = False
+            self._stop_bar()
             self.frame.place_forget()
+            self._placed_width = None
         except tk.TclError:
             pass
 
@@ -441,6 +482,7 @@ class GalleryLoadProgress:
         self.hide()
         self._closed = True
         try:
+            self._parent.unbind('<Configure>', self._parent_resize_binding)
             self.frame.destroy()
         except tk.TclError:
             pass

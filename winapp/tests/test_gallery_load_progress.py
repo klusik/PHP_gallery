@@ -94,6 +94,13 @@ TEST_BAR_ANIMATION_WAIT_SECONDS = 0.12
 # Rationale: Ten milliseconds matches the established GUI fixture cadence.
 TEST_BAR_ANIMATION_POLL_SECONDS = 0.01
 
+# Purpose: Allow the next Windows composition frames to paint the overlay.
+# Type: float. Units: seconds. Scope: one held-metadata screenshot.
+# Consumers: NativeGalleryLoadProgressTests._capture_viewer.
+# Rationale: A half-second bounds painting on the virtual display without
+# treating a never-painted shadow or an occluded capture as success.
+TEST_SHADOW_PAINT_WAIT_SECONDS = 0.5
+
 # Purpose: Store visual evidence under the existing uploaded audit artifact.
 # Type: tuple[str, ...]. Units: repository-relative path components.
 # Scope: optional Windows progress UI evidence. Consumers: screenshot sequence test.
@@ -168,6 +175,11 @@ class GalleryLoadProgressTests(unittest.TestCase):
         except tk.TclError as exc:
             self.skipTest(f'Real Tk display is unavailable: {exc}')
         self.addCleanup(self._destroy_root)
+        errors: list[str] = []
+        self.root.report_callback_exception = lambda _kind, error, _trace: errors.append(
+            str(error),
+        )
+        self.addCleanup(self.assertEqual, [], errors)
         self.progress = progress_module.GalleryLoadProgress(
             self.canvas, lambda key: tr('en', key),
         )
@@ -341,6 +353,7 @@ class GalleryLoadProgressTests(unittest.TestCase):
             None: Reports create no widgets or timers, and repeated counts and
                 retry dispatch do not replace the last real progress timestamp.
         """
+        self.root.update()
         children = tuple(self.progress.frame.winfo_children())
         timers = self.root.tk.call('after', 'info')
         largest_count = TEST_PROGRESS_CATALOGUE_SIZES[-1]
@@ -390,6 +403,30 @@ class GalleryLoadProgressTests(unittest.TestCase):
         self.assertIsNone(self.progress._tick_id)
         self.assertEqual(children, tuple(self.progress.frame.winfo_children()))
 
+    def test_paint_is_idempotent_and_overlay_keeps_its_anchor(self) -> None:
+        """Keep placement and widget state stable across repeated progress reports.
+
+        Returns:
+            None: Real transitions repaint once and repeated observations
+                leave the bar, caption and viewport geometry alone.
+        """
+        self.root.update()
+        placement = self.progress.frame.place_info()
+        canvas_size = (self.canvas.winfo_width(), self.canvas.winfo_height())
+        self.progress.thumbnails(2, 5)
+        self.root.update()
+        with (
+            mock.patch.object(self.progress.bar, 'configure') as configure_bar,
+            mock.patch.object(self.progress.label, 'configure') as configure_label,
+            mock.patch.object(self.progress.frame, 'place') as place,
+        ):
+            self.progress.thumbnails(2, 5)
+            configure_bar.assert_not_called()
+            configure_label.assert_not_called()
+            place.assert_not_called()
+        self.assertEqual(placement, self.progress.frame.place_info())
+        self.assertEqual(canvas_size, (self.canvas.winfo_width(), self.canvas.winfo_height()))
+
 
 @unittest.skipUnless(
     sys.platform == 'win32' and tk is not None
@@ -413,7 +450,7 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
 
     def _capture_viewer(
         self, viewer: 'native_fixture.native_gallery_viewer._NativeGalleryViewer',
-        stage: str,
+        stage: str, *, expect_progress: bool = False,
     ) -> None:
         """Capture the mounted viewer's real desktop bounds when supported.
 
@@ -421,6 +458,8 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
             viewer (native_fixture.native_gallery_viewer._NativeGalleryViewer):
                 Mounted controller whose frame is visible.
             stage (str): Stable filename stem for this progress phase.
+            expect_progress (bool): Require the actual painted track color
+                and, during held metadata, the shadow outside the card.
         Returns:
             None: Saves screenshot evidence under the existing audit artifact.
         """
@@ -435,8 +474,46 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
         )
         evidence = WINAPP_DIR.parent.joinpath(*TEST_VISUAL_EVIDENCE_PATH)
         evidence.mkdir(parents=True, exist_ok=True)
+        progress = viewer._load_progress
+        shadow_sample: tuple[int, int] | None = None
+        background = ui_theme._hex_rgb(ui_theme._PALETTE['card_surface'])
+        if expect_progress and progress.phase == 'metadata':
+            card = progress.frame
+            layers = card._shadow_layers
+            self.assertTrue(layers and all(layer.winfo_viewable() for layer in layers), stage)
+            # Two pixels outside the card, comfortably inside the canvas.
+            right = card.winfo_rootx() + card.winfo_width() - bounds[0] + 2
+            center_y = card.winfo_rooty() - bounds[1] + card.winfo_height() // 2
+            shadow_sample = (right, center_y)
+            # Tk has mapped the children. The Windows compositor can paint
+            # a later frame, so sample pixels before taking the full evidence.
+            deadline = time.monotonic() + TEST_SHADOW_PAINT_WAIT_SECONDS
+            pixel = (bounds[0] + right, bounds[1] + center_y)
+            pixel_bounds = (*pixel, pixel[0] + 1, pixel[1] + 1)
+            while time.monotonic() < deadline:
+                with ImageGrab.grab(bbox=pixel_bounds) as sample:
+                    if sum(sample.getpixel((0, 0))) < sum(background):
+                        break
+                self.root.update()
+                time.sleep(TEST_BAR_ANIMATION_POLL_SECONDS)
         with ImageGrab.grab(bbox=bounds) as captured:
             captured.save(evidence / f'viewer-{stage}.png')
+            if expect_progress:
+                bar = progress.bar
+                self.assertTrue(bar.winfo_viewable(), stage)
+                self.assertGreaterEqual(bar.winfo_width(), bar.winfo_reqwidth(), stage)
+                x = bar.winfo_rootx() - bounds[0]
+                y = bar.winfo_rooty() - bounds[1]
+                with captured.crop((
+                    x, y, x + bar.winfo_width(), y + bar.winfo_height(),
+                )).convert('RGB') as track:
+                    trough = ui_theme._hex_rgb(ui_theme._PALETTE['line'])
+                    colors = track.getcolors()
+                    self.assertIsNotNone(colors, stage)
+                    self.assertIn(trough, {color for _count, color in colors}, stage)
+                if shadow_sample is not None:
+                    shadow = captured.getpixel(shadow_sample)
+                    self.assertLess(sum(shadow), sum(background), stage)
 
     def test_newest_first_progress_reaches_tk_during_held_catalogue_read(self) -> None:
         """Show queue-fed validated counts while large newest-first scans wait.
@@ -594,14 +671,14 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
         self.assertEqual(page_size, len(viewer._view_order._pending))
         self.assertEqual(page_size, viewer._view_order._pending_cursor)
         self._capture_viewer(
-            viewer, f'{renderer_name}-metadata-held-{total}',
+            viewer, f'{renderer_name}-metadata-held-{total}', expect_progress=True,
         )
         self.root.geometry(
             f'{TEST_NARROW_ROOT_SIZE[0]}x{TEST_NARROW_ROOT_SIZE[1]}+0+0',
         )
         self.root.update()
         self._capture_viewer(
-            viewer, f'{renderer_name}-metadata-held-narrow-{total}',
+            viewer, f'{renderer_name}-metadata-held-narrow-{total}', expect_progress=True,
         )
         self.root.geometry(
             f'{TEST_ROOT_SIZE[0]}x{TEST_ROOT_SIZE[1]}+0+0',
@@ -666,7 +743,7 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
             'The first real thumbnail did not update partial viewport progress.',
         )
         self._capture_viewer(
-            viewer, f'{renderer_name}-thumbnails-partial-{total}',
+            viewer, f'{renderer_name}-thumbnails-partial-{total}', expect_progress=True,
         )
         release_thumbnail.set()
         self._wait_until(

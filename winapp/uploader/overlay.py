@@ -13,7 +13,9 @@ import tkinter as tk
 from tkinter import ttk
 
 from uploader.localization import gettext
-from uploader.ui_theme import Button, DialogSurface, icon_button, hide_inline_tooltip
+from uploader.ui_theme import (
+    Button, RaisedDialogSurface, hide_inline_tooltip, icon_button,
+)
 from uploader.flight_report_translations import tr
 
 # Purpose: Leave a visible edge of the owning workspace around a panel.
@@ -66,7 +68,7 @@ def layout_actions(
             row, column = row + 1, 0
 
 
-class OverlayPanel(DialogSurface):
+class OverlayPanel(RaisedDialogSurface):
     """Present one contextual surface without creating an OS popup window."""
 
     def __init__(

@@ -1245,10 +1245,11 @@ site-root Referer, same-origin fetch metadata, session cookie and CSRF
 payload. It also checks approval layout at desktop and narrow widths and
 the absence of Referer on the loopback navigation. Hosted Linux runs with
 the runner's Firefox installation exercise the same markup through GeckoDriver.
-The fixture opens the loopback page explicitly in a fresh browser session
-under the existing journey deadline. The private profile root is removed after
-the driver exits. The central audit runs this cross-browser fixture behind its
-serial barrier to give browser startup exclusive resources on the runner.
+The fixture starts its fresh Firefox session at a blank document with home and
+welcome content disabled, then opens the loopback page explicitly under the
+same journey deadline. The private profile root is removed after the driver
+exits. The central audit runs this cross-browser fixture behind its serial
+barrier to give browser startup exclusive resources on the runner.
 The fixture endpoints stand in for storage and token exchange.
 No TeX manual impact. This transport correction preserves the documented
 approval and revocation procedures.
@@ -2089,8 +2090,24 @@ visible thumbnails contribute a determinate fraction. Small oldest-first reads,
 cached reopen during a held refresh, manual quota Retry, safe header-timeout
 retry, transient thumbnail waits and viewer cancellation retain their actual
 owner behavior. The coalesced count slot cannot occupy a photo-result queue
-entry; stale generations cannot repaint the current indicator. Component
-checks cover elapsed/last-progress text, unknown delays and terminal cleanup.
+entry; stale generations cannot repaint the current indicator. Native captures
+check painted progress and its drop shadow within the mapped renderer at both
+widths. The held-metadata screenshot allows up to 0.5 seconds for Windows to
+compose the shadow, then asserts the painted pixels in the retained capture.
+Component checks cover elapsed/last-progress text, unknown delays and terminal
+cleanup.
+
+The same discovery exercises retained panel switching with native notebook
+and scroll widgets, stable header geometry during Watcher transitions, steady batch
+admission, localized Settings persistence, centered modal bounds, focus
+restoration and updater progress. The Windows shell tests retain screenshots
+and selection-to-mapped-idle samples under
+`cache/test-audit/winapp-shell/`. The updater fixture compares client,
+dimmed backdrop and shadow pixels. The header fixtures check that switching
+Photos and Watcher keeps the link address, requested width and row placement
+stable with the compact gallery-picker and disconnect icons.
+The switch samples are software
+timings from a populated fixture, with repeated mutations checked separately.
 
 The existing **Issue 380 integrated WinApp UI** workflow runs this feature on
 Windows and Linux/Xvfb, bound to the exact event SHA and its immutable
@@ -2146,8 +2163,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery and its seven serial partitions; it is not
-the narrower `winapp-native` viewer diagnostic. It performs no integration,
+central complete discovery in eight serial partitions. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
 
@@ -9642,11 +9658,11 @@ The inspector dismissal regression closes the pane during a held metadata read,
 checks that its late reply cannot reopen it, preserves the current gallery/viewer
 and selection, and reopens the same photo through current cached metadata. It
 retains open/closed screenshots under `cache/test-audit/inspector-dismissal/`.
-The multi-navigation gallery screenshot fixture disables automatic cyclic GC
-only during its render batch and explicitly collects discarded widgets on the Tk
-owner thread. Its update-based host does not run a continuous Tk mainloop;
-automatic collection on a Pillow worker can otherwise block while deleting Tk
-images. Production timing/limits and every visibility assertion remain unchanged.
+The native viewer fixture cancels remaining timers in its private interpreter
+before destroying each root. It disables automatic cyclic GC for each fixture
+and collects discarded widgets on the Tk owner thread before restoring GC.
+Its update-based host does not run a continuous Tk mainloop. Collection on a
+Pillow worker can block while deleting Tk variables and images.
 
 The native header fixture calls the real application header factory above
 Photos without constructing an installed profile or starting capture. It retains
@@ -10034,9 +10050,11 @@ That START record identifies the case active at the deadline; without its END
 record it does not distinguish a case-specific stall from accumulated remainder
 work. Pre-optimization Windows run 43957959829 completed its entire 1,420-test
 inventory; the current candidate discovers 1,427 tests.
-The coordinator therefore splits only the exact remaining inventory into two
+The initial seven-child split later exhausted its remainder deadline on
+Windows runs 45645021519, 45646864051 and 45648688561. The coordinator
+splits only the exact remaining inventory into three
 deterministic least-loaded, class-preserving shards; test order within each shard
-follows canonical discovery. All seven children run
+follows canonical discovery. All eight children run
 serially in separate Python processes, each under the existing 90-second cap;
 the coordinator retains its 480-second outer bound for child execution plus
 inventory and report handling. It retains each original schema-1 child report
@@ -10049,7 +10067,7 @@ JSON report serialization.
 verify this progress evidence itself.
 Report verbosity, schema, child limits and selection remain unchanged. The
 coordinator checks runtime identity and report
-counts, and requires the exact disjoint test-ID union across all seven children
+counts, and requires the exact disjoint test-ID union across all eight children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
 and its 90-second full-process behavior remain unchanged; earlier full-process
@@ -10058,19 +10076,15 @@ are not converted into passes by partitioned execution.
 
 The audit owner installs both WinApp source and test import roots explicitly;
 selected children cannot depend on another module alphabetically bootstrapping
-`uploader` imports. The dense-return body and its setup are reused unchanged,
-retaining its cache, transport and measurement assertions in the separate class.
-The 480-second whole-run cap is retained with seven bounded children.
+`uploader` imports. The dense-return class shares the native viewer setup and
+retains its cache, transport and measurement assertions.
+The 480-second whole-run cap is retained with eight bounded children.
 
 The issue #361 functional workflow also runs the existing central `php-fast`
 suite in a separate required Linux job. That registered suite includes
 `tests/audit_runner_test.php`; the Python partition report fixtures remain in
 the complete WinApp inventory. The workflow retains both native audit reports
 and publishes the actual coordinator-contract job result.
-
-No TeX manual impact: this changes central test process ownership and the
-publication of already-computed performance statistics. Runtime behavior and
-user-facing contracts are unchanged.
 
 Only the coordinator performs complete canonical discovery. An explicitly
 selected child discovers the exact local `test_` modules represented in its ID

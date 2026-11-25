@@ -68,7 +68,8 @@ from .native_gallery_viewer import (
 from .tk_scroll_input import vertical_scroll_delta
 from .ui_theme import (
     Button,
-    GlassCard, MetricCard, METRIC_ICON_SIZE, ThemeImage, _PALETTE, attach_inline_tooltip,
+    GlassCard, MetricCard, METRIC_ICON_SIZE, RaisedDialogSurface, ThemeImage,
+    _PALETTE, attach_inline_tooltip,
     create_smooth_icon, icon_button,
 )
 
@@ -475,6 +476,7 @@ class PhotosWorkspace(ttk.Frame):
             for sanitized Photos failures.
         canvas_grid_enabled (bool): Frozen process-startup decision selecting
             experimental Canvas rendering; this workspace never re-reads config.
+        thumbnail_batch_size (Callable[[], int] | None): Host's live saved size.
     """
 
     def __init__(
@@ -513,6 +515,7 @@ class PhotosWorkspace(ttk.Frame):
         storage_surface: tk.Misc | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
         canvas_grid_enabled: bool = False,
+        thumbnail_batch_size: Callable[[], int] | None = None,
     ) -> None:
         """Create the gallery, viewer and optional metadata panes.
 
@@ -578,6 +581,8 @@ class PhotosWorkspace(ttk.Frame):
                 thread-safe host receiver for accepted safe Photos failures.
             canvas_grid_enabled (bool): Frozen process-startup renderer choice;
                 changing saved configuration cannot alter existing workspaces.
+            thumbnail_batch_size (Callable[[], int] | None): Host reader for
+                the current steady thumbnail request size.
 
         Returns:
             None: Starts a bounded asynchronous catalogue read when available.
@@ -587,6 +592,7 @@ class PhotosWorkspace(ttk.Frame):
         self._connect = connect
         self._language = language
         self._canvas_grid_enabled = canvas_grid_enabled is True
+        self._thumbnail_batch_size = thumbnail_batch_size
         self._manager = manager
         self._format_bytes = format_bytes
         self._manage_link = manage_link
@@ -3611,6 +3617,7 @@ class PhotosWorkspace(ttk.Frame):
                 ) == 'newest' else {}),
                 thumbnail_memory=self._thumbnail_memory,
                 canvas_grid_enabled=self._canvas_grid_enabled,
+                thumbnail_batch_size=self._thumbnail_batch_size,
                 context_menu=lambda photo, event: self._viewer_context(
                     gallery.gallery_id, photo, event,
                 ),
@@ -4266,7 +4273,7 @@ class PhotosWorkspace(ttk.Frame):
 
     def _open_context(
         self, event: tk.Event, *, surface: tk.Misc | None = None,
-    ) -> GlassCard:
+    ) -> RaisedDialogSurface:
         """Anchor a compact context to its trigger on the visible owner.
 
         Args:
@@ -4275,11 +4282,11 @@ class PhotosWorkspace(ttk.Frame):
                 trigger, or None to place the card inside Photos.
 
         Returns:
-            GlassCard: The new current contextual surface.
+            RaisedDialogSurface: Current contextual card above the gallery.
         """
         self._dismiss_context(restore=False)
         parent = surface if surface is not None else self
-        card = GlassCard(parent, padding=8, takefocus=True)
+        card = RaisedDialogSurface(parent, padding=8, takefocus=True)
         self._context_card, self._context_origin = card, event.widget
         self._context_surface = parent
         self._context_xy = (

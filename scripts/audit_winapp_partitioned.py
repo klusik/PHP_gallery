@@ -50,15 +50,15 @@ CHILD_TEST_ID_LIMIT = 4096
 CHILD_REASON_LIMIT = 16384
 
 # Purpose: Isolate the observed long-running viewer test module in one child.
-# Type: frozenset[str]. Units: unittest module names. Scope: seven WinApp shards.
+# Type: frozenset[str]. Units: unittest module names. Scope: partitioned WinApp.
 # Consumers: partition_test_ids(). Rationale: hosted timings showed the viewer
 # module alone approaches the existing per-child limit; keep all its classes
-# separate from measured owners while the canonical remainder uses two shards.
+# separate from the other measured owners and the canonical remainder.
 PARTITION_ISOLATED_MODULES = frozenset({"test_native_gallery_viewer"})
 
 # Purpose: Isolate measured benchmark and preload classes in separate children.
 # Type: tuple[str, ...]. Units: unittest module/class identities.
-# Scope: seven WinApp shards. Consumers: partition_test_ids().
+# Scope: partitioned WinApp. Consumers: partition_test_ids().
 # Rationale: the two filesystem cohorts and real-session preload benchmark each
 # approach the existing child deadline and must not share another slow owner.
 # The durable dense-return case has the same filesystem cost and its own class.
@@ -70,12 +70,12 @@ PARTITION_ISOLATED_CLASSES = (
 )
 
 
-# Purpose: Split only the canonical remainder into two serial child processes.
-# Type: int. Units: remainder child processes. Scope: seven WinApp shards.
-# Consumers: partition_test_ids(). Rationale: one 1,270-test remainder shard
-# reached its 90-second child cap; two whole-class buckets reduce aggregation
-# without mixing the five previously isolated measured groups.
-PARTITION_REMAINDER_SHARD_COUNT = 2
+# Purpose: Split only the canonical remainder into three serial child processes.
+# Type: int. Units: remainder child processes. Scope: partitioned WinApp.
+# Consumers: partition_test_ids(). Rationale: two roughly 730-test shards
+# repeatedly reached the 90-second child cap on Windows. Three whole-class
+# buckets reduce aggregation while retaining the five isolated measured groups.
+PARTITION_REMAINDER_SHARD_COUNT = 3
 
 
 def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:

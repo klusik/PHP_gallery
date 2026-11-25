@@ -13,7 +13,27 @@ from tkinter import font as tkfont, ttk
 from typing import Callable
 
 from uploader.localization import gettext
-from uploader.ui_theme import Button, DialogSurface, _PALETTE, icon_button
+from uploader.ui_theme import (
+    Button, DialogSurface, ModalScrim, RaisedDialogSurface, _PALETTE, icon_button,
+)
+
+# Purpose: Keep the root visible around embedded dialogs at supported sizes.
+# Type: int. Units: Tk pixels per edge. Scope: active modal placement.
+# Consumers: EmbeddedWindow._fit.
+# Rationale: 20 px leaves context even at the 840 by 500 application minimum.
+_DIALOG_MARGIN = 20
+
+# Purpose: Give content-heavy dialogs room for their existing scroll controls.
+# Type: tuple[int, int]. Units: Tk pixels. Scope: preferred dialog size.
+# Consumers: EmbeddedWindow. Rationale: 900 by 620 accommodates file pickers,
+# reports and diagnostics while preserving margins on a narrow root.
+_DIALOG_SIZE = (900, 620)
+
+# Purpose: Center questions and text-entry prompts in a compact card.
+# Type: tuple[int, int]. Units: Tk pixels. Scope: one synchronous prompt.
+# Consumers: _prompt. Rationale: 620 by 360 leaves space for wrapping and
+# the response row, with long text contained by its existing scrollbar.
+_PROMPT_SIZE = (620, 360)
 
 # Purpose: Keep help instructions comfortably readable in a compact overlay.
 # Type: int; Units: pixels; Scope: help window minimum content width.
@@ -66,8 +86,10 @@ def initialize_shell(root: tk.Tk) -> None:
         root._embedded_notices = []
         root._embedded_notice_widget = None
         root._embedded_notices_omitted = 0
+        root._embedded_scrim = None
         root.bind("<Escape>", lambda _event: _close_active_panel(root), add="+")
         root.bind("<Map>", _scope_mapped_widget, add="+")
+        root.bind("<Configure>", _fit_active_panel, add="+")
         root.bind_class("EmbeddedPanelKeys", "<Tab>", lambda event: _tab_active_panel(root, event, False))
         root.bind_class("EmbeddedPanelKeys", "<Shift-Tab>", lambda event: _tab_active_panel(root, event, True))
         root.bind_class("EmbeddedPanelKeys", "<Escape>", lambda _event: _close_active_panel(root))
@@ -82,6 +104,9 @@ def _scope_mapped_widget(event: tk.Event) -> None:
         None: Adds the shared panel key tag only to panel-owned descendants.
     """
     widget = event.widget
+    if (not isinstance(widget, tk.Misc)
+            or not getattr(widget._root(), "_embedded_panels", ())):
+        return
     surface_owner = getattr(widget, "_embedded_owner", None)
     if surface_owner is not None:
         surface_owner.grab_set()
@@ -93,6 +118,22 @@ def _scope_mapped_widget(event: tk.Event) -> None:
                 widget.bindtags(("EmbeddedPanelKeys",) + tags)
             return
         owner = getattr(owner, "master", None)
+
+
+def _fit_active_panel(event: tk.Event) -> None:
+    """Fit the centered card only after real main-window geometry changes.
+
+    Args:
+        event (tk.Event): Root or descendant Configure event.
+    Returns:
+        None: The current card retains its margins without responding to
+            progress text and other internal layout events.
+    """
+    root = event.widget
+    if isinstance(root, tk.Tk):
+        panel = active_panel(root)
+        if panel is not None:
+            panel._fit()
 
 
 def _tab_active_panel(root: tk.Tk, event: tk.Event, reverse: bool) -> str | None:
@@ -192,7 +233,7 @@ def _render_notice(root: tk.Tk) -> None:
     if not root._embedded_notices:
         return
     owner = active_panel(root) or root
-    strip = DialogSurface(owner, padding=(12, 8), style="Card.TFrame")
+    strip = RaisedDialogSurface(owner, padding=(12, 8))
     strip.columnconfigure(0, weight=1)
     title, message = root._embedded_notices[0]
     label = title + f" · {len(root._embedded_notices)} notice(s)"
@@ -202,8 +243,8 @@ def _render_notice(root: tk.Tk) -> None:
     Button(strip, text=gettext("Dismiss"), command=lambda: _dismiss_notice(root)).grid(row=0, column=1, sticky="e")
     text = tk.Text(
         strip, height=NOTICE_TEXT_ROWS, wrap="word", relief="flat",
-        font="TkDefaultFont", background=root.cget("background"),
-        foreground=ttk.Style(root).lookup("TLabel", "foreground") or "#000000",
+        font="TkDefaultFont", background=_PALETTE["card_surface"],
+        foreground=_PALETTE["ink"], borderwidth=0, highlightthickness=0,
         takefocus=True,
     )
     text.insert("1.0", message)
@@ -212,7 +253,10 @@ def _render_notice(root: tk.Tk) -> None:
     text.configure(yscrollcommand=scroll.set)
     text.grid(row=1, column=0, sticky="ew", pady=(6, 0))
     scroll.grid(row=1, column=1, sticky="ns", pady=(6, 0))
-    strip.place(relx=0, rely=1, relwidth=1, anchor="sw")
+    strip.place(
+        relx=0.5, rely=1, relwidth=1, width=-2 * _DIALOG_MARGIN,
+        y=-_DIALOG_MARGIN, anchor="s",
+    )
     strip.lift()
     root._embedded_notice_widget = strip
 
@@ -224,11 +268,14 @@ class EmbeddedWindow(DialogSurface):
     this adapter owns stacking, keyboard traversal and window compatibility.
     """
 
-    def __init__(self, parent: tk.Misc) -> None:
+    def __init__(
+        self, parent: tk.Misc, *, size: tuple[int, int] = _DIALOG_SIZE,
+    ) -> None:
         """Create and display a stacked panel owned by the root.
 
         Args:
             parent (tk.Misc): Invoking widget within the main root.
+            size (tuple[int, int]): Preferred card width and height in Tk pixels.
         Returns:
             None: Creates a visible panel with a title and close control.
         """
@@ -244,22 +291,41 @@ class EmbeddedWindow(DialogSurface):
                 break
             owner = getattr(owner, "master", None)
         self._close_callback = self.destroy
+        self._preferred_size = size
+        self._placed_size: tuple[int, int] | None = None
         self._hidden = True
         self._ready = False
         self._destroying = False
-        self._surface = DialogSurface(root, style="Backdrop.TFrame")
+        self._surface = RaisedDialogSurface(root)
         self._surface._embedded_owner = self
         super().__init__(self._surface, borderwidth=0)
-        self._header = ttk.Frame(self._surface, style="Card.TFrame")
-        self._title_label = ttk.Label(self._header, text="")
-        self._title_label.pack(side="left", fill="x", expand=True, padx=8)
-        Button(self._header, text="×", width=3, command=self._close).pack(side="right")
+        self._header = ttk.Frame(self._surface, padding=(12, 7), style="Card.TFrame")
+        self._title_label = ttk.Label(self._header, text="", style="Section.TLabel")
+        self._title_label.pack(side="left", fill="x", expand=True)
+        icon_button(
+            self._header, "close", self._close, gettext("Close"),
+        ).pack(side="right")
         self._header.pack(fill="x")
         self.pack(fill="both", expand=True)
         root._embedded_panels.append(self)
         self.deiconify()
-        self.grab_set()
         self._scope_after = self.after_idle(self._scope_keyboard)
+
+    def _fit(self) -> None:
+        """Place the modal at its preferred size within the current client area.
+
+        Returns:
+            None: The center remains stable and available margins constrain
+                both dimensions, including after a root resize.
+        """
+        root = self.winfo_toplevel()
+        width = max(1, min(self._preferred_size[0], root.winfo_width() - 2 * _DIALOG_MARGIN))
+        height = max(1, min(self._preferred_size[1], root.winfo_height() - 2 * _DIALOG_MARGIN))
+        if (width, height) != self._placed_size:
+            self._surface.place(
+                relx=0.5, rely=0.5, anchor="center", width=width, height=height,
+            )
+            self._placed_size = (width, height)
 
     def _scope_keyboard(self) -> None:
         """Keep keyboard traversal inside the active panel and its close control.
@@ -373,7 +439,7 @@ class EmbeddedWindow(DialogSurface):
         """
 
     def resizable(self, width: bool, height: bool) -> None:
-        """Accept window resize preferences for a root-sized panel.
+        """Accept native resize preferences for the host-sized card.
 
         Args:
             width (bool): Whether a native window would resize horizontally.
@@ -412,6 +478,7 @@ class EmbeddedWindow(DialogSurface):
         self._ready = False
         self._hidden = True
         self._surface.place_forget()
+        self._placed_size = None
         if was_active:
             self.grab_release()
             self._restore_interaction()
@@ -424,7 +491,7 @@ class EmbeddedWindow(DialogSurface):
         """
         self._ready = True
         current = active_panel(self.winfo_toplevel())
-        if current is None or current is self or current is self._owner_panel:
+        if current is None or current is self._owner_panel:
             self._activate()
 
     def _activate(self) -> None:
@@ -433,15 +500,19 @@ class EmbeddedWindow(DialogSurface):
         Returns:
             None: Places the complete surface above the root without a new window.
         """
+        root = self.winfo_toplevel()
         self._hidden = False
-        self._surface.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._surface.lift()
-        panels = self.winfo_toplevel()._embedded_panels
+        self._fit()
+        if root._embedded_scrim is None:
+            root._embedded_scrim = ModalScrim(root)
+        root._embedded_scrim.show(self._surface)
+        panels = root._embedded_panels
         panels.remove(self)
         panels.append(self)
         self.grab_set()
         self.focus_set()
-        _render_notice(self.winfo_toplevel())
+        if root._embedded_notices:
+            _render_notice(root)
 
     def _restore_interaction(self) -> None:
         """Reveal the next ready panel after the active one closes or hides.
@@ -457,12 +528,14 @@ class EmbeddedWindow(DialogSurface):
         )
         if next_panel is not None:
             next_panel._activate()
-        elif (self._previous_grab is not None
-              and not hasattr(self._previous_grab, "_embedded_owner")
-              and self._previous_grab.winfo_exists()):
-            self._previous_grab.grab_set()
         if next_panel is None:
-            _render_notice(root)
+            root._embedded_scrim.place_forget()
+            if (self._previous_grab is not None
+                    and not hasattr(self._previous_grab, "_embedded_owner")
+                    and self._previous_grab.winfo_exists()):
+                self._previous_grab.grab_set()
+            if root._embedded_notices:
+                _render_notice(root)
         if (self._previous_focus is not None
                 and self._previous_focus.winfo_exists()
                 and self._previous_focus.winfo_viewable()):
@@ -690,16 +763,18 @@ def _prompt(
     # active context. Explicit child owners remain authoritative for nesting.
     if isinstance(owner, tk.Tk):
         owner = active_panel(owner) or owner
-    panel = EmbeddedWindow(owner)
+    panel = EmbeddedWindow(owner, size=_PROMPT_SIZE)
     panel.title(title)
     body = ttk.Frame(panel, padding=20)
     body.pack(fill="both", expand=True)
+    body.columnconfigure(0, weight=1)
+    body.rowconfigure(0, weight=1)
     text_frame = ttk.Frame(body)
-    text_frame.pack(fill="both", expand=True)
+    text_frame.grid(row=0, column=0, sticky="nsew")
     text = tk.Text(
         text_frame, wrap="word", height=PROMPT_TEXT_ROWS, relief="flat",
-        font="TkDefaultFont", background=owner.winfo_toplevel().cget("background"),
-        foreground=ttk.Style(owner).lookup("TLabel", "foreground") or "#000000",
+        font="TkDefaultFont", background=_PALETTE["card_surface"],
+        foreground=_PALETTE["ink"], borderwidth=0, highlightthickness=0,
         padx=8, pady=8,
     )
     text.insert("1.0", message)
@@ -712,9 +787,9 @@ def _prompt(
     entry = None
     if initial is not None:
         entry = ttk.Entry(body, textvariable=value)
-        entry.pack(fill="x", pady=12)
+        entry.grid(row=1, column=0, sticky="ew", pady=(8, 0))
     error = ttk.Label(body, text="")
-    error.pack(anchor="w")
+    error.grid(row=2, column=0, sticky="w")
     completed = tk.BooleanVar(master=owner, value=False)
     result: list[str | None] = []
 
@@ -756,7 +831,7 @@ def _prompt(
             completed.set(True)
 
     footer = ttk.Frame(body)
-    footer.pack(fill="x", pady=12)
+    footer.grid(row=3, column=0, sticky="ew", pady=(8, 0))
     focused = None
     for label, token in buttons:
         button = Button(

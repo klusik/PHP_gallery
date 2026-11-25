@@ -257,7 +257,7 @@ class AuditReportingTests(unittest.TestCase):
         """Isolate five measured groups and split only the class remainder.
 
         Returns:
-            None: Seven deterministic shards preserve every class and prove
+            None: Eight deterministic shards preserve every class and prove
                 exact disjoint coverage of the canonical test IDs.
         """
         viewer_ids = [
@@ -282,13 +282,14 @@ class AuditReportingTests(unittest.TestCase):
             'test_upload.UploadTests.test_eight',
             'test_sync.SyncTests.test_nine',
             'test_upload.UploadTests.test_ten',
+            'test_read.ReadTests.test_eleven',
         ]
         canonical_ids = (
             viewer_ids + small_benchmark_ids + large_benchmark_ids
             + preload_benchmark_ids + dense_return_ids + complement_ids
         )
 
-        shards = partition_test_ids(canonical_ids, 7)
+        shards = partition_test_ids(canonical_ids, 8)
 
         self.assertEqual(set(viewer_ids), set(shards[0]))
         self.assertEqual(set(small_benchmark_ids), set(shards[1]))
@@ -298,7 +299,8 @@ class AuditReportingTests(unittest.TestCase):
         # The repeated Upload class stays whole and retains canonical order.
         self.assertEqual([complement_ids[0], complement_ids[2]], shards[5])
         self.assertEqual([complement_ids[1]], shards[6])
-        self.assertEqual(shards, partition_test_ids(canonical_ids, 7))
+        self.assertEqual([complement_ids[3]], shards[7])
+        self.assertEqual(shards, partition_test_ids(canonical_ids, 8))
         flattened_ids = [test_id for shard in shards for test_id in shard]
         self.assertEqual(set(canonical_ids), set(flattened_ids))
         self.assertEqual(len(canonical_ids), len(flattened_ids))
@@ -316,7 +318,7 @@ class AuditReportingTests(unittest.TestCase):
         ]
         incomplete_groups.append('test_extra.ExtraTests.test_ten')
         with self.assertRaises(ValueError):
-            partition_test_ids(incomplete_groups, 7)
+            partition_test_ids(incomplete_groups, 8)
 
     def test_partition_merge_rejects_missing_duplicate_and_unsuccessful_children(self) -> None:
         """Prevent incomplete, duplicated or failed child evidence from passing.

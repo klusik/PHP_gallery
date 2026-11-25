@@ -451,8 +451,16 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
         Returns:
             None: A mapped root with native display coordinates is available
-                to each native viewer test and its screenshots.
+                to each native viewer test, with owner-thread cycle cleanup.
         """
+        # The fixture pumps update() instead of staying inside mainloop().
+        # Let the Tk thread collect unreachable widget cycles after teardown,
+        # so worker allocation cannot finalize Tcl variables off-thread.
+        if gc.isenabled():
+            gc.disable()
+            self.addCleanup(gc.enable)
+        self.addCleanup(gc.collect)
+
         # These widget tests inject storage observations explicitly. Avoid
         # starting the background reader against the runner's real profile.
         storage_poll = mock.patch.object(
@@ -586,18 +594,20 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 ui.lease.release()
 
     def _destroy_root(self) -> None:
-        """Destroy the test root and collect Tk-owned cycles on its thread.
+        """Destroy the private Tk interpreter after canceling its timers.
 
         Returns:
-            None: Remaining Tcl variables finalize on the Tk owner thread.
+            None: No fixture timer survives to run during the next Tk root.
         """
         try:
             if self.root.winfo_exists():
+                # Cancel the Tcl timers without deleting Python callback
+                # registrations owned by the widgets being destroyed.
+                for timer in self.root.tk.splitlist(self.root.tk.call('after', 'info')):
+                    self.root.tk.call('after', 'cancel', timer)
                 self.root.destroy()
         except tk.TclError:
             pass
-        finally:
-            gc.collect()
 
     def _wait_until(self, condition: Callable[[], bool], message: str) -> None:
         """Pump Tk until a worker-backed condition succeeds or times out.
@@ -4526,6 +4536,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         thumbnail_memory: 'native_gallery_viewer.GalleryThumbnailMemory | None' = None,
         canvas_grid_enabled: bool | None = False,
         newest_first: bool = False,
+        thumbnail_batch_size: Callable[[], int] | None = None,
     ) -> 'native_gallery_viewer._NativeGalleryViewer':
         """Mount the public API and retain its real embedded controller.
 
@@ -4536,6 +4547,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             canvas_grid_enabled (bool | None): Explicit renderer choice;
                 False keeps native tests on the native-widget compatibility path.
             newest_first (bool): Use the real viewer's local reverse order.
+            thumbnail_batch_size (Callable[[], int] | None): Reader for the
+                fixture's live steady-size setting, or None for the default.
 
         Returns:
             native_gallery_viewer._NativeGalleryViewer: Actual controller whose
@@ -4551,6 +4564,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             thumbnail_memory=thumbnail_memory,
             newest_first=newest_first,
             canvas_grid_enabled=canvas_grid_enabled,
+            thumbnail_batch_size=thumbnail_batch_size,
         )
         frame.pack(fill='both', expand=True)
         self.root.update_idletasks()
@@ -5461,7 +5475,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         app.refresh_watcher_header = mock.Mock()
         app.notebook = mock.Mock()
         app.notebook.index.return_value = 0
-        app.tab_indices = {'photos': 0}
+        app.tab_indices = {'photos': 0, 'watch': 1}
         header = app.build_app_header(outer)
         app._watcher_header_stop_button.pack(side='left', padx=(6, 0))
         app.monitor_light.create_oval(4, 4, 12, 12, fill='#41ce8b', outline='')
@@ -5538,6 +5552,14 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 self.assertEqual(0, int(header.links.grid_info()['row']))
                 self.assertLess(header.winfo_height() + HEADER_WORKSPACE_GAP, legacy_height)
             self.assertLessEqual(int(header.links.grid_info()['row']), 1)
+            expected_header = (header.winfo_height(), header.links.winfo_rooty())
+            for selected in (1, 0):
+                app.notebook.index.return_value = selected
+                app._gallery_link_refresh()
+                self.root.update()
+                self.assertEqual(
+                    expected_header, (header.winfo_height(), header.links.winfo_rooty()),
+                )
             self.assertGreaterEqual(workspace.winfo_rooty(),
                                     header.winfo_rooty() + header.winfo_height())
             controller = workspace._viewer._gallery_viewer_controller
@@ -10655,6 +10677,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         # A 400 px canvas keeps two columns in both Default and 16:9. The
         # third old row represents space left by an earlier larger page.
         viewer.grid_canvas.winfo_width.return_value = 400
+        viewer._native_grid_width = viewer.grid_canvas.winfo_width.return_value
         viewer.grid_frame = mock.Mock()
         viewer.grid_frame.grid_size.return_value = (2, 3)
         viewer.grid_window = 'photo-grid'
@@ -10665,6 +10688,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer.set_card_format('16:9')
         self.assertEqual('16:9', viewer._card_format)
         self.assertEqual(2, viewer._grid_columns)
+        viewer.grid_canvas.itemconfigure.assert_not_called()
         viewer.grid_frame.grid_rowconfigure.assert_any_call(2, minsize=0)
         # 81 px is the exact integer height of a 144 px-wide 16:9 card.
         short_row = (

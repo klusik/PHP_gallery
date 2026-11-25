@@ -227,6 +227,7 @@ class CanvasGalleryGrid:
         self._slot_by_index: dict[int, _CanvasSlot] = {}
         self._epoch = 0
         self._tile_size = (1, 1)
+        self._applied_layout: tuple[int, int, tuple[int, int], int] | None = None
         self._placeholder_font = tkfont.Font(
             root=canvas, font=theme.placeholder_font,
         )
@@ -365,6 +366,7 @@ class CanvasGalleryGrid:
 
         Returns:
             tuple[int, int]: Responsive column count and logical content height.
+                Identical geometry and record count reuse the existing layout.
 
         Raises:
             ValueError: Viewport or image dimensions are not positive integers.
@@ -373,6 +375,9 @@ class CanvasGalleryGrid:
                 or height < 1 or len(tile_size) != 2
                 or any(type(part) is not int or part < 1 for part in tile_size)):
             raise ValueError("Canvas grid geometry must use positive integers.")
+        layout = (width, height, tile_size, len(self._records))
+        if layout == self._applied_layout:
+            return self._columns, self._content_height
         old_width = self._width
         old_height = self._height
         old_tile_size = self._tile_size
@@ -404,7 +409,9 @@ class CanvasGalleryGrid:
         content_width = max(
             width, max(0, self._columns * pitch_x - self.gutter // 2),
         )
-        self.canvas.configure(scrollregion=(0, 0, content_width, self._content_height))
+        # Gallery navigation scrolls vertically even if a minimum-size tile
+        # extends past a very narrow viewport.
+        self.canvas.configure(scrollregion=(0, 0, width, self._content_height))
         self.canvas.coords(self._extent_item, 0, 0, content_width, self._content_height)
         for slot in self._slots:
             if slot.index is not None:
@@ -416,6 +423,7 @@ class CanvasGalleryGrid:
             self.canvas.yview_moveto(
                 min(max_y, target_y) / max(1, self._content_height),
             )
+        self._applied_layout = layout
         self._viewport()
         return self._columns, self._content_height
 

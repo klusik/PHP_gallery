@@ -785,6 +785,7 @@ class ThumbnailCacheIndexTests(ThumbnailCacheFixture):
                     TEST_CACHE_CONCURRENT_WRITERS
                     * TEST_CACHE_CONCURRENT_WRITES_PER_PROCESS,
                     sum(completed for _writer, completed, _failure in results),
+                    f"Concurrent writer results: {results}",
                 )
                 self.assertTrue(all(not failure for _writer, _completed, failure in results))
                 snapshot = self._cache(root).thumbnail_storage_snapshot()

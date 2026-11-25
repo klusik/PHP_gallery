@@ -26,9 +26,24 @@ from .flight_jobs import read_document
 from .gallery_media_cache import GalleryMediaCache, MEDIA_CACHE_MAX_BYTES
 from .localization import DEFAULT_LANGUAGE, LANGUAGE_NAMES
 from .state_store import atomic_write_json
+from .thumbnail_batch_protocol import PRODUCTION_MAX_ITEMS
 
 APP_PROFILE_NAME = "PHPGalleryUploader"
 LANGUAGE_FILE = "ui-language.json"
+THUMBNAIL_BATCH_FILE = "thumbnail-download.json"
+
+# Purpose: Offer ordered steady download limits within the deployed protocol.
+# Type: tuple[int, ...]. Units: photos per API request. Scope: one WinApp profile.
+# Consumers: Settings, thumbnail preference I/O and the Photos viewer.
+# Rationale: 8, 16, 24 and the wire cap of 32 permit smaller requests on slow
+# installations without changing the first-load, byte or decode limits.
+THUMBNAIL_BATCH_CHOICES = (8, 16, 24, PRODUCTION_MAX_ITEMS)
+
+# Purpose: Use the full negotiated wire count on a healthy thumbnail stream.
+# Type: int. Units: photos per API request. Scope: steady Photos loads.
+# Consumers: saved preference reader and the Photos viewer.
+# Rationale: 32 is four times the eight-photo probe within the existing API.
+THUMBNAIL_BATCH_DEFAULT_SIZE = PRODUCTION_MAX_ITEMS
 
 
 def load_ui_language(profile: Path) -> str:
@@ -72,6 +87,43 @@ def save_ui_language(profile: Path, language: str) -> None:
     if language not in LANGUAGE_NAMES:
         raise ValueError("Unsupported interface language")
     atomic_write_json(profile / LANGUAGE_FILE, {"language": language})
+
+
+def load_thumbnail_batch_size(profile: Path) -> int:
+    """Read the local steady thumbnail request limit.
+
+    Args:
+        profile (Path): Owned per-user WinApp profile.
+    Returns:
+        int: One supported limit, or the factory default for missing or damaged
+            preferences. The existing file remains available for recovery.
+    """
+    try:
+        size = read_document(profile / THUMBNAIL_BATCH_FILE).get("batch_size")
+    except (ValueError, RecursionError):
+        # Previous profiles have no file. Keep browsing available for those
+        # profiles and for a damaged optional preference.
+        return THUMBNAIL_BATCH_DEFAULT_SIZE
+    if type(size) is int and size in THUMBNAIL_BATCH_CHOICES:
+        return size
+    return THUMBNAIL_BATCH_DEFAULT_SIZE
+
+
+def save_thumbnail_batch_size(profile: Path, size: int) -> None:
+    """Publish the next thumbnail request limit independently of uploader state.
+
+    Args:
+        profile (Path): Owned per-user WinApp profile.
+        size (int): One advertised thumbnail request limit.
+    Returns:
+        None: Atomically replaces only the thumbnail transport preference.
+    Raises:
+        ValueError: The requested limit is unsupported.
+        OSError: The preference cannot be persisted.
+    """
+    if type(size) is not int or size not in THUMBNAIL_BATCH_CHOICES:
+        raise ValueError("Unsupported thumbnail request size")
+    atomic_write_json(profile / THUMBNAIL_BATCH_FILE, {"batch_size": size})
 
 
 # Purpose: Offer a compact set of shared thumbnail quota choices.
