@@ -2215,6 +2215,12 @@ Qt updater fixture validates installer bytes, refuses installation during
 active work and closes only after the existing helper boundary is ready.
 Continuation admission also rejects a foreign helper nonce or wrong version
 and preserves the original queue bytes.
+The portable startup fixtures verify that the idle Qt updater saves its
+restart policy before launching the helper. A valid ticket from an older
+updater with an admitted idle profile reports Qt ready with Watcher idle.
+The native gallery fixture captures the Legacy Tk notice and action in
+desktop and narrow Photos layouts and exercises the coordinated restart
+callback.
 
 The same opt-in suite verifies installed updates using the published
 WinApp 1.7.1 onefile setup and two hosted common onedir builds. The earlier build sets

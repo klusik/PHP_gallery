@@ -13574,6 +13574,7 @@ class WatcherApp:
             ),
             canvas_grid_enabled=self._canvas_grid_enabled_at_startup,
             thumbnail_batch_size=lambda: self._thumbnail_batch_size,
+            restart_with_qt=lambda: self._gui_backend_settings.restart_with_qt(),
         )
         self.photos_workspace.grid(row=0, column=0, sticky="nsew")
         self._sync_watcher_recording()
@@ -23728,9 +23729,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 logging.warning('Qt profile admission refused: %s', start_work.refusal_stage)
                 report_gui_startup(handshake, args.gui_child, 'refused', 'pending_work')
                 return 1
+            resume_capture = (
+                start_work.restart is not None
+                and start_work.restart.phase == 'prepared'
+            )
             if installer_restart is not None and start_work.restart is None:
-                report_gui_startup(handshake, args.gui_child, 'refused', 'update_continuation')
-                return 1
+                # Older idle Qt updaters used the ticket's active-capture default.
+                # The shared admission above already checked the retained profile.
+                logging.info(
+                    'Qt update restart accepted with Watcher resume disabled.'
+                )
             if capture is not None:
                 capture.restart_record = start_work.restart
                 capture.restart_ordinary = installer_restart is None
@@ -23748,7 +23756,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 recoverable_imports=start_work.recoverable_imports,
                 capture=capture,
                 recoverable_capture=start_work.recoverable_capture,
-                resume_capture=start_work.restart is not None and start_work.restart.phase == 'prepared',
+                resume_capture=resume_capture,
                 reset_watcher=start_work.reset_pending,
                 runtime_settings=settings,
                 connections=connections,

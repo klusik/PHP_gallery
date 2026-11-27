@@ -337,6 +337,15 @@ strict; explicit idle helper tickets omit capture continuation. Actual installed
 Windows and deployed-host qualification of these changes is unknown; feature
 BASIC cannot retire those acceptance requirements.
 
+An installed WinApp 2.0.0 to 2.0.1 update initiated in idle Qt was reported
+to restart in Legacy Tk with an update continuation mismatch. A manual launch
+opened Qt. The idle Qt helper wrapper inherited the ticket's active-capture
+default, so it asked the installed client to resume Watcher. The idle wrapper
+now binds idle intent before launch. The Qt startup owner accepts a verified
+older ticket when profile admission succeeds without a matching checkpoint.
+Keep this compatibility while supported older installations can issue such
+tickets. Installed prevalence and the live outcome with the fix are unknown.
+
 WinApp direct linking JSON and media requests use a truthful stable
 `PHPGalleryUploader` User-Agent. A deployed HTTPS verification page was observed
 to reject the same public discovery request without this header while admitting

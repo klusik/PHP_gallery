@@ -5459,6 +5459,76 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 )
                 shelf.destroy()
 
+    def test_legacy_interface_notice_stays_above_photos(self) -> None:
+        """Capture the native Legacy Tk notice and exercise its restart action.
+
+        Returns:
+            None: The warning and button fit the gallery at both widths.
+                The button invokes one operator-requested restart callback.
+        """
+        ui_theme.configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Testovací galerie')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        restart = mock.Mock()
+        provider: list[LinkingSession | None] = [None]
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'cs',
+            restart_with_qt=restart,
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(
+            lambda: workspace.tree.exists(str(TEST_GALLERY_ID)),
+            'The Legacy Tk notice fixture did not load its gallery.',
+        )
+        workspace._select_gallery(workspace._galleries[TEST_GALLERY_ID])
+        self._wait_until(
+            lambda: workspace._photos_present is True,
+            'The Legacy Tk notice fixture did not show photos.',
+        )
+        notice = workspace._legacy_interface_notice
+        label = workspace._legacy_interface_notice_label
+        button = workspace._legacy_interface_restart
+        heading = workspace._gallery_heading
+        self.assertEqual('Používáte starší rozhraní Legacy Tk.', label.cget('text'))
+        self.assertEqual('Přepnout na Qt a restartovat', button.cget('text'))
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'legacy-interface-notice'
+        evidence.mkdir(parents=True, exist_ok=True)
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            self.root.geometry(
+                f'{min(width, self.root.winfo_screenwidth() - TEST_HEADER_SCREEN_WIDTH_MARGIN)}x'
+                f'{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
+            )
+            self.root.update()
+            self.assertTrue(notice.winfo_viewable())
+            self.assertLessEqual(notice.winfo_rooty() + notice.winfo_height(), heading.winfo_rooty())
+            for control in (label, button):
+                self.assertTrue(control.winfo_viewable())
+                self.assertGreaterEqual(control.winfo_rootx(), notice.winfo_rootx())
+                self.assertLessEqual(
+                    control.winfo_rootx() + control.winfo_width(),
+                    notice.winfo_rootx() + notice.winfo_width(),
+                )
+            controller = workspace._viewer._gallery_viewer_controller
+            self._wait_until(
+                lambda: bool(controller._visible_thumbnail_indices)
+                and all(controller._photo_images[index]
+                        for index in controller._visible_thumbnail_indices),
+                'The photos under the Legacy Tk notice did not settle.',
+            )
+            x, y = self.root.winfo_rootx(), self.root.winfo_rooty()
+            bounds = (x, y, x + self.root.winfo_width(), y + self.root.winfo_height())
+            with ImageGrab.grab(bbox=bounds) as capture:
+                capture.save(evidence / f'legacy-interface-{width}.png')
+        restart.assert_not_called()
+        button.invoke()
+        restart.assert_called_once_with()
+        workspace.destroy()
+
     def test_compact_application_header_reclaims_gallery_height(self) -> None:
         """Render the real header factory above Photos at desktop and narrow widths.
 

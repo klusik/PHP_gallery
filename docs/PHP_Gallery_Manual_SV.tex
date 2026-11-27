@@ -2915,7 +2915,9 @@ Qt-beroendena i~de fullständiga kraven.
 Använd \ui{Starta om WinApp} för att tillämpa valet. Pågående jobb måste
 avslutas eller ha en verifierad fortsättning. Båda gränssnitten använder samma
 profil. Om Qt inte kan starta öppnas Legacy Tk. Du kan också välja Legacy Tk
-för framtida starter. I macOS använder Qt Lightbox EDR när bilden och skärmen
+för framtida starter. I Legacy Tk visas en varning ovanför galleriet.
+\ui{Byt till Qt och starta om} sparar Qt som valt gränssnitt och begär en
+samordnad omstart. I macOS använder Qt Lightbox EDR när bilden och skärmen
 stöder det, och visar annars SDR.
 
 Fotodetaljerna i~Qt glider in kort och~visar en större förhandsvisning ovanför
@@ -3084,8 +3086,10 @@ installationsprogram i flera CMS-utgåvor accepteras. Galleriets
 inloggningsuppgifter skickas aldrig till GitHub.
 
 \ui{Update} hämtar och verifierar installationsprogrammet med förlopp och
-möjlighet att avbryta hämtningen. En aktiv Watcher slutför den aktuella
-bekräftade bildöverföringen, sparar kön och skriver den ursprungliga
+möjlighet att avbryta hämtningen. Vid uppdatering i viloläge öppnas det valda
+gränssnittet igen. En aktiv Watcher fortsätter från en kontrollpunkt som
+matchar installationsbiljetten. Före uppdateringen slutför en aktiv Watcher
+den aktuella bekräftade bildöverföringen, sparar kön och skriver den ursprungliga
 inspelningen före hjälparstart. Olöst arbete skjuter upp installationen efter
 120~sekunder; spelidentifieringen blockerar den inte. Slutför först en manuell
 import, AI-uppgift eller rapport. Ett hjälparfel lämnar appen öppen.

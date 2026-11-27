@@ -110,6 +110,15 @@ class TkBackendSettings(ttk.Frame):
         self.refresh()
         return True
 
+    def restart_with_qt(self) -> None:
+        """Persist Qt as the explicit Photos action and request safe restart.
+
+        Returns:
+            None: Restarts only when Qt is available and its preference was saved.
+        """
+        if self.qt_available and self.save("pyside6"):
+            self.restart()
+
     def choose(self, _event: Event) -> None:
         """Accept one valid combobox selection and offer immediate restart.
 
