@@ -1289,6 +1289,7 @@
         "winapp/uploader/qt_hdr_macos.py",
         "winapp/uploader/qt_import.py",
         "winapp/uploader/qt_operator_views.py",
+        "winapp/uploader/qt_photo_inspector.py",
         "winapp/uploader/qt_photo_model.py",
         "winapp/uploader/qt_photo_source.py",
         "winapp/uploader/qt_photos.py",

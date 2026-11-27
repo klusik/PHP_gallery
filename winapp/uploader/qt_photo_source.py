@@ -30,9 +30,11 @@ from .app_linking import (
     NATIVE_MEDIA_MAX_BYTES,
     LegacyThumbnailPublication,
     LinkedGallery,
+    LinkedMediaPage,
     LinkedPhoto,
     LinkingError,
     LinkingSession,
+    LinkingThumbnailProofChanged,
     MediaReadTimings,
     ThumbnailPublication,
 )
@@ -90,6 +92,17 @@ class ThumbnailActivity:
     identities: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class ThumbnailProofPage:
+    """Bind refreshed authorized rows to the exclusive cursor they covered."""
+
+    after_id: int | None
+    page: LinkedMediaPage
+
+
+ThumbnailEvent = PhotoFrame | ThumbnailActivity | ThumbnailGroup | ThumbnailProofPage
+
+
 def read_gallery_tree(session: LinkingSession, cancelled: Event) -> tuple[LinkedGallery, ...]:
     """Read the current tree with the existing legacy paginated fallback.
 
@@ -144,12 +157,18 @@ def read_gallery_photos(
     raise ReadCancelled
 
 
-def decode_photo(body: bytes, *, thumbnail: bool) -> tuple[QImage, QSize]:
+def decode_photo(
+    body: bytes, *, thumbnail: bool,
+    thumbnail_size: tuple[int, int] = MEDIA_THUMBNAIL_SIZE,
+) -> tuple[QImage, QSize]:
     """Decode a bounded encoded image using the visible Qt platform's codecs.
 
     Args:
         body (bytes): Complete local preview or authorized gallery image.
-        thumbnail (bool): Use the shared bounded thumbnail dimensions.
+        thumbnail (bool): Apply a bounded thumbnail size instead of the
+            detail limit.
+        thumbnail_size (tuple[int, int]): Decoded maximum width and height in
+            pixels for the trusted view, defaulting to the shared grid thumbnail.
     Returns:
         tuple[QImage, QSize]: Owned rendered pixels and original encoded geometry.
     Raises:
@@ -165,7 +184,7 @@ def decode_photo(body: bytes, *, thumbnail: bool) -> tuple[QImage, QSize]:
     size = reader.size()
     if not size.isValid() or size.isEmpty():
         raise ValueError("Image dimensions could not be determined.")
-    width, height = MEDIA_THUMBNAIL_SIZE if thumbnail else MEDIA_IMAGE_MAX_SIZE
+    width, height = thumbnail_size if thumbnail else MEDIA_IMAGE_MAX_SIZE
     if size.width() * size.height() > MEDIA_IMAGE_MAX_PIXELS:
         if thumbnail or bytes(reader.format()).lower() not in (b"jpeg", b"jpg"):
             raise PhotoPixelLimit("Image exceeds the decoded size bound.")
@@ -239,6 +258,7 @@ def _content_crop_bounds(
 def read_photo(
     row: PhotoRow, session: LinkingSession | None, gallery_id: int | None,
     cancelled: Event, *, thumbnail: bool,
+    thumbnail_size: tuple[int, int] = MEDIA_THUMBNAIL_SIZE,
 ) -> PhotoFrame:
     """Read a local or explicitly authorized remote rendition.
 
@@ -248,6 +268,8 @@ def read_photo(
         gallery_id (int | None): Physical gallery that owns a remote photo.
         cancelled (Event): Existing view-owned cancellation, including read I/O.
         thumbnail (bool): True for a thumbnail and False for the selected detail.
+        thumbnail_size (tuple[int, int]): Decoded maximum width and height in
+            pixels for the trusted view. The encoded rendition is unchanged.
     Returns:
         PhotoFrame: Bounded, independent raster and source geometry.
     Raises:
@@ -264,7 +286,9 @@ def read_photo(
             body = image_file.read(NATIVE_MEDIA_MAX_BYTES + 1)
         if cancelled.is_set():
             raise ReadCancelled
-        image, size = decode_photo(body, thumbnail=thumbnail)
+        image, size = decode_photo(
+            body, thumbnail=thumbnail, thumbnail_size=thumbnail_size,
+        )
         hdr_source = _bounded_hdr_source(body, size, thumbnail)
         content_crop = None if thumbnail else _content_crop_bounds(image, cancelled)
         return PhotoFrame(
@@ -276,7 +300,9 @@ def read_photo(
     if cancelled.is_set():
         raise ReadCancelled
     try:
-        image, size = decode_photo(body, thumbnail=thumbnail)
+        image, size = decode_photo(
+            body, thumbnail=thumbnail, thumbnail_size=thumbnail_size,
+        )
     except PhotoPixelLimit:
         if thumbnail or cancelled.is_set():
             raise
@@ -413,10 +439,11 @@ def stream_thumbnails(
                 except ValueError:
                     return
                 check_active()
-                if session.thumbnail_publication_current(publication, cancelled):
-                    publish(PhotoFrame(by_id[identity], image, size, replace(publication, body=None)))
-                    decoded = True
-                    delivered += 1
+                if not session.thumbnail_publication_current(publication, cancelled):
+                    raise LinkingThumbnailProofChanged('Gallery thumbnail proof is no longer current.')
+                publish(PhotoFrame(by_id[identity], image, size, replace(publication, body=None)))
+                decoded = True
+                delivered += 1
             finally:
                 remaining = tuple(current for current in active if current != identity)
                 if decoded:
@@ -433,3 +460,44 @@ def stream_thumbnails(
         time.monotonic() - started <= MEDIA_HTTP_BATCH_SLOW_SECONDS
         and encoded_bytes < MEDIA_HTTP_BATCH_LARGE_BYTES,
     ))
+
+
+def stream_revalidated_thumbnails(
+    rows: tuple[PhotoRow, ...], session: LinkingSession, gallery_id: int,
+    cancelled: Event, publish: Callable[[ThumbnailEvent], None],
+) -> None:
+    """Renew only pages covering a bounded visible group before retrying its pixels.
+
+    Args:
+        rows (tuple[PhotoRow, ...]): Current visible retry group at the initial batch limit.
+        session (LinkingSession): Original, still-approved gallery reader.
+        gallery_id (int): Physical gallery owning the requested photos.
+        cancelled (Event): Current group cancellation fence.
+        publish (Callable[[ThumbnailEvent], None]): Ordered page, activity and raster output.
+    Returns:
+        None: Delivers refreshed proofs and reads only still-listed candidates.
+    Raises:
+        ReadCancelled: The viewport cancelled this renewal.
+        LinkingError: The renewed catalogue or thumbnail read was refused.
+    """
+    refreshed: dict[int, PhotoRow] = {}
+    covered: int | None = 0
+    for identity in sorted(row.identity for row in rows):
+        if covered is None or identity <= covered:
+            continue
+        if cancelled.is_set():
+            raise ReadCancelled
+        # The existing cursor is exclusive. Start just before the missing ID.
+        after_id = identity - 1 or None
+        page = session.media_page(gallery_id, after_id, cancelled)
+        if cancelled.is_set():
+            raise ReadCancelled
+        publish(ThumbnailProofPage(after_id, page))
+        refreshed.update(
+            (photo.image_id, PhotoRow(photo.image_id, photo.title, photo))
+            for photo in page.photos
+        )
+        covered = page.next_after
+    current = tuple(refreshed[row.identity] for row in rows if row.identity in refreshed)
+    if current:
+        stream_thumbnails(current, session, gallery_id, cancelled, publish)

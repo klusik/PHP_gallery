@@ -2322,14 +2322,14 @@ msgstr "Fotku se nepodařilo načíst."
 msgid "Photos loading progress"
 msgstr "Průběh načítání fotek"
 
-msgid "PySide6 / Qt 6 (highly experimental)"
-msgstr "PySide6 / Qt 6 (vysoce experimentální)"
+msgid "Qt / PySide6"
+msgstr "Qt / PySide6"
 
-msgid "Qt dependencies could not load. WinApp opened with Tkinter. Install the optional Qt requirements for this Python and retry in Settings."
-msgstr "Nepodařilo se načíst balíčky Qt. WinApp běží v Tkinteru. Nainstalujte volitelné balíčky Qt do tohoto Pythonu a zkuste přepnutí znovu v Nastavení."
+msgid "Qt dependencies could not load. WinApp opened with Legacy Tk. Install the optional Qt requirements for this Python and retry in Settings."
+msgstr "Nepodařilo se načíst balíčky Qt. WinApp běží v režimu Legacy Tk. Nainstalujte volitelné balíčky Qt do tohoto Pythonu a zkuste přepnutí znovu v Nastavení."
 
-msgid "Qt did not become ready. WinApp opened with Tkinter. Review the WinApp log and retry or cancel the change in Settings."
-msgstr "Qt se nepodařilo spustit. WinApp běží v Tkinteru. Zkontrolujte log WinApp a v Nastavení přepnutí zkuste znovu nebo zrušte."
+msgid "Qt did not become ready. WinApp opened with Legacy Tk. Review the WinApp log and retry or cancel the change in Settings."
+msgstr "Qt se nepodařilo spustit. WinApp běží v režimu Legacy Tk. Zkontrolujte log WinApp a v Nastavení přepnutí zkuste znovu nebo zrušte."
 
 msgid "Qt is available in the source launcher with the optional Qt requirements."
 msgstr "Qt je dostupné při spuštění ze zdrojového kódu s volitelnými balíčky Qt."
@@ -2410,8 +2410,8 @@ msgstr "Nainstalovat aktualizaci"
 msgid "The GUI backend was saved. Restart WinApp now to apply it?"
 msgstr "Backend rozhraní byl uložen. Restartovat WinApp a použít ho teď?"
 
-msgid "Tkinter / ttk (stable, default)"
-msgstr "Tkinter / ttk (stabilní, výchozí)"
+msgid "Legacy Tk"
+msgstr "Legacy Tk"
 
 msgid "Update available: {version}"
 msgstr "Dostupná aktualizace: {version}"
@@ -2419,14 +2419,14 @@ msgstr "Dostupná aktualizace: {version}"
 msgid "WinApp is up to date."
 msgstr "WinApp je aktuální."
 
-msgid "WinApp opened with Tkinter to finish the update continuation."
-msgstr "WinApp běží v Tkinteru, aby dokončil práci po aktualizaci."
+msgid "WinApp opened with Legacy Tk to finish the update continuation."
+msgstr "WinApp běží v režimu Legacy Tk, aby dokončil práci po aktualizaci."
 
-msgid "WinApp opened with Tkinter to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
-msgstr "WinApp běží v Tkinteru kvůli rozpracované práci. Před přepnutím na Qt zkontrolujte Watcher, Aktivitu a Let."
+msgid "WinApp opened with Legacy Tk to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
+msgstr "WinApp běží v režimu Legacy Tk kvůli rozpracované práci. Před přepnutím na Qt zkontrolujte Watcher, Aktivitu a Let."
 
-msgid "Finish the current work in Tkinter before switching to Qt."
-msgstr "Před přepnutím na Qt dokončete rozpracovanou práci v Tkinteru."
+msgid "Finish the current work in Legacy Tk before switching to Qt."
+msgstr "Před přepnutím na Qt dokončete rozpracovanou práci v režimu Legacy Tk."
 
 msgid "Use a GUI backend for this launch only."
 msgstr "Použít backend rozhraní jen pro toto spuštění."

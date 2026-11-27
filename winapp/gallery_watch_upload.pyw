@@ -322,6 +322,7 @@ from uploader.ui_layout import (
 )
 from uploader.gui_backend import (
     DEFAULT_GUI_BACKEND, GUI_BACKENDS, GUI_CHILD_OPTION, GUI_FALLBACK_REASONS,
+    LEGACY_GUI_BACKEND,
     GuiFallback, configure_frozen_qt_environment, gui_startup_directory,
     launcher_command, launcher_environment,
     load_gui_backend, public_executable, report_gui_startup, supervise_gui_startup,
@@ -19513,7 +19514,7 @@ class WatcherApp:
                      or self._resume_retry_available)):
             messagebox.showwarning(
                 gettext("Restart WinApp"),
-                gettext("Finish the current work in Tkinter before switching to Qt."),
+                gettext("Finish the current work in Legacy Tk before switching to Qt."),
                 parent=self.root,
             )
             return
@@ -23298,7 +23299,7 @@ def _start_qt_supervisor(
     if reason is None:
         return 0
     return _launch_desktop(config, [
-        *arguments, "--gui-backend", DEFAULT_GUI_BACKEND, "--gui-fallback", reason,
+        *arguments, "--gui-backend", LEGACY_GUI_BACKEND, "--gui-fallback", reason,
     ])
 
 
@@ -23330,6 +23331,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if handshake is not None:
                 report_gui_startup(handshake, args.gui_child, "activated")
             return 0
+        store = ConfigStore(args.config)
         reason: GuiFallback | None = args.gui_fallback
         if handshake is not None:
             if run_qt is None:
@@ -23338,14 +23340,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif not args.once and not args.configure_startup:
             requested = args.gui_backend or load_gui_backend(CONFIG_DIR)
             if requested == "pyside6":
+                # A damaged shared configuration cannot be repaired by changing
+                # toolkits. Report it before passing ownership to either child.
+                try:
+                    store.load(read_only=True)
+                except OSError:
+                    setup_logging()
+                    raise
                 # The child uses this same app-local runtime and independently
-                # reacquires the profile before opening a window or admitting work.
+                # reacquires the profile and verifies its current configuration.
                 instance.close()
                 transferred = True
                 return _start_qt_supervisor(args.config, args.startup, args.after_update)
         # A second launcher never opens/rotates logs or reads/writes app state.
         setup_logging()
-        store = ConfigStore(args.config)
         config = store.load(read_only=True) if handshake is not None else store.load()
         if args.once:
             return run_once(config, store)

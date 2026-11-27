@@ -2077,6 +2077,10 @@ invalid preferences and retained-work
 protection use isolated profiles and subprocesses. Linux software rendering
 and advisory macOS source execution are labeled independently. Cross-toolkit
 operator and performance qualification follow the [backend gate](docs/WINAPP_GUI_BACKENDS.md).
+The same hosted source and frozen owners cover the WinApp 2.0 branch in issue
+446. They verify clean-profile Qt startup, saved Legacy Tk and fallback, both
+installed Settings switch directions, and the inspector's settled frame,
+authorized preview and wrapping metadata.
 On the issue 445 feature branch, `[gui-compare]` at the start of the commit
 message requests all six paired Photos cells. `[445-bench]` selects the
 2,000-photo warm diagnostic. The paired driver verifies the stable Tk module
@@ -2320,6 +2324,17 @@ The native Windows fixture exercises actual anchored editors and grouped
 menus, repeats A/B/A/B title edits without remounting the viewer, retains an
 editable unresolved draft without reload actions, and captures desktop/narrow menu and
 information screenshots under `cache/test-audit/gallery-controls/`.
+
+The native Qt title-editor scenario keeps a linked Watcher active while it
+renames an unpublished gallery. It checks accepted-write ownership, live
+capture, the returned title and the blocked disconnect and conflicting actions.
+The disposable MySQL/MariaDB gallery edit fixture moves a protected subtree
+through the actual Picture manager route and checks stable IDs, visibility,
+destination ownership, original bytes and refusals, including a pending
+visibility recovery in a descendant. The catalog-picker browser
+fixture submits the committed destination and verifies the in-place refresh.
+Its desktop and narrow panel screenshots are under
+`cache/test-audit/picture-manager-move/`.
 These fixtures do not establish an installed-client upgrade, target-host
 sidecar failure recovery or production account consent.
 
@@ -8816,13 +8831,15 @@ last selection restores hiding when the pointer and keyboard focus leave.
 Verify the collapsed count, expand/collapse,
 Select all/Clear, individual and range selection, and photo-only versus mixed
 selection action availability. Search a destination by keyboard and verify the
-committed picker value enables Move/Copy only for photos. Expand New gallery
+committed picker value enables Move/Copy for photos and Move for physical
+subgalleries. Keep Move unavailable for mixed selections. Expand New gallery
 from selection, verify the current parent and title-dependent Create state,
 and keep actual filesystem mutations on disposable data only.
 
 Open `?` using click and keyboard; dismiss by outside click and Escape. Check
-that picker guidance/directory access appears on focus and that request errors
-and completion feedback remain visible. Review desktop and narrow layouts,
+that search results remain in the panel flow and the directory fallback appears
+with empty or unavailable results. Request errors and completion feedback must
+remain visible. Review desktop and narrow layouts,
 long localized labels, Theme colors, visible focus and mobile 44px targets.
 This presentation review complements the existing mixed-selection/copy
 contracts; hosted BASIC alone does not qualify filesystem operations.

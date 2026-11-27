@@ -45,7 +45,8 @@ from .app_linking import (
     MEDIA_RECENT_ORDER_PHOTO_LIMIT,
     NATIVE_MEDIA_DELETE_BATCH_MAX, UPLOAD_SCOPE, LinkedGallery, LinkedMediaDetails,
     LinkedPhoto, LinkingAttempt, LinkingError, LinkingReconnectRequired,
-    LinkingRefreshRejected, LinkingResponseError, LinkingSession, LinkingUnavailable,
+    LinkingRefreshRejected, LinkingResponseError, LinkingSession,
+    LinkingThumbnailProofChanged, LinkingUnavailable,
     discover_linking_capabilities,
     linking_issuer, linking_prompt_issuer, requested_linking_scope, scope_base,
 )
@@ -92,12 +93,16 @@ from .offline_linking import (
 )
 from .qt_folder_shelf import QtFolderShelf
 from .qt_gallery_editor import QtGalleryEditor
+from .qt_photo_inspector import (
+    INSPECTOR_PREVIEW_PIXELS, InspectorMetadata, InspectorPane, InspectorPreview,
+)
 from .qt_photo_model import PhotoListModel, PhotoTextures
 from .qt_gallery_playback import GalleryPlayback
 from .qt_hdr_macos import MacQtHDRSurface
 from .qt_photo_source import (
-    PhotoFrame, PhotoRow, ThumbnailActivity, ThumbnailGroup, read_gallery_photos, read_gallery_tree,
-    read_photo, stream_thumbnails,
+    PhotoFrame, PhotoRow, ThumbnailActivity, ThumbnailEvent, ThumbnailGroup,
+    ThumbnailProofPage, read_gallery_photos, read_gallery_tree, read_photo,
+    stream_revalidated_thumbnails, stream_thumbnails,
 )
 from .qt_read_lane import QtReadLane, ReadCancelled
 from .qt_theme import ACTION_ICON_SIZE, ActionButton, RaisedSurface, ToggleSwitch, qt_icon
@@ -414,6 +419,7 @@ class QtPhotos(QWidget):
         connections: ConnectionActions | None = None,
         transfer_busy: Callable[[], bool] | None = None,
         start_contextual: Callable[[LinkedUploadTarget], None] | None = None,
+        *, gallery_rename_busy: Callable[[], bool] | None = None,
     ) -> None:
         """Compose compact photo controls around a retained Qt Quick viewport.
 
@@ -424,6 +430,8 @@ class QtPhotos(QWidget):
             transfer_busy (Callable[[], bool] | None): Other views still own the current grant.
             start_contextual (Callable[[LinkedUploadTarget], None] | None):
                 Starts the verified gallery's Watcher with its temporary key.
+            gallery_rename_busy (Callable[[], bool] | None): Checks transfer
+                ownership for a title edit. None uses the general transfer check.
         Returns:
             None: Prepares the empty catalogue and native renderer.
         """
@@ -439,6 +447,7 @@ class QtPhotos(QWidget):
         self.connections = connections
         self.transfer_busy = transfer_busy or (lambda: False)
         self.start_contextual = start_contextual
+        self._gallery_rename_busy = gallery_rename_busy
         self.simbrief_available: Callable[[], bool] | None = None
         self.simbrief_action: Callable[[], None] | None = None
         self._active_gallery_menu: QMenu | None = None
@@ -538,6 +547,8 @@ class QtPhotos(QWidget):
         self._wanted: tuple[int, ...] = ()
         self._attempted: set[int] = set()
         self._group: tuple[int, ...] = ()
+        self._renewing_thumbnail_proofs = False
+        self._thumbnail_proof_changed = False
         self._loading_thumbnails: set[int] = set()
         self._healthy = False
         self._batch_limit = load_thumbnail_batch_size(profile)
@@ -592,7 +603,7 @@ class QtPhotos(QWidget):
         ](
             self._receive_scope_capabilities, self._scope_discovery_finished, self,
         )
-        self._thumbnails = QtReadLane[PhotoFrame | ThumbnailActivity | ThumbnailGroup](
+        self._thumbnails = QtReadLane[ThumbnailEvent](
             self._receive_thumbnail, self._group_finished, self,
         )
         self._details = QtReadLane[PhotoFrame](
@@ -605,6 +616,9 @@ class QtPhotos(QWidget):
         )
         self._information = QtReadLane[MediaInformation | MediaInformationFailure](
             self._show_information, self._information_finished, self,
+        )
+        self._inspector_read = QtReadLane[PhotoFrame](
+            self._show_inspector_preview, self._inspector_preview_finished, self,
         )
         self._keepalive = QtReadLane[DesktopLinkedSite](
             self._keepalive_problem, lambda _failure: None, self,
@@ -893,10 +907,8 @@ class QtPhotos(QWidget):
         gallery_layout.addWidget(self._gallery_tree)
         self._gallery_panel.hide()
         self._split.addWidget(self._gallery_panel)
-        self._inspector_panel = QFrame()
-        self._inspector_panel.setObjectName('photosInspector')
-        self._inspector_panel.setProperty('shellCard', True)
-        inspector_layout = QVBoxLayout(self._inspector_panel)
+        self._inspector_panel = InspectorPane()
+        inspector_layout = QVBoxLayout(self._inspector_panel.card)
         inspector_title = QHBoxLayout()
         self._inspector_heading = QLabel(self._text('photo_info'))
         self._inspector_heading.setObjectName('heading')
@@ -912,18 +924,16 @@ class QtPhotos(QWidget):
             icon='close', icon_only=True,
         ))
         inspector_layout.addLayout(inspector_title)
+        self._inspector_preview = InspectorPreview(self._text('photo_preview'))
+        inspector_layout.addWidget(self._inspector_preview)
         self._inspector_summary = QLabel()
         self._inspector_summary.setObjectName('status')
         self._inspector_summary.setTextFormat(Qt.TextFormat.PlainText)
         self._inspector_summary.setWordWrap(True)
         inspector_layout.addWidget(self._inspector_summary)
-        self._inspector = QPlainTextEdit()
-        self._inspector.setReadOnly(True)
-        self._inspector.setFrameShape(QFrame.Shape.NoFrame)
-        self._inspector.setStyleSheet(
-            f'QPlainTextEdit {{ background: {PALETTE["card_surface"]}; }}',
+        self._inspector = InspectorMetadata(
+            self._text('photo_info'), self._text('show_full_name'), self._text('collapse_name'),
         )
-        self._inspector.setAccessibleName(self._text('photo_info'))
         inspector_layout.addWidget(self._inspector, stretch=1)
         self._inspector_panel.hide()
         self._preload_row = QWidget()
@@ -4535,8 +4545,11 @@ class QtPhotos(QWidget):
         """
         session = self._session
         gallery = self._gallery_id if gallery_id is None else gallery_id
-        if session is None or gallery is None or not self._owns_gallery(session, gallery) or not self._can_disconnect():
+        if session is None or gallery is None or not self._owns_gallery(session, gallery):
             self.status_message('Gallery connection is unavailable.')
+            return
+        if self.busy():
+            self.status_message('Wait for the current operation to finish.')
             return
         if field == 'title' and not session.can_edit_gallery_metadata():
             self.approve_admin()
@@ -4564,11 +4577,19 @@ class QtPhotos(QWidget):
             caption = next((name for name, key in fields.items() if key == field), '')
             if not caption:
                 return
+        transfer_busy = (
+            (self._gallery_rename_busy or self.transfer_busy)
+            if field == 'title' else self.transfer_busy
+        )
+        if self.busy() or transfer_busy():
+            self.status_message('Wait for the current operation to finish.')
+            return
         if self._gallery_editor is not None:
             self._gallery_editor.reject()
         editor = QtGalleryEditor(
             self, session, gallery, field, caption, self.language,
-            lambda: self._owns_gallery(session, gallery) and not self._maintenance_busy and not self.transfer_busy(),
+            lambda: (self._owns_gallery(session, gallery) and not self._maintenance_busy
+                     and not self._selecting_saved_target and not transfer_busy()),
         )
         self._gallery_editor = editor
         editor.writing_changed.connect(self.work_changed.emit)
@@ -4963,7 +4984,10 @@ class QtPhotos(QWidget):
             None: Only explicit foreground requests preempt the cache worker.
         """
         detail = self._details.busy()
-        busy = detail or self._load.busy() or self._information.busy() or self.busy()
+        busy = (
+            detail or self._load.busy() or self._information.busy()
+            or self._inspector_read.busy() or self.busy()
+        )
         self._preload_wait_reason = 'browsing' if detail else 'metadata' if busy else ''
         if self._pipeline_waiting or busy:
             self._preload_foreground.set()
@@ -5433,34 +5457,41 @@ class QtPhotos(QWidget):
     def _request_information(
         self, session: LinkingSession, gallery: int, photo_id: int | None = None,
     ) -> None:
-        """Read validated metadata on demand without a rendition request.
+        """Read metadata and, for the inspector, a bounded authorized thumbnail.
 
         Args:
             session (LinkingSession): Current exact media session.
             gallery (int): Physical gallery whose details are requested.
             photo_id (int | None): Exact selected direct photo, or None for gallery details.
         Returns:
-            None: Shows fresh metadata for the exact live inspector or starts a
-                cancellable passive read.
+            None: Displays current metadata and schedules any outstanding
+                passive metadata or preview reads independently.
         """
         if not self._owns_gallery(session, gallery) or photo_id is not None and gallery != self._gallery_id:
             return
         in_inspector = photo_id is not None and not self.detailOpen
+        row: PhotoRow | None = None
         photo: LinkedPhoto | None = None
         if in_inspector and photo_id is not None:
             index = self.model.index_by_id.get(photo_id)
-            source = self.model.rows[index].source if index is not None else None
-            if not isinstance(source, LinkedPhoto):
+            row = self.model.rows[index] if index is not None else None
+            if row is None or not isinstance(row.source, LinkedPhoto):
                 return
-            photo = source
+            photo = row.source
         self._dismiss_information(keep_pane=in_inspector)
-        if photo is not None:
+        if row is not None and photo is not None:
             self._inspected_photo = photo
             self._set_inspector_summary(photo, self._text('working'))
+            self._inspector_preview.present(None, self._text('working'))
             if self._inspector_panel.isHidden():
-                self._inspector_panel.show()
+                self._inspector_panel.reveal()
                 self._split.refresh()
                 self.restore_inspector_width(self._inspector_width)
+            self._inspector_read.submit(lambda cancelled, publish: publish(
+                read_photo(row, session, gallery, cancelled, thumbnail=True,
+                           thumbnail_size=INSPECTOR_PREVIEW_PIXELS),
+            ))
+            self._update_preload_priority()
             key = (gallery, photo.image_id, session.can_read_admin_media())
             cached = self._photo_info_cache.get(key)
             if cached is not None:
@@ -5503,6 +5534,32 @@ class QtPhotos(QWidget):
         self._information.submit(read)
         self._update_preload_priority()
 
+    def _show_inspector_preview(self, frame: PhotoFrame) -> None:
+        """Publish a preview only while its exact selection and grant are current.
+
+        Args:
+            frame (PhotoFrame): Bounded raster delivered by the current preview lane.
+        Returns:
+            None: Updates the preview without modifying the grid's retained textures.
+        """
+        session, gallery = self._session, self._gallery_id
+        if (self._inspected_photo is frame.row.source and session is not None
+                and gallery is not None and self._owns_gallery(session, gallery)
+                and session.can_read_media()):
+            self._inspector_preview.present(frame.image)
+
+    def _inspector_preview_finished(self, _failure: str) -> None:
+        """Complete the inspector preview independently of its metadata.
+
+        Args:
+            _failure (str): Sanitized read outcome from the preview lane.
+        Returns:
+            None: Shows an unavailable status if no current raster was published.
+        """
+        if self._inspected_photo is not None and self._inspector_preview.image.isNull():
+            self._inspector_preview.present(None, self._text('preview_unavailable'))
+        self._update_preload_priority()
+
     def _information_for_detail(self) -> None:
         """Request metadata for the exact displayed Lightbox rendition.
 
@@ -5519,7 +5576,7 @@ class QtPhotos(QWidget):
     def _show_information(
         self, result: MediaInformation | MediaInformationFailure, *, remember: bool = True,
     ) -> None:
-        """Display the exact current authorized metadata as selectable plain text.
+        """Display current authorized metadata as selectable details.
 
         Args:
             result (MediaInformation | MediaInformationFailure): Current authorized
@@ -5569,7 +5626,6 @@ class QtPhotos(QWidget):
             groups = photo_information_groups(
                 fields, include_location=result.include_location and location_allowed,
             )
-        content = self._information_rows(groups)
         if result.photo_id is not None and not self.detailOpen:
             photo = self._inspected_photo
             if photo is not None and photo.image_id == result.photo_id:
@@ -5583,13 +5639,16 @@ class QtPhotos(QWidget):
                     self._photo_info_cache.move_to_end(key)
                     if len(self._photo_info_cache) > PHOTOS_INFO_CACHE_ENTRY_LIMIT:
                         self._photo_info_cache.popitem(last=False)
-                self._set_inspector_summary(photo, self._text('photo_info_ready'))
-                self._inspector.setPlainText(content)
+                self._set_inspector_summary(
+                    photo, self._text('photo_info_ready'),
+                    size_in_details=fields.get('size') is not None,
+                )
+                self._set_inspector_metadata(groups)
             return
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
-        details = QPlainTextEdit(content)
+        details = QPlainTextEdit(self._information_rows(groups))
         details.setReadOnly(True)
         details.setAccessibleName(title)
         layout.addWidget(details)
@@ -5597,23 +5656,28 @@ class QtPhotos(QWidget):
         self._information_dialog = dialog
         dialog.open()
 
-    def _set_inspector_summary(self, photo: LinkedPhoto, status: str) -> None:
+    def _set_inspector_summary(
+        self, photo: LinkedPhoto, status: str, *, size_in_details: bool = False,
+    ) -> None:
         """Show the immediate descriptor and the current metadata read status.
 
         Args:
             photo (LinkedPhoto): Exact original authorized descriptor.
             status (str): Localized working, ready or partial-data notice.
+            size_in_details (bool): Whether the structured rows show the original size.
         Returns:
-            None: Keeps the heading and original size visible above the scroll area.
+            None: Shows status and retains the descriptor size until details include it.
         """
         title = ' '.join(''.join(char if char.isprintable() else ' ' for char in photo.title).split())
-        size = (self._format_information('photos_workspace_field_size', photo.size)
-                if photo.size is not None else self._text('unknown'))
         title = title or self._text('photo_info')
         self._inspector_heading.setAccessibleName(title)
         self._inspector_heading.setToolTip(f'<span>{escape(title)}</span>')
         self._layout_inspector_heading()
-        self._inspector_summary.setText(f"{self._text('field_size')}: {size}\n{status}")
+        if not size_in_details:
+            size = (self._format_information('photos_workspace_field_size', photo.size)
+                    if photo.size is not None else self._text('unknown'))
+            status = f"{self._text('field_size')}: {size}\n{status}"
+        self._inspector_summary.setText(status)
 
     def _layout_inspector_heading(self) -> None:
         """Fit the file title into the header while retaining its full name.
@@ -5626,6 +5690,22 @@ class QtPhotos(QWidget):
             label.accessibleName(), Qt.TextElideMode.ElideMiddle,
             label.contentsRect().width(),
         ))
+
+    def _set_inspector_metadata(self, groups: list[InformationGroup]) -> None:
+        """Localize the authorized fields for the compact inspector document.
+
+        Args:
+            groups (list[InformationGroup]): Localized group keys and validated fields.
+        Returns:
+            None: Displays grouped metadata and expandable names for this photo.
+        """
+        self._inspector.set_groups([
+            (tr(self.language, heading), [
+                (key, tr(self.language, key), self._format_information(key, value))
+                for key, value in rows if value is not None
+            ])
+            for heading, rows in groups
+        ])
 
     def _information_rows(self, groups: list[InformationGroup]) -> str:
         """Format the same ordered scoped groups as the existing Tk inspector.
@@ -5678,30 +5758,35 @@ class QtPhotos(QWidget):
         photo = self._inspected_photo
         if photo is not None and not self._inspector_panel.isHidden():
             if failure:
-                self._set_inspector_summary(photo, self._text('details_fallback'))
+                self._set_inspector_summary(
+                    photo, self._text('details_fallback'),
+                    size_in_details=photo.size is not None,
+                )
                 groups = photo_information_groups({
                     'title': photo.title, 'size': photo.size,
                     'visibility': photo.visibility, 'nsfw': photo.nsfw,
                 }, include_location=False)
-                self._inspector.setPlainText(self._information_rows(groups))
+                self._set_inspector_metadata(groups)
             return
         self.status_message(self._text('info_unavailable') if failure else '')
 
     def _dismiss_information(self, *, keep_pane: bool = False) -> None:
-        """Withdraw stale metadata before navigation, replacement or shutdown.
+        """Withdraw stale metadata and previews before navigation or shutdown.
 
         Args:
             keep_pane (bool): Whether a new request keeps the current split geometry.
         Returns:
-            None: Cancels the read and clears the pane or previous detail dialog.
+            None: Cancels both reads and clears the pane or previous detail dialog.
         """
         self._information.cancel()
+        self._inspector_read.cancel()
         self._inspected_photo = None
         if not keep_pane and not self._inspector_panel.isHidden():
             self._inspector_panel.hide()
             self.restore_tree_width(self._preferred_tree_width)
         self._inspector_summary.clear()
-        self._inspector.clear()
+        self._inspector_preview.present(None)
+        self._inspector.set_groups([])
         if self._information_dialog is not None:
             self._information_dialog.close()
             self._information_dialog.deleteLater()
@@ -6665,18 +6750,23 @@ class QtPhotos(QWidget):
         """
         self._thumbnails.cancel()
         self._group = ()
+        self._renewing_thumbnail_proofs = False
+        self._thumbnail_proof_changed = False
         self._loading_thumbnails.clear()
         self.model.set_loading(set())
 
-    def _start_group(self) -> None:
+    def _start_group(self, *, renew_proofs: bool = False) -> None:
         """Admit one initial or healthy steady group through the shared transport.
 
+        Args:
+            renew_proofs (bool): Refresh authorized pages for one stale visible group.
         Returns:
             None: Maintains one thumbnail lane and an independent detail lane.
         """
         if not self._photos_active or self._group or self.detailOpen:
             return
-        limit = self._batch_limit if self._healthy else MEDIA_HTTP_BATCH_INITIAL_SIZE
+        limit = (self._batch_limit if self._healthy and not renew_proofs
+                 else MEDIA_HTTP_BATCH_INITIAL_SIZE)
         wanted = tuple(
             identity for identity in self._wanted
             if identity not in self._tiles and identity not in self._attempted
@@ -6687,22 +6777,32 @@ class QtPhotos(QWidget):
         self._group = wanted
         rows = tuple(self.model.rows[self.model.index_by_id[identity]] for identity in wanted)
         session, gallery = self._session, self._gallery_id
-        self._thumbnails.submit(lambda cancel, publish: stream_thumbnails(
-            rows, session, gallery, cancel, publish,
-        ))
+        self._renewing_thumbnail_proofs = renew_proofs
+        self._thumbnail_proof_changed = False
+        if renew_proofs and session is not None and gallery is not None:
+            self._thumbnails.submit(lambda cancel, publish: stream_revalidated_thumbnails(
+                rows, session, gallery, cancel, publish,
+            ))
+        else:
+            self._thumbnails.submit(lambda cancel, publish: stream_thumbnails(
+                rows, session, gallery, cancel, publish,
+            ))
         self._update_thumbnail_progress()
 
-    def _receive_thumbnail(self, value: PhotoFrame | ThumbnailActivity | ThumbnailGroup) -> None:
+    def _receive_thumbnail(self, value: ThumbnailEvent) -> None:
         """Update visible loading indicators and admit still-authorized pixels.
 
         Args:
-            value (PhotoFrame | ThumbnailActivity | ThumbnailGroup): Current
-                decoded frame, read activity or health from the serialized lane.
+            value (ThumbnailEvent): Renewed page, decoded frame, read activity
+                or health from the current serialized lane.
         Returns:
             None: Progressively publishes only current authorized pixels.
         """
         if isinstance(value, ThumbnailGroup):
             self._healthy = value.healthy
+            return
+        if isinstance(value, ThumbnailProofPage):
+            self._apply_thumbnail_proof_page(value)
             return
         if isinstance(value, ThumbnailActivity):
             self._loading_thumbnails = set(value.identities).intersection(self._group)
@@ -6717,10 +6817,66 @@ class QtPhotos(QWidget):
         if value.publication is not None and (
             self._session is None or not self._session.thumbnail_publication_current(value.publication)
         ):
+            self._thumbnail_proof_changed = True
             return
         self._retain_frame(value)
         self.model.texture(identity, self._store_thumbnail(value))
         self._update_thumbnail_progress()
+
+    def _apply_thumbnail_proof_page(self, result: ThumbnailProofPage) -> None:
+        """Reconcile renewed rows and revoke obsolete pixels through the model.
+
+        Args:
+            result (ThumbnailProofPage): Authorized page from the active gallery read lane.
+        Returns:
+            None: Updates the existing catalogue slots without resetting scroll or selection.
+        """
+        page = result.page
+        session = self._session
+        if (page.gallery_id != self._rendered_gallery or session is None
+                or not session.can_read_media()):
+            return
+        photos = {photo.image_id: photo for photo in page.photos}
+        replacements: dict[int, PhotoRow] = {}
+        retired: set[int] = set()
+        for row in self.model.rows:
+            identity = row.identity
+            if (not isinstance(row.source, LinkedPhoto)
+                    or identity <= (result.after_id or 0)
+                    or (page.next_after is not None and identity > page.next_after)):
+                continue
+            photo = photos.get(identity)
+            if photo is None:
+                retired.add(identity)
+                continue
+            replacements[identity] = PhotoRow(identity, photo.title, photo)
+            # A newly confirmed strong validator can keep the displayed tile.
+            # It cannot renew the authority on a separately retained frame.
+            if (not (photo.thumbnail_etag or photo.preload_thumbnail_etag)
+                    or replace(row.source,
+                               thumbnail_verified_at=photo.thumbnail_verified_at,
+                               preload_verified_at=photo.preload_verified_at) != photo):
+                retired.add(identity)
+        self.model.update_textures(dict.fromkeys(retired, ''))
+        for identity in retired:
+            key = self._tiles.pop(identity, None)
+            if key is not None:
+                self.textures.discard(key)
+        for identity in retired.union(replacements):
+            cached = self._retained.pop(identity, None)
+            if cached is not None:
+                self._retained_bytes -= cached[2]
+        if self._inspected_photo is not None and self._inspected_photo.image_id in retired:
+            self._dismiss_information()
+        for key in tuple(self._photo_info_cache):
+            if key[0] == page.gallery_id and key[1] in retired:
+                del self._photo_info_cache[key]
+        self.model.renew_rows(replacements)
+        if replacements:
+            self._tree_order = self.model.rows if self._newest else self.model.rows[::-1]
+        self._attempted.difference_update(retired.intersection(replacements))
+        # A verified disappearance is terminal for this visit to the viewport.
+        self._attempted.update(retired.difference(replacements).intersection(self._wanted))
 
     def _store_thumbnail(self, frame: PhotoFrame) -> str:
         """Prepare a viewport raster for publication without re-decoding.
@@ -6785,20 +6941,42 @@ class QtPhotos(QWidget):
         return frame
 
     def _group_finished(self, failure: str) -> None:
-        """Advance the visible batch or expose a retry after a read failure.
+        """Advance the viewport or renew its stale thumbnail evidence once.
 
         Args:
             failure (str): Sanitized failure class, or empty on completion.
         Returns:
-            None: Retains first-visible frames and bounds unavailable rows.
+            None: Keeps departed rows eligible and bounds failed visible reads.
         """
-        self._attempted.update(self._group)
+        missing = set(self._group).intersection(self._wanted).difference(self._tiles)
+        proof_changed = (failure == LinkingThumbnailProofChanged.__name__
+                         or self._thumbnail_proof_changed)
+        already_renewed = self._renewing_thumbnail_proofs
         self._group = ()
+        self._renewing_thumbnail_proofs = False
+        self._thumbnail_proof_changed = False
         self._loading_thumbnails.clear()
         self.model.set_loading(set())
-        if failure:
+        if proof_changed and not missing:
+            self._start_group()
+            return
+        session = self._session
+        if (proof_changed and not already_renewed and session is not None
+                and self._gallery_id is not None and session.can_read_media()):
+            self._healthy = False
+            logging.getLogger(__name__).info('Photos renewing thumbnail proofs for visible rows.')
+            self._start_group(renew_proofs=True)
+            return
+        # A group can finish after some of its original rows have left the
+        # viewport. They need a new attempt when they enter the view again.
+        self._attempted.update(missing)
+        if failure or proof_changed:
             self._healthy = False
             self.progress.hide()
+            logging.getLogger(__name__).warning(
+                'Photos thumbnail group stopped: failure=%s; visible_missing=%d',
+                failure or LinkingThumbnailProofChanged.__name__, len(missing),
+            )
             self.status.setText(gettext("Some photos could not be loaded. Use Refresh to retry."))
             self.check_link()
             return
@@ -7212,7 +7390,7 @@ class QtPhotos(QWidget):
         self._folder_shelf.shutdown()
         for lane in (
             self._load, self._cache_probe, self._thumbnails, self._details, self._maintenance,
-            self._information, self._keepalive, self._scope_discovery,
+            self._information, self._inspector_read, self._keepalive, self._scope_discovery,
         ):
             lane.close()
         self.quick.setSource(QUrl())

@@ -2688,17 +2688,22 @@ class ConfigStateTests(unittest.TestCase):
         """Keep damaged configuration unchanged and prevent startup workers.
 
         Returns:
-            None: Checks normal, once, startup and startup-registration modes.
+            None: Checks default Qt, explicit Legacy Tk, tray and command modes.
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'
             original = b'{"api_key":"pgu_fixture",'
             path.write_bytes(original)
-            for arguments in ([], ['--once'], ['--startup'], ['--configure-startup']):
+            for arguments in (
+                [], ['--gui-backend', 'tkinter'], ['--once'], ['--startup'],
+                ['--configure-startup'],
+            ):
                 with (
                     self.subTest(arguments=arguments),
+                    mock.patch.object(MAIN, 'CONFIG_DIR', path.parent),
                     mock.patch.object(MAIN, 'WindowsInstance') as instance,
                     mock.patch.object(MAIN, 'setup_logging'),
+                    mock.patch.object(MAIN, '_start_qt_supervisor') as supervise,
                     mock.patch.object(MAIN, 'WatcherApp') as app,
                     mock.patch.object(MAIN, 'run_once') as once,
                     mock.patch.object(MAIN, 'synchronize_startup') as startup,
@@ -2707,11 +2712,14 @@ class ConfigStateTests(unittest.TestCase):
                 ):
                     instance.return_value.acquire.return_value = True
                     self.assertEqual(1, MAIN.main(arguments + ['--config', str(path)]))
+                    supervise.assert_not_called()
                     app.assert_not_called()
                     once.assert_not_called()
                     startup.assert_not_called()
                     if '--once' in arguments or '--configure-startup' in arguments:
                         messages.showerror.assert_not_called()
+                    else:
+                        messages.showerror.assert_called_once()
                     self.assertEqual(original, path.read_bytes())
 
     def test_once_requires_real_mode_admission_for_the_complete_scan(self) -> None:

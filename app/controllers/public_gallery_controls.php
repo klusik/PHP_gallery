@@ -350,7 +350,8 @@ function render_picture_manager_toolbar(
     array $gallery,
     bool $hasVisibleDropTargets,
 ): void {
-    if (!current_user() || admin_anonymous_preview_active()) {
+    $user = current_user();
+    if (!$user || admin_anonymous_preview_active()) {
         return;
     }
 
@@ -385,6 +386,7 @@ function render_picture_manager_toolbar(
 
     \Gallery\Views\view_render_picture_manager_toolbar([
         'gallery_id' => $galleryId,
+        'can_move_galleries' => ($user['role'] ?? '') === 'admin',
         'has_visible_drop_targets' => $hasVisibleDropTargets,
         'csrf_token' => csrf_token(),
         'move_url' => url_for('picture_manager_move'),

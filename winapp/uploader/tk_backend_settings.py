@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import Event, Misc, StringVar, ttk
 from typing import Callable
 
-from .gui_backend import DEFAULT_GUI_BACKEND, GUI_BACKENDS, GuiBackend
+from .gui_backend import GUI_BACKENDS, LEGACY_GUI_BACKEND, GuiBackend
 from .gui_backend import load_gui_backend, save_gui_backend
 from .gui_backend_labels import backend_label, backend_status
 from .localization import gettext
@@ -67,7 +67,7 @@ class TkBackendSettings(ttk.Frame):
         self.restart_button.pack(side="left")
         Button(
             self.pending, text=gettext("Cancel pending change"),
-            command=lambda: self.save(DEFAULT_GUI_BACKEND),
+            command=lambda: self.save(LEGACY_GUI_BACKEND),
         ).pack(side="left", padx=(8, 0))
         self.columnconfigure(1, weight=1)
         self.refresh()
@@ -76,15 +76,15 @@ class TkBackendSettings(ttk.Frame):
         """Synchronize the chooser, status and pending-restart controls.
 
         Returns:
-            None: Displays the persisted selection even in a stable-only build.
+            None: Displays the persisted selection in a Legacy Tk-only environment.
         """
         self.selection.set(backend_label(self.requested))
-        text = backend_status(DEFAULT_GUI_BACKEND, self.requested)
+        text = backend_status(LEGACY_GUI_BACKEND, self.requested)
         if not self.qt_available:
             text += "\n" + gettext("Qt is available in the source launcher with the optional Qt requirements.")
         self.summary.set(text)
         self.restart_button.configure(state="normal" if self.qt_available else "disabled")
-        if self.requested != DEFAULT_GUI_BACKEND:
+        if self.requested != LEGACY_GUI_BACKEND:
             self.pending.grid()
         else:
             self.pending.grid_remove()
@@ -95,11 +95,10 @@ class TkBackendSettings(ttk.Frame):
         Args:
             backend (GuiBackend): Explicitly requested toolkit or rollback.
         Returns:
-            bool: True when the preference already matches or was saved.
+            bool: True when the explicit preference was saved.
         """
         try:
-            if backend != self.requested:
-                save_gui_backend(self.profile, backend)
+            save_gui_backend(self.profile, backend)
         except OSError:
             self.refresh()
             messagebox.showerror(
@@ -123,7 +122,7 @@ class TkBackendSettings(ttk.Frame):
         if not self.qt_available or index < 0:
             return
         backend = GUI_BACKENDS[index]
-        if (self.save(backend) and backend != DEFAULT_GUI_BACKEND
+        if (self.save(backend) and backend != LEGACY_GUI_BACKEND
                 and messagebox.askyesno(
                     gettext("Restart WinApp"),
                     gettext("The GUI backend was saved. Restart WinApp now to apply it?"),

@@ -105,8 +105,8 @@ PARTITION_REMAINDER_SHARD_COUNT = 3
 # cases, 12.88 in queue tests, and 18.88 in native localization in the same
 # overdue child. Recovery retains an allowance for its last case. The full
 # Windows run 45860420889 spent 12.84 seconds on the retry progress case and
-# ~24 seconds inside the native Qt cohorts. The Qt weight also accounts for
-# the child startup and exit around the measured tests.
+# ~24 seconds inside the native Qt cohorts. The complete ordinary suite also
+# uses this distribution for its core-only Tk environment.
 PARTITION_REMAINDER_CLASS_WEIGHTS = {
     "test_uploader_fifo.UploaderFifoTests": 225,
     "test_localization.NativeLocalizationTests": 190,
@@ -122,6 +122,19 @@ PARTITION_REMAINDER_CLASS_WEIGHTS = {
     "test_flight_report.FlightReportTests": 65,
     "test_native_thumbnail_batch.NativeThumbnailBatchTests": 65,
     "test_canvas_gallery_grid.CanvasGalleryGridTests": 60,
+}
+
+# Purpose: Balance the ordinary remainder of the Qt visual-delegated owner.
+# Type: dict[str, int]. Units: equivalent ordinary test cases.
+# Scope: winapp-partitioned-no-visual. Consumers: partition_nonvisual_test_ids().
+# Rationale: run 45991503477 reached the child cap after 35.8 seconds in
+# QtBackendTests and 3.8 seconds in the wide viewport class. The 41- and
+# 4-second weights completed all nine shards on 45993687942. Its Tk-only job
+# showed a different cost profile because it cannot run the Qt cases.
+PARTITION_VISUAL_DELEGATED_CLASS_WEIGHTS = {
+    **PARTITION_REMAINDER_CLASS_WEIGHTS,
+    "test_qt_backend.QtBackendTests": 410,
+    "test_qt_backend.QtWidePhotosViewportTests": 40,
 }
 
 # The baseline checkout supplies its own canonical adapter. Use a separate
@@ -140,6 +153,7 @@ print(json.dumps([case.id() for case in cases]))
 def partition_test_ids(
     test_ids: list[str], count: int, *,
     isolated_classes: tuple[str, ...] = PARTITION_ISOLATED_CLASSES,
+    class_weights: dict[str, int] = PARTITION_REMAINDER_CLASS_WEIGHTS,
 ) -> list[list[str]]:
     """Isolate measured owners and balance whole classes by estimated cost.
 
@@ -148,6 +162,8 @@ def partition_test_ids(
         count (int): Required partition count.
         isolated_classes (tuple[str, ...]): Complete measured-class set to
             isolate when the configured class-preserving shape is available.
+        class_weights (dict[str, int]): Case-equivalent cost per measured class
+            for this suite. Unlisted classes use their discovered case count.
     Returns:
         list[list[str]]: Disjoint class-preserving IDs in stable shard order;
             the measured module and classes each occupy separate
@@ -198,6 +214,7 @@ def partition_test_ids(
             )
         remainder_shards = partition_test_ids(
             remaining_ids, PARTITION_REMAINDER_SHARD_COUNT,
+            class_weights=class_weights,
         )
         shards = [viewer_ids, *isolated_ids, *remainder_shards]
         return shards
@@ -205,7 +222,7 @@ def partition_test_ids(
     shards: list[list[str]] = [[] for _ in range(count)]
     weights = [0] * count
     weighted_classes = [
-        (max(len(ids), PARTITION_REMAINDER_CLASS_WEIGHTS.get(class_id, 0)), ids)
+        (max(len(ids), class_weights.get(class_id, 0)), ids)
         for class_id, ids in classes.items()
     ]
     # Stable sort preserves original class discovery order for equal weights.
@@ -247,6 +264,7 @@ def partition_nonvisual_test_ids(
     )
     return partition_test_ids(
         ordinary_ids, expected_count, isolated_classes=ordinary_isolates,
+        class_weights=PARTITION_VISUAL_DELEGATED_CLASS_WEIGHTS,
     ), delegated
 
 

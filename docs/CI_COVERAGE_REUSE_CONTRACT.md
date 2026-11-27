@@ -69,7 +69,9 @@ focus operation that caused Linux/Xvfb SIGSEGVs in hosted partitions 7 on runs
 310 and 8621, losing 537 otherwise-discovered test identities. A fresh Tcl/Tk
 process preserves the actual focus assertion while limiting any native crash
 to that class. The coordinator weights the measured slower remainder classes
-using hosted Windows timings.
+using hosted Windows timings. The Qt visual-delegated suite uses the native Qt
+and wide viewport costs observed in run `45991503477`. The complete ordinary
+suite uses its own weights to cover the Tk-only Windows environment.
 
 The issue 445 Windows, Linux and macOS Qt qualification uses a registered two-suite
 split to keep the measured visual class outside the ordinary coordinator's

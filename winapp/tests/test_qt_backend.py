@@ -52,7 +52,9 @@ from uploader.flight_render import ReportMaps, ReportRenderer
 from uploader.flight_report_translations import tr
 from uploader.flight_simbrief import DispatchPlan, load_dispatch
 from uploader.flight_workflow import FinalizationWorker
-from uploader.gallery_image_policy import MEDIA_HTTP_BATCH_INITIAL_SIZE
+from uploader.gallery_image_policy import (
+    MEDIA_HTTP_BATCH_INITIAL_SIZE, MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS,
+)
 from uploader.gallery_lightbox import (
     LIGHTBOX_TOUCHPAD_ZOOM_DELTA_UNITS, LIGHTBOX_WHEEL_DELTA_UNITS,
     LIGHTBOX_WHEEL_STEP,
@@ -116,8 +118,9 @@ try:
     from uploader.app_linking import (
         CALLBACK_LIFETIME_SECONDS, GALLERIES_SCOPE,
         ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE,
-        LinkedGallery, LinkedGalleryEditSnapshot, LinkedIdentity,
-        LinkedPhoto, LinkedPresentation, LinkedTrack, LinkingError, LinkingSession, MediaReadTimings,
+        LinkedGallery, LinkedGalleryEditSnapshot, LinkedIdentity, LinkedMediaPage,
+        LinkedPhoto, LinkedPresentation, LinkedTrack, LinkingError, LinkingSession,
+        LinkingThumbnailProofChanged, MediaReadTimings,
         ThumbnailBatchWitness, ThumbnailPublication,
     )
     from uploader.qt_photos import (
@@ -1546,7 +1549,10 @@ class QtBackendTests(_NativeQtAppFixture):
                 window.settings.focus_backend_picker()
                 self.wait_for(lambda: window.settings.backend.isVisible() and window.settings.backend.hasFocus())
                 self.assertEqual('GUI backend', window.settings.backend.accessibleName())
-                self.assertIn('highly experimental', window.settings.backend.currentText())
+                self.assertEqual('Qt / PySide6', window.settings.backend.currentText())
+                self.assertEqual('Legacy Tk', window.settings.backend.itemText(
+                    window.settings.backend.findData('tkinter'),
+                ))
                 QTimer.singleShot(0, select_later)
                 tkinter_index = window.settings.backend.findData("tkinter")
                 self.assertGreaterEqual(tkinter_index, 0)
@@ -2195,8 +2201,8 @@ class QtBackendTests(_NativeQtAppFixture):
         """Edit a linked gallery through the real native pencil and exact worker.
 
         Returns:
-            None: Shows the full authorized value before mutation and refuses
-                dismissal until the current accepted write has reached a result.
+            None: Renames a child of a hidden gallery while a linked Watcher
+                remains active and fences connection changes and accepted writes.
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
@@ -2206,9 +2212,20 @@ class QtBackendTests(_NativeQtAppFixture):
             session.available.return_value = True
             session.can_edit_gallery_metadata.return_value = True
             session.can_read_media.return_value = False
+            parent = LinkedGallery(2, None, 'Hidden parent')
+            child = LinkedGallery(1, 2, 'Short tree caption')
             session.read_gallery_edit.return_value = LinkedGalleryEditSnapshot(
-                1, 'Complete server title', '', '1', 'public', True, False,
+                1, 'Complete server title', '', '1', 'unpublished', False, False,
             )
+            commands = mock.Mock()
+            commands.events = Queue()
+            commands.report_target.return_value = None
+            watching = CaptureStatus(
+                phase='watching', alive=True, capturing=True, linked_mode=True,
+                watcher_worker_active=True, can_checkpoint=True,
+                capture_target=(issuer, 1, child.gallery_id),
+            )
+            commands.snapshot.return_value = watching
             entered, released = Event(), Event()
 
             def save(gallery: int, field: str, value: str, cancel: Event) -> LinkedGalleryEditSnapshot:
@@ -2225,22 +2242,34 @@ class QtBackendTests(_NativeQtAppFixture):
                 entered.set()
                 if not released.wait(QT_CHILD_SECONDS) or cancel.is_set():
                     raise TimeoutError('The editor fixture did not reach terminal publication.')
-                return LinkedGalleryEditSnapshot(gallery, value, '', '2', 'public', True, False)
+                return LinkedGalleryEditSnapshot(gallery, value, '', '2', 'unpublished', False, False)
 
             session.apply_gallery_edit.side_effect = save
-            window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False)
+            window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False, capture=commands)
             photos = window.photos
             with (
                 mock.patch('uploader.qt_photos.read_gallery_photos', return_value=()),
-                mock.patch('uploader.qt_photos.read_gallery_tree', return_value=(LinkedGallery(1, None, 'New title'),)),
+                mock.patch('uploader.qt_photos.read_gallery_tree',
+                           return_value=(parent, replace(child, title='New title'))),
             ):
                 try:
                     window.show()
                     photos._receive_catalogue(LinkedPhotos(
-                        session, issuer, 1, (LinkedGallery(1, None, 'Short tree caption'),),
+                        session, issuer, 1, (parent, child),
                         load_photos_tree_preferences(tree),
                     ))
+                    photos._open_folder(child.gallery_id)
                     self.wait_for(lambda: not photos._load.busy())
+                    self.assertEqual(child.gallery_id, photos._gallery_id)
+                    commands.snapshot.return_value = replace(watching, can_checkpoint=False)
+                    photos._edit_title_button.click()
+                    self.assertIsNone(photos._gallery_editor)
+                    self.assertEqual(gettext('Wait for the current operation to finish.'), photos.status.text())
+                    commands.snapshot.return_value = watching
+                    photos.edit_gallery(field='description')
+                    self.assertIsNone(photos._gallery_editor)
+                    self.assertFalse(photos._can_disconnect())
+                    session.read_gallery_edit.assert_not_called()
                     photos._edit_title_button.click()
                     editor = photos._gallery_editor
                     self.assertIsNotNone(editor)
@@ -2258,8 +2287,14 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.wait_for(lambda: photos._gallery_editor is None)
                     session.apply_gallery_edit.assert_called_once_with(1, 'title', 'New title', mock.ANY)
                     self.wait_for(lambda: photos._gallery_title.text() == 'New title')
+                    self.assertEqual('Hidden parent', photos._gallery_items[child.gallery_id].parent().text(0))
+                    self.assertTrue(window.transfer_busy())
+                    commands.interrupt.assert_not_called()
+                    commands.finish.assert_not_called()
+                    commands.close.assert_not_called()
                 finally:
                     released.set()
+                    commands.snapshot.return_value = CaptureStatus()
                     self.wait_for(lambda: not photos.busy())
                     window.exit_window()
 
@@ -2381,7 +2416,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 confirmed deletion removes the exact rows, GPS is scoped, and
                 the inspector reuses only authorized results and rejects late reads.
                 The inline card preserves the real action order and keyboard exit.
-                A long filename leaves the tree, viewport and pane controls usable.
+                Long names expand individually and keep the viewport controls usable.
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
@@ -2399,9 +2434,14 @@ class QtBackendTests(_NativeQtAppFixture):
                 'while_the_original_file_details_remain_available.jpg'
             )
             session.media_photo_info.return_value = {
-                'title': long_photo_name, 'gps_lat': 49.12,
-                'exif_camera_model': 'Synthetic',
+                'title': long_photo_name, 'filename': long_photo_name, 'gps_lat': 49.12,
+                'exif_camera_model': 'Synthetic camera body',
             }
+            # This synthetic thumbnail retains more decoded detail than a grid tile.
+            preview_body = BytesIO()
+            with Image.new('RGB', (480, 270), '#28748e') as preview:
+                preview.save(preview_body, format='PNG')
+            session.media_photo.return_value = (preview_body.getvalue(), 'image/png')
             galleries = (LinkedGallery(1, None, 'Root'),)
             # Keep the direct photo IDs in a stable but deliberately nonnumeric order.
             rows = (
@@ -2439,8 +2479,28 @@ class QtBackendTests(_NativeQtAppFixture):
                     session.delete_media_photos.assert_not_called()
                     splitter = photos._split
                     tree_width = photos.tree_width()
-                    photos._request_information(session, 1, 8)
+                    inspector = photos._inspector_panel
+                    with mock.patch.object(inspector, '_reduce_motion', return_value=False):
+                        photos._request_information(session, 1, 8)
+                    sizes = splitter.sizes()
+                    animation = inspector.transition
+                    animation.pause()
+                    animation.setCurrentTime(0)
+                    self.assertGreater(inspector.card.x(), 0)
+                    # 180 ms includes the brief settling motion within the 200 ms cap.
+                    self.assertEqual(180, animation.duration())
+                    animation.setCurrentTime(animation.duration() * 2 // 3)
+                    self.assertLess(inspector.card.x(), 0)
+                    animation.setCurrentTime(animation.duration())
+                    animation.stop()
+                    self.assertEqual(0, inspector.card.x())
+                    self.assertEqual(sizes, splitter.sizes())
                     self.wait_for(lambda: 'Synthetic' in photos._inspector.toPlainText())
+                    self.wait_for(lambda: not photos._inspector_preview.image.isNull())
+                    self.assertEqual((480, 270), (
+                        photos._inspector_preview.image.width(), photos._inspector_preview.image.height(),
+                    ))
+                    self.assertEqual((1, 8, True), session.media_photo.call_args.args[:3])
                     text = photos._inspector.toPlainText()
                     self.assertTrue(photos._inspector_panel.isVisible())
                     self.assertGreater(photos.inspector_width(), 0)
@@ -2451,7 +2511,40 @@ class QtBackendTests(_NativeQtAppFixture):
                     heading = photos._inspector_heading
                     self.assertEqual(long_photo_name, heading.accessibleName())
                     self.assertIn(long_photo_name, heading.toolTip())
-                    self.assertIn(long_photo_name, text)
+                    self.assertNotIn(long_photo_name, text)
+                    metadata = photos._inspector
+                    document = metadata.document()
+                    document.documentLayout().documentSize()
+                    title_toggle = document.find('▸')
+                    filename_toggle = document.find('▸', title_toggle)
+                    self.assertFalse(title_toggle.isNull())
+                    self.assertFalse(filename_toggle.isNull())
+                    self.assertEqual(1, title_toggle.block().layout().lineCount())
+                    self.assertEqual(1, filename_toggle.block().layout().lineCount())
+                    filename_toggle.setPosition(filename_toggle.selectionStart())
+                    metadata.setTextCursor(filename_toggle)
+                    # A point just inside the glyph activates the native text link.
+                    point = metadata.cursorRect(filename_toggle).center() + QPoint(3, 0)
+                    self.assertEqual('#photos_workspace_field_filename', metadata.anchorAt(point))
+                    QTest.mouseClick(metadata.viewport(), Qt.MouseButton.LeftButton, pos=point)
+                    self.wait_for(lambda: long_photo_name in metadata.toPlainText())
+                    self.assertEqual(1, metadata.toPlainText().count(long_photo_name))
+                    filename_value = document.find(long_photo_name)
+                    self.assertEqual(long_photo_name, filename_value.selectedText())
+                    camera_value = document.find('Synthetic camera body')
+                    table = filename_value.currentTable()
+                    self.assertIsNotNone(table)
+                    self.assertEqual(2, table.columns())
+                    self.assertEqual(table, camera_value.currentTable())
+                    self.assertEqual(1, table.cellAt(filename_value).column())
+                    self.assertEqual(1, table.cellAt(camera_value).column())
+                    self.assertGreater(filename_value.block().layout().lineCount(), 1)
+                    collapse = document.find('▾')
+                    collapse.setPosition(collapse.selectionStart())
+                    metadata.setTextCursor(collapse)
+                    point = metadata.cursorRect(collapse).center() + QPoint(3, 0)
+                    QTest.mouseClick(metadata.viewport(), Qt.MouseButton.LeftButton, pos=point)
+                    self.wait_for(lambda: long_photo_name not in metadata.toPlainText())
                     self.assertIn('…', heading.text())
                     self.assertLessEqual(
                         heading.fontMetrics().horizontalAdvance(heading.text()),
@@ -2463,7 +2556,6 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.assertLessEqual(
                         photos.inspector_width(), UI_LAYOUT_INFO_WIDTH_BOUNDS[1],
                     )
-                    inspector = photos._inspector_panel
                     close_info = next(
                         button for button in inspector.findChildren(QPushButton)
                         if button.accessibleName() == photos._text('close_photo_info')
@@ -2486,6 +2578,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     desktop_size = window.size()
                     window.resize(*QT_WINDOW_MINIMUM)
                     self.wait_for(lambda: photos.inspector_width() < widened)
+                    self.assertEqual(0, photos._inspector.horizontalScrollBar().maximum())
                     self.assertGreaterEqual(
                         splitter.sizes()[1], UI_LAYOUT_VIEWER_MINIMUM_WIDTH,
                     )
@@ -2508,11 +2601,15 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.assertIn('49.12', text)
                     photos._close_inspector()
                     self.assertFalse(photos._inspector_panel.isVisible())
+                    self.assertTrue(photos._inspector_preview.image.isNull())
                     reads = session.media_photo_info.call_count
-                    photos._request_information(session, 1, 8)
+                    with mock.patch.object(inspector, '_reduce_motion', return_value=True):
+                        photos._request_information(session, 1, 8)
+                    self.assertEqual(0, inspector.card.x())
                     self.assertEqual(narrowed, photos.inspector_width())
                     self.assertEqual(tree_width, photos.tree_width())
                     self.assertIn('49.12', photos._inspector.toPlainText())
+                    self.assertNotIn(long_photo_name, photos._inspector.toPlainText())
                     self.assertEqual(reads, session.media_photo_info.call_count)
                     session.can_read_admin_media.return_value = False
                     photos._request_information(session, 1, 8)
@@ -3982,9 +4079,10 @@ class QtBackendTests(_NativeQtAppFixture):
         session.media_thumbnails.side_effect = deliver
         values: list[PhotoFrame | ThumbnailActivity | ThumbnailGroup] = []
         session.thumbnail_publication_current.return_value = False
-        stream_thumbnails((row,), session, 9, Event(), values.append)
+        with self.assertRaises(LinkingThumbnailProofChanged):
+            stream_thumbnails((row,), session, 9, Event(), values.append)
         self.assertEqual([
-            ThumbnailActivity((row.identity,)), ThumbnailActivity(()), ThumbnailGroup(False),
+            ThumbnailActivity((row.identity,)), ThumbnailActivity(()),
         ], values)
         values.clear()
         session.thumbnail_publication_current.return_value = True
@@ -3996,6 +4094,130 @@ class QtBackendTests(_NativeQtAppFixture):
 
 class QtWidePhotosViewportTests(_NativeQtAppFixture):
     """Qualify the large native photo surface in its own bounded Qt process."""
+
+    def test_viewport_return_admits_rows_departed_during_an_overlapping_group(self) -> None:
+        """Re-admit thumbnails discarded while an overlapping viewport was active.
+
+        Returns:
+            None: A late group completion cannot strand formerly visible rows.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            source = profile / 'synthetic.jpg'
+            # Four identities allow one overlapping row and one entirely new tile.
+            rows = tuple(PhotoRow(identity, str(identity), source) for identity in range(4))
+            window = QtWindow(profile, '2.0.0', '', 500, False)
+            photos = window.photos
+            photos._photos_active = True
+            photos.model.replace(rows)
+            try:
+                with mock.patch.object(photos._thumbnails, 'submit'):
+                    photos._requested = (0, 3)
+                    photos._apply_viewport()
+                    self.assertEqual((0, 1, 2), photos._group)
+                    photos._requested = (2, 4)
+                    photos._apply_viewport()
+                    self.assertEqual((0, 1, 2), photos._group)
+                    image = QImage(photos.tileWidth, photos.tileHeight, QImage.Format.Format_RGB32)
+                    image.fill(QColor(Qt.GlobalColor.green))
+                    photos._receive_thumbnail(PhotoFrame(rows[2], image, image.size()))
+                    photos._group_finished('')
+                    self.assertEqual((3,), photos._group)
+                    photos._requested = (0, 3)
+                    photos._apply_viewport()
+                    self.assertEqual((0, 1), photos._group)
+                    self.assertEqual({2}, set(photos.model.texture_urls))
+            finally:
+                window.exit_window()
+
+    def test_expired_thumbnail_proofs_renew_only_the_visible_page(self) -> None:
+        """Recover native thumbnails after a fresh page renews their exact proofs.
+
+        Returns:
+            None: Keeps a confirmed tile and selection, retries the renewed row,
+                and never requests a photograph absent from the new proof page.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+            session.available.return_value = True
+            session.can_read_media.return_value = True
+            session.thumbnail_publication_current.return_value = True
+            gallery = 1
+            timestamp = time.monotonic()
+            expired = timestamp - 2 * MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
+            visible = LinkedPhoto(44, 'Displayed', thumbnail_etag='"displayed"',
+                                  thumbnail_verified_at=timestamp, cache_eligible=True)
+            gone = LinkedPhoto(43, 'Removed', thumbnail_verified_at=expired, cache_eligible=True)
+            missing = LinkedPhoto(42, 'Missing raster', thumbnail_etag='"missing"',
+                                  thumbnail_verified_at=expired, cache_eligible=True)
+            renewed = replace(missing, thumbnail_verified_at=timestamp)
+            session.media_page.return_value = LinkedMediaPage(gallery, None, (renewed, visible), None)
+            rows = tuple(PhotoRow(photo.image_id, photo.title, photo)
+                         for photo in (visible, gone, missing))
+            buffer = BytesIO()
+            with Image.new('RGB', (144, 108), 'blue') as fixture:
+                fixture.save(buffer, format='PNG')
+            body = buffer.getvalue()
+
+            def deliver(
+                gallery_id: int, descriptors: tuple[LinkedPhoto, ...],
+                publish: Callable[[ThumbnailPublication, MediaReadTimings, Callable[[], None]], None],
+                _cancelled: Event, *, active_photos: Callable[[tuple[int, ...]], None] | None = None,
+            ) -> None:
+                """Simulate the shared session's typed refusal for an old descriptor.
+
+                Args:
+                    gallery_id (int): Exact gallery used for this fixture.
+                    descriptors (tuple[LinkedPhoto, ...]): Current visible read order.
+                    publish (Callable[[ThumbnailPublication, MediaReadTimings, Callable[[], None]], None]):
+                        Worker callback for a verified encoded thumbnail.
+                    _cancelled (Event): Existing cancellation fence for this group.
+                    active_photos (Callable[[tuple[int, ...]], None] | None): Optional activity receiver.
+                Returns:
+                    None: Publishes the available rows in order.
+                Raises:
+                    LinkingThumbnailProofChanged: A row still uses expired evidence.
+                """
+                for photo in descriptors:
+                    if photo.thumbnail_verified_at == expired:
+                        raise LinkingThumbnailProofChanged('Synthetic expired proof.')
+                    if active_photos is not None:
+                        active_photos((photo.image_id,))
+                    witness = ThumbnailBatchWitness(
+                        session, 'synthetic', gallery_id, photo, 'public',
+                        (photo.thumbnail_etag, photo.thumbnail_verified_at), None, 0,
+                    )
+                    publish(ThumbnailPublication(
+                        witness, photo, 'ok', body, 'image/png', photo.thumbnail_etag, True,
+                    ), MediaReadTimings(), lambda: None)
+
+            session.media_thumbnails.side_effect = deliver
+            window = QtWindow(profile, '2.0.0', '', 500, False)
+            photos = window.photos
+            resets: list[bool] = []
+            try:
+                window.show()
+                photos._session = session
+                photos._identity = ('https://gallery.example.test/', 1)
+                photos._gallery_id = gallery
+                photos._sync_connection_state()
+                photos._install_catalogue(rows)
+                photos.model.select({visible.image_id})
+                photos.model.modelReset.connect(lambda: resets.append(True))
+                self.wait_for(lambda: set(photos.model.texture_urls) == {42, 44}
+                              and not photos._thumbnails.busy())
+                self.assertEqual([], resets)
+                self.assertEqual({44}, photos.model.selected)
+                self.assertEqual({43}, photos._attempted)
+                self.assertEqual(renewed, photos.model.rows[2].source)
+                self.assertEqual(1, session.media_page.call_count)
+                self.assertEqual((gallery, 41), session.media_page.call_args.args[:2])
+                self.assertEqual([(visible, gone, missing), (renewed,)], [
+                    call.args[1] for call in session.media_thumbnails.call_args_list
+                ])
+            finally:
+                window.exit_window()
 
     def test_wide_21_9_viewport_fills_all_visible_cards(self) -> None:
         """Exercise large linked viewport geometry and exact active arrow roles.

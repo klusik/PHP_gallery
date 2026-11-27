@@ -404,7 +404,7 @@ def verify_installed_switches(
     executable: Path, profile_root: Path, environment: dict[str, str], version: str,
     evidence: Path | None = None,
 ) -> None:
-    """Exercise both Settings switches with inactive linked and flight history.
+    """Start Qt by default and switch both ways with retained profile history.
 
     Args:
         executable (Path): The single installed application executable.
@@ -413,8 +413,9 @@ def verify_installed_switches(
         version (str): Current version used to suppress unrelated update traffic.
         evidence (Path | None): Hosted artifact directory for an owned failure window.
     Returns:
-        None: Tk to Qt, Qt to Tk and shutdown preserve an old linked outcome,
-            a closed flight's retained queue and its original photograph.
+        None: The unconfigured profile starts Qt. The Settings round trip and
+            shutdown preserve an old linked outcome and the closed flight's
+            retained queue and original photograph.
     Raises:
         RuntimeError: The owned Settings journey or exact profile proof failed.
     """
@@ -476,8 +477,10 @@ def verify_installed_switches(
     )
     pid: int | None = None
     try:
-        pid = wait_installed_backend(log, 'tkinter', None)
-        for backend in ('pyside6', 'tkinter'):
+        pid = wait_installed_backend(log, 'pyside6', None)
+        if (profile / GUI_BACKEND_FILE).exists():
+            raise RuntimeError('Default Qt startup unexpectedly wrote a backend preference.')
+        for backend in ('tkinter', 'pyside6'):
             started = time.monotonic()
             choose_installed_backend(pid, profile, backend, log)
             pid = wait_installed_backend(log, backend, pid)
@@ -495,7 +498,7 @@ def verify_installed_switches(
                 print('Both installed backends retained exact linked and closed flight history.', flush=True)
                 return
             time.sleep(GUI_STARTUP_POLL_SECONDS)
-        raise RuntimeError('The final installed Tk process did not finish shutdown.')
+        raise RuntimeError('The final installed Qt process did not finish shutdown.')
     except (RuntimeError, OSError):
         window = installed_window(pid) if pid is not None else None
         if evidence is not None and window is not None and ImageGrab is not None:
@@ -579,7 +582,9 @@ def observe_installed_tk(
         profile (Path): Fresh hosted profile for the exact launch.
         environment (dict[str, str]): Isolated fixture subprocess environment.
         version (str): Exact package version for the fixture's update cache.
-        require_qt_fallback (bool): Request Qt and require its failed start before Tk.
+        require_qt_fallback (bool): Use the unconfigured Qt default and require its
+            failed start before Legacy Tk. Other common installs select Legacy Tk
+            explicitly, while the published onefile build uses its original CLI.
         require_clean_imports (bool): Require the stable startup import record
             from the new common packaging.
     Returns:
@@ -597,8 +602,8 @@ def observe_installed_tk(
     }), encoding='utf-8')
     started = time.monotonic()
     command = [str(executable), '--config', str(config)]
-    if require_qt_fallback:
-        command.extend(('--gui-backend', 'pyside6'))
+    if not require_qt_fallback and (executable.parent / '_internal').is_dir():
+        command.extend(('--gui-backend', 'tkinter'))
     child = subprocess.Popen(
         command,
         env={**environment, 'APPDATA': str(profile), 'LOCALAPPDATA': str(profile / 'local')},

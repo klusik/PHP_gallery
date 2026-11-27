@@ -281,6 +281,7 @@ class InstanceCoordinationTests(unittest.TestCase):
             mock.patch.object(MAIN, "WindowsInstance") as factory,
             mock.patch.object(MAIN, "setup_logging"),
             mock.patch.object(MAIN, "ConfigStore") as store,
+            mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
             mock.patch.object(MAIN, "synchronize_startup") as synchronize,
             mock.patch.object(MAIN, "WatcherApp") as app,
         ):
@@ -324,6 +325,7 @@ class InstanceCoordinationTests(unittest.TestCase):
             mock.patch.object(MAIN, "WindowsInstance") as factory,
             mock.patch.object(MAIN, "setup_logging"),
             mock.patch.object(MAIN, "ConfigStore") as store,
+            mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
             mock.patch.object(MAIN, "WatcherApp") as app,
         ):
             factory.return_value.acquire.return_value = True
@@ -349,6 +351,7 @@ class InstanceCoordinationTests(unittest.TestCase):
                 mock.patch.object(MAIN, "WindowsInstance") as factory,
                 mock.patch.object(MAIN, "setup_logging"),
                 mock.patch.object(MAIN, "ConfigStore") as store,
+                mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
                 mock.patch.object(MAIN, "WatcherApp") as app,
                 mock.patch.object(MAIN.subprocess, "Popen") as launch,
                 mock.patch.object(MAIN.sys, "frozen", frozen, create=True),

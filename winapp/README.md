@@ -145,13 +145,21 @@ refresh or reconcile the queue.
 ## Interface and local feature settings
 
 **Settings > Interface > GUI backend** selects the desktop frontend for the
-next launch. Tkinter / ttk is the factory default. The standard Windows setup
-and complete source environment also provide **PySide6 / Qt 6 (highly experimental)**.
-The setting is independent of the
+next launch. WinApp 2.0.0 starts **Qt / PySide6** when the profile has no saved
+choice. The standard Windows setup includes both Qt and **Legacy Tk**. Saved
+choices are retained and the startup supervisor falls back to Legacy Tk if
+Qt cannot start. The setting is independent of the
 upload configuration and the Tk Canvas choice. Both frontends show the active
 backend, offer restart or a later retry, and can cancel a pending selection.
 The icon rail, compact connection header and latest Activity strip use the
 same shell structure in both frontends. Flight is part of Watcher in both.
+
+The Qt Photos inspector opens with a short slide and a small overshoot. It
+reserves its final width while the card moves, honors reduced motion where
+available, and opens immediately while loading one authorized thumbnail.
+The larger preview keeps its aspect ratio. The details below it group selectable
+fields into compact sections with one value column. Select the arrow on a long
+title or filename to see and copy the full wrapped value.
 
 The current Qt source checkpoint supports viewing local and linked Photos,
 including the saved gallery tree and selection, Lightbox with manual fullscreen
@@ -1885,6 +1893,9 @@ old directory; an ambiguous commit or failed post-commit sidecar stays unconfirm
 and is reconciled through an authorized read before any further conditional
 write. The tree refreshes after confirmation. Repeated A/B/A/B title edits are
 serialized by the context worker without blocking the native event loop.
+Qt accepts a title edit while a healthy linked Watcher is recording. The same
+gallery ID continues to own the queue and flight. Rename and upload requests
+share the linked transport and the server's gallery writer lease.
 
 Capture progress offers **Continue** and **Interrupt** as applicable. The app
 may reverify the original saved connection after a Finish error. If access is
@@ -2965,8 +2976,9 @@ If Pillow is unavailable:
 - manual imports still work with server-created thumbnails;
 - local preview/thumbnail capability is reported accurately.
 
-The macOS source build defaults to Tk. The Windows tray uses pystray when
-available.
+The complete source environment defaults to Qt on supported desktop hosts.
+On a source installation with only the core dependencies, use Legacy Tk with
+`--gui-backend tkinter`. The Windows tray uses pystray when available.
 
 ## UI rendering
 
@@ -3018,7 +3030,7 @@ resolved at application startup before any photo viewer is created; the
 Canvas item pool for the current admitted viewport; catalogue metadata does
 not create one Tk widget or Tcl variable per photo. The existing viewer still
 owns media authorization, caches, workers, cancellation and image publication.
-The experimental backend requires hosted functional and paired performance
+The experimental Tk Canvas renderer requires hosted functional and paired performance
 qualification. Hover help uses one shared tooltip anchored to the current photo.
 Physical display smoothness, installed acceptance and screen-reader parity are
 unverified.

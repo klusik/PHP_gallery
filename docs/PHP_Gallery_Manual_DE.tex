@@ -1974,11 +1974,10 @@ verfügbar. Die~Sprache der~Website und~die
 PDF-Sprachfassungen der~Flugberichte lassen sich getrennt einstellen.
 
 Unter \ui{Einstellungen} und~\ui{Oberfläche} wählen Sie das~GUI-Backend
-für den~nächsten Start. Tkinter/ttk ist der~Standard. PySide6/Qt~6 ist stark
-experimentell. Die vollständigen Quellabhängigkeiten installieren die Qt-Pakete
-zusammen mit dem~gemeinsamen Kern.
-Das Standard-Setup für Windows enthält beide Oberflächen und~behält
-Tkinter als Standard bei. Der normale Updater übernimmt die vorhandene Installation.
+für den~nächsten Start. WinApp 2.0.0 verwendet standardmäßig \ui{Qt / PySide6}.
+Die vollständigen Quellabhängigkeiten installieren Qt und~den gemeinsamen Kern.
+Das Standard-Setup für Windows enthält Qt und~\ui{Legacy Tk}.
+Der normale Updater übernimmt vorhandene Installationen und~gespeicherte Auswahlen.
 In~älteren Versionen ausdrücklich geschlossene Flüge bleiben im~lokalen Verlauf.
 Ihre Fotowarteschlangen bleiben beim Oberflächenwechsel gespeichert und~inaktiv.
 Beide Oberflächen verwenden die linke Symbolleiste und~die kompakte Verbindungsleiste.
@@ -3135,15 +3134,19 @@ Bedienhilfe, mit \texttt{Ctrl+Shift+D} die Supportdiagnose sowie About.
 Die Navigationsregister bleiben verfügbar. Solange ein Panel die Eingabe
 besitzt, sind Menübefehle und~Kurzbefehle gesperrt.
 
-Unter \ui{Einstellungen > Oberfläche > GUI-Backend} ist Tkinter / ttk die
-Vorgabe. Das Standard-Setup für Windows enthält
-\ui{PySide6 / Qt 6 (stark experimentell)} bereits. Für den Quellstart
-stehen die optionalen Qt-Abhängigkeiten zur Verfügung.
+Unter \ui{Einstellungen > Oberfläche > GUI-Backend} ist \ui{Qt / PySide6}
+die~Vorgabe ohne gespeicherte Auswahl. \ui{Legacy Tk} bleibt verfügbar.
+Das Standard-Setup für Windows enthält Qt. Für den Quellstart sind die
+Qt-Abhängigkeiten in~den vollständigen Anforderungen enthalten.
 Übernehmen Sie die Auswahl mit \ui{WinApp neu starten}. Laufende Arbeit muss
 abgeschlossen sein oder eine überprüfte Fortsetzung besitzen. Beide
 Oberflächen verwenden dasselbe Profil. Bei einem Startfehler von Qt öffnet
-sich Tkinter. Sie können Tkinter auch für spätere Starts wählen. Unter macOS
+sich Legacy Tk. Sie können Legacy Tk auch für spätere Starts wählen. Unter macOS
 verwendet die Qt-Lightbox bei geeignetem Bild und Display EDR, sonst SDR.
+
+Die Qt-Fotoinformationen gleiten kurz ins Bild und~zeigen eine größere Vorschau
+über den Details. Kompakte Gruppen teilen sich eine Wertespalte. Der Pfeil bei
+einem langen Namen zeigt den vollständigen Text zum Lesen und Kopieren.
 
 Einstellungen, Hilfe, Verbindungsabfragen und~Hinweise erscheinen im
 Hauptfenster. Informative Hinweise nutzen eine nicht blockierende, schließbare
@@ -7906,7 +7909,10 @@ kopieren. Reine Fotoauswahlen können außerdem auf eine sichtbare Untergalerie
 gezogen, über die durchsuchbare Zielauswahl verschoben oder kopiert, über den
 nativen Gerätefreigabedialog geteilt, sofern unterstützt, oder heruntergeladen
 werden. Natives Teilen fällt auf die ZIP-Datei ausgewählter Fotos zurück, wenn
-der Browser vorbereitete Dateien nicht teilen kann. Smart Galleries sind von
+der Browser vorbereitete Dateien nicht teilen kann. Administratoren können eine
+reine Galerieauswahl mit \ui{Verschieben} unter eine andere Galerie verschieben.
+IDs, gespeicherte Sichtbarkeit und alle Untergalerien bleiben erhalten. Geerbter
+Zugriff richtet sich nach der neuen übergeordneten Galerie. Smart Galleries sind von
 physischen Teilbaumaktionen ausgeschlossen. Die Auswahl selbst ist nur
 Browserzustand und gewährt keine Berechtigung. Jede Änderungs-/ZIP-Anfrage prüft
 erneut normales angemeldetes Konto, CSRF-Token, Quellgalerie, ausgewählte
@@ -7919,12 +7925,14 @@ Kopier-, physische Galerieerstellungs- und Auswahlexportabläufe anbieten.
 
 Die kompakte obere Leiste zeigt stets die Anzahl ausgewählter Elemente.
 Aufgeklappt bietet sie Gesamtauswahl, Aufheben der Auswahl, Teilen, Löschen
-und die Zielgalerie zum Verschieben oder Kopieren von Fotos. Öffnen Sie
+und die Zielgalerie zum Verschieben von Fotos oder Galerien und zum Kopieren
+von Fotos. Öffnen Sie
 \ui{Neue Galerie aus Auswahl} erst beim Erstellen einer Galerie; als
 übergeordnete Galerie ist die aktuelle Galerie voreingestellt. Das schlichte
 \ui{?} öffnet Hinweise zu Auswahl, Ziehen, Kopieren und Verschieben;
-ein Klick außerhalb oder Escape schließt sie. Auswahlhinweise und der Link
-zum Galerieverzeichnis erscheinen bei Fokus in der Zielauswahl. Fortschritt,
+ein Klick außerhalb oder Escape schließt sie. Suchergebnisse öffnen sich unter
+dem Zielfeld. Bei leeren oder nicht verfügbaren Ergebnissen erscheint der Link
+zum Galerieverzeichnis. Fortschritt,
 Erfolg und Fehler bleiben sichtbar; die Bereitschaftsmeldung entfällt.
 
 Ohne Auswahl ist die Verwaltung oberhalb der Seite verborgen. Bewegen Sie

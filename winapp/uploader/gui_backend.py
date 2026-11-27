@@ -29,8 +29,9 @@ GuiFallback = Literal[
     "update_continuation",
 ]
 GuiStartupState = Literal["ready", "activated", "refused"]
-GUI_BACKENDS: tuple[GuiBackend, ...] = ("tkinter", "pyside6")
-DEFAULT_GUI_BACKEND: GuiBackend = "tkinter"
+DEFAULT_GUI_BACKEND: GuiBackend = "pyside6"
+LEGACY_GUI_BACKEND: GuiBackend = "tkinter"
+GUI_BACKENDS: tuple[GuiBackend, ...] = (LEGACY_GUI_BACKEND, DEFAULT_GUI_BACKEND)
 GUI_BACKEND_FILE = "ui-backend.json"
 GUI_CHILD_OPTION = "--gui-child"
 GUI_STARTUP_DIRECTORY = "_PHP_GALLERY_GUI_STARTUP_DIRECTORY"
@@ -97,18 +98,26 @@ def _read_gui_document(path: Path) -> dict[str, JsonValue]:
 
 
 def load_gui_backend(profile: Path) -> GuiBackend:
-    """Resolve the saved backend with a permanent stable default.
+    """Resolve the saved backend or choose Qt for an unconfigured profile.
 
     Args:
         profile (Path): Per-user profile containing independent interface state.
     Returns:
-        GuiBackend: The validated selection, or Tkinter for unusable evidence.
+        GuiBackend: The validated selection, Qt if the preference is absent,
+            or Legacy Tk if an existing preference cannot be trusted.
     """
-    fields = _read_gui_document(profile / GUI_BACKEND_FILE)
+    path = profile / GUI_BACKEND_FILE
+    fields = _read_gui_document(path)
     backend = fields.get("backend")
     if set(fields) == {"backend"} and isinstance(backend, str) and backend in GUI_BACKENDS:
         return cast(GuiBackend, backend)
-    return DEFAULT_GUI_BACKEND
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return DEFAULT_GUI_BACKEND
+    except OSError:
+        pass
+    return LEGACY_GUI_BACKEND
 
 
 def save_gui_backend(profile: Path, backend: GuiBackend) -> None:

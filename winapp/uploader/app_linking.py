@@ -7912,7 +7912,7 @@ class LinkingSession:
             """
             check_active()
             if not self.thumbnail_publication_current(result, cancel):
-                raise LinkingError('Gallery thumbnail proof is unavailable.')
+                raise LinkingThumbnailProofChanged('Gallery thumbnail proof is unavailable.')
             began = time.perf_counter()
             try:
                 publish(result, item_timings, check_active)
@@ -7995,7 +7995,7 @@ class LinkingSession:
             check_active()
             wait_cooldown()
             if witness is not None and not self._thumbnail_batch_witness_current(witness, cancel):
-                raise LinkingError('Gallery thumbnail proof is unavailable.')
+                raise LinkingThumbnailProofChanged('Gallery thumbnail proof is unavailable.')
             generation_out: list[int] = []
             try:
                 body, mime, etag, _cacheable = self._media_read(
@@ -8033,7 +8033,7 @@ class LinkingSession:
                             if witness.private_identity is not None else None)
                 if expected is not None and etag != expected:
                     self._invalidate_thumbnail_batch_witness(witness)
-                    raise LinkingError('Gallery thumbnail descriptor requires refresh.')
+                    raise LinkingThumbnailProofChanged('Gallery thumbnail descriptor requires refresh.')
             result = LegacyThumbnailPublication(
                 self, self._issuer, gallery_id, photo, 'ok', body, mime, etag,
                 witness, generation_out[0],

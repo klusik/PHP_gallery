@@ -96,13 +96,17 @@ class BackendPreferenceTests(unittest.TestCase):
         """Round-trip both choices and reject duplicate or malformed values.
 
         Returns:
-            None: Only a complete supported backend choice can supersede Tk.
+            None: Qt starts by default. Valid choices persist and malformed
+                preferences keep the Legacy Tk recovery path.
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
             preference = profile / gui_backend.GUI_BACKEND_FILE
             config = profile / "config.json"
             config.write_bytes(b'{"sentinel": true}')
+            self.assertEqual("pyside6", gui_backend.load_gui_backend(profile))
+            self.assertFalse(preference.exists())
+            gui_backend.save_gui_backend(profile, "tkinter")
             self.assertEqual("tkinter", gui_backend.load_gui_backend(profile))
             gui_backend.save_gui_backend(profile, "pyside6")
             self.assertEqual("pyside6", gui_backend.load_gui_backend(profile))
@@ -182,11 +186,10 @@ class BackendPreferenceTests(unittest.TestCase):
         """Retain an updater continuation when supervised Qt cannot start.
 
         Returns:
-            None: The one Tk recovery launch receives the original exact nonce.
+            None: A fresh profile starts Qt and falls back once with the same nonce.
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
-            gui_backend.save_gui_backend(profile, "pyside6")
             nonce = "b" * 32
             config = profile / "config.json"
             with (
@@ -218,6 +221,7 @@ class BackendPreferenceTests(unittest.TestCase):
             self.assertEqual("startup_failed", fallback_arguments[
                 fallback_arguments.index("--gui-fallback") + 1
             ])
+            self.assertFalse((profile / gui_backend.GUI_BACKEND_FILE).exists())
             instance.return_value.close.assert_called_once_with()
 
     def test_frozen_qt_reuses_stable_launcher_and_requires_current_runtime(self) -> None:

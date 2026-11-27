@@ -1,9 +1,9 @@
 # WinApp GUI backends
 
-Issue [#445](https://github.com/klusik/PHP_gallery/issues/445) starts on WinApp
-1.7.1, commit `b63d6d5e5bee014ab3750080833f49dcc27e9a34`. Tkinter/ttk is the
-default. Issue [#442](https://github.com/klusik/PHP_gallery/issues/442) supplies
-the optimized Tk shell and thumbnail baseline. The widget and retained Canvas
+The baseline for issue [#445](https://github.com/klusik/PHP_gallery/issues/445)
+was WinApp 1.7.1, commit `b63d6d5e5bee014ab3750080833f49dcc27e9a34`, with
+Tkinter/ttk as the default. Issue [#442](https://github.com/klusik/PHP_gallery/issues/442)
+supplies the optimized Tk shell and thumbnail baseline. The widget and retained Canvas
 renderers are both relevant controls. The #399 hosted audit replays its
 100/500/2,000-photo cold and warm Canvas workloads on the immutable source.
 
@@ -54,6 +54,12 @@ One shared animation rotates the refresh glyph on active visible rows.
 Moving off Photos or cancelling the request retires the animation.
 The viewport and catalogue reset withdraw model URLs before discarding their
 provider slots. Reusable delegates release their image source while pooled.
+When a visible group loses its thumbnail proof, Qt renews the exact authorized
+pages needed by a bounded group and retries once. The catalogue restores
+current descriptors in place. A removed photo or changed proof retires its
+old raster, and confirmed live frames keep their slots. A group that finishes
+after scrolling only records misses from the current viewport, so returning
+to its departed rows can fetch them again.
 The gallery heading leaves spare width beside the title. Ratio controls sit
 next to the other gallery actions and move below the title at the same narrow
 widths as Tk, preserving readable labels in that layout.
@@ -143,12 +149,17 @@ Gallery-tree markers preserve their shared cache colors on open and selected
 Qt rows. Their localized tooltips and accessible descriptions explain the cache
 state, pin and Watcher overlays, including a target inside a collapsed branch.
 Linked-photo metadata now opens in the right pane. Both frontends use the
-shared saved pane width and field visibility rules. Qt limits the inspector
-to the available width beside the gallery and retains the dragged preference
-when space is temporarily restricted. Long titles shorten in the Qt heading.
-The full title is available in its tooltip, accessible name and metadata.
-Closing the pane cancels its queued lookup and returns focus to the same
-selected photo.
+shared saved pane width and field visibility rules. Qt reserves the final
+splitter width at reveal and moves the card inside it for 180 ms. A small
+overshoot settles once. Reduced-motion preferences skip the motion. This
+keeps viewport layout and thumbnail admission independent of animation frames.
+The right inspector retains its dragged width when space is temporarily
+restricted. A larger thumbnail above the metadata uses the existing authorized
+media path in a separate bounded read lane. The heading shortens long titles.
+The compact, selectable detail rows align values in one column. A long title
+or filename takes one line until its arrow expands that field. The expanded
+name wraps and can be copied. Closing the pane cancels both reads and returns
+focus to the same selected photo.
 Reopening the same recent metadata keeps the reference's 32-entry in-memory
 cache and one-minute age limit. Qt checks the exact session and Admin scope
 before reuse and drops the gallery's entries on refresh.
@@ -414,7 +425,9 @@ recursive requirements and constraints, Qt Quick scene, Qt licenses and
 common onedir build files. CMS activation draws from its existing updater
 inventory. See the [package policy](PRODUCTION_FILES.md).
 
-The profile saves the independent `ui-backend.json` choice atomically. An
+The profile saves the independent `ui-backend.json` choice atomically.
+From WinApp 2.0.0, an unconfigured profile opens Qt. The Settings choices
+are Qt / PySide6 and Legacy Tk. An
 ordinary alternate-backend launch starts a bounded source child. The child
 acquires the existing desktop instance owner before logging or profile
 admission. The supervisor sees only a nonce and fixed disposition. It waits
@@ -611,9 +624,12 @@ SimConnect bytes, Qt platform, image and Quick libraries, both Settings
 transitions, normal shutdown, fault fallback and standard setup repair.
 It exercises the public 1.7.1 installer and two monotonic onedir builds for
 installed updates while preserving exact artifact, profile and ticket evidence.
-The active Watcher switch journeys enter Settings after consuming an updater
-ticket. They require a normal exit from the original process and both ordinary
-restart markers consumed by the new frontend for the same flight. The fixture
+The hosted observer retries incomplete process snapshots within the existing
+deadline and only closes windows with a verified helper image and ticket.
+The active Watcher switch journeys seed and verify the starting backend choice,
+then enter Settings after consuming an updater ticket. They require a normal
+exit from the original process and both ordinary restart markers consumed by
+the new frontend for the same flight. The fixture
 uses an empty authorized queue and retains the original update measurement.
 The comparison audit installs the published 1.7.1 setup, the authenticated
 historical dual build and the common candidate on the same hosted Windows VM.

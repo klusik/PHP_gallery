@@ -1546,6 +1546,26 @@ class QtCapture(QWidget):
         """
         return self._busy or self.commands.snapshot().alive
 
+    def blocks_connection_action(self, *, allow_linked_rename: bool) -> bool:
+        """Protect capture authority while an action uses its linked connection.
+
+        Args:
+            allow_linked_rename (bool): Whether the action is a title edit that
+                keeps the capture target and uses the serialized linked transport.
+        Returns:
+            bool: True while capture or cleanup must block this gallery action.
+        """
+        if self._busy:
+            return True
+        state = self.commands.snapshot()
+        # A healthy linked Watcher addresses uploads by gallery ID. Its requests
+        # share the linked transport slot, and both server writes use the same lease.
+        linked_rename = (
+            allow_linked_rename and state.can_checkpoint
+            and state.capture_target is not None
+        )
+        return state.context_cleanup_failed or (state.alive and not linked_rename)
+
     def import_capture_actions(
         self,
     ) -> tuple[str, Callable[[], None] | None, str, Callable[[], None] | None]:

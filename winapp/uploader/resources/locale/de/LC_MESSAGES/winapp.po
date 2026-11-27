@@ -2322,14 +2322,14 @@ msgstr "Das Foto konnte nicht geladen werden."
 msgid "Photos loading progress"
 msgstr "Fortschritt beim Laden von Fotos"
 
-msgid "PySide6 / Qt 6 (highly experimental)"
-msgstr "PySide6 / Qt 6 (stark experimentell)"
+msgid "Qt / PySide6"
+msgstr "Qt / PySide6"
 
-msgid "Qt dependencies could not load. WinApp opened with Tkinter. Install the optional Qt requirements for this Python and retry in Settings."
-msgstr "Die Qt-Abhängigkeiten konnten nicht geladen werden. WinApp wurde mit Tkinter geöffnet. Installieren Sie die optionalen Qt-Pakete für dieses Python und versuchen Sie es erneut in den Einstellungen."
+msgid "Qt dependencies could not load. WinApp opened with Legacy Tk. Install the optional Qt requirements for this Python and retry in Settings."
+msgstr "Die Qt-Abhängigkeiten konnten nicht geladen werden. WinApp wurde mit Legacy Tk geöffnet. Installieren Sie die optionalen Qt-Pakete für dieses Python und versuchen Sie es erneut in den Einstellungen."
 
-msgid "Qt did not become ready. WinApp opened with Tkinter. Review the WinApp log and retry or cancel the change in Settings."
-msgstr "Qt wurde nicht einsatzbereit. WinApp wurde mit Tkinter geöffnet. Prüfen Sie das WinApp-Protokoll und wiederholen oder verwerfen Sie die Änderung in den Einstellungen."
+msgid "Qt did not become ready. WinApp opened with Legacy Tk. Review the WinApp log and retry or cancel the change in Settings."
+msgstr "Qt wurde nicht einsatzbereit. WinApp wurde mit Legacy Tk geöffnet. Prüfen Sie das WinApp-Protokoll und wiederholen oder verwerfen Sie die Änderung in den Einstellungen."
 
 msgid "Qt is available in the source launcher with the optional Qt requirements."
 msgstr "Qt ist beim Start aus dem Quellcode mit den optionalen Qt-Paketen verfügbar."
@@ -2410,8 +2410,8 @@ msgstr "Update installieren"
 msgid "The GUI backend was saved. Restart WinApp now to apply it?"
 msgstr "Das GUI-Backend wurde gespeichert. WinApp jetzt neu starten, um es zu übernehmen?"
 
-msgid "Tkinter / ttk (stable, default)"
-msgstr "Tkinter / ttk (stabil, Standard)"
+msgid "Legacy Tk"
+msgstr "Legacy Tk"
 
 msgid "Update available: {version}"
 msgstr "Update verfügbar: {version}"
@@ -2419,14 +2419,14 @@ msgstr "Update verfügbar: {version}"
 msgid "WinApp is up to date."
 msgstr "WinApp ist auf dem neuesten Stand."
 
-msgid "WinApp opened with Tkinter to finish the update continuation."
-msgstr "WinApp wurde mit Tkinter geöffnet, um die Wiederaufnahme nach dem Update abzuschließen."
+msgid "WinApp opened with Legacy Tk to finish the update continuation."
+msgstr "WinApp wurde mit Legacy Tk geöffnet, um die Wiederaufnahme nach dem Update abzuschließen."
 
-msgid "WinApp opened with Tkinter to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
-msgstr "WinApp wurde mit Tkinter geöffnet, damit ausstehende Arbeit verfügbar bleibt. Prüfen Sie Watcher, Aktivität und Flüge vor dem Wechsel zu Qt."
+msgid "WinApp opened with Legacy Tk to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
+msgstr "WinApp wurde mit Legacy Tk geöffnet, damit ausstehende Arbeit verfügbar bleibt. Prüfen Sie Watcher, Aktivität und Flüge vor dem Wechsel zu Qt."
 
-msgid "Finish the current work in Tkinter before switching to Qt."
-msgstr "Schließen Sie die laufende Arbeit in Tkinter ab, bevor Sie zu Qt wechseln."
+msgid "Finish the current work in Legacy Tk before switching to Qt."
+msgstr "Schließen Sie die laufende Arbeit in Legacy Tk ab, bevor Sie zu Qt wechseln."
 
 msgid "Use a GUI backend for this launch only."
 msgstr "Ein GUI-Backend nur für diesen Start verwenden."

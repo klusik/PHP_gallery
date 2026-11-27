@@ -97,15 +97,17 @@ nor an explicit pystray backend, since the library's Xorg import opens a display
 This is a supported deployment mode for the WinApp launcher. Native tray
 integration remains available on desktop launches with a suitable tray backend.
 
-Tkinter remains the factory default and supported rollback on every launcher.
-The independent `ui-backend.json` preference has two validated values and does
-not change credentials, queues or upload configuration. Missing, malformed or
-unreadable preferences select Tk. The one-launch CLI option leaves the saved
-selection alone. The desktop launcher owns the bounded, nonce-bound Qt startup
-and requires child exit before a fresh fallback. Qt absence, incompatible
-native drivers and failed startup must continue to permit stable Tk and CLI
-operation. Both backends can resume an admitted Watcher from the exact
-installed update ticket. Tk remains the compatibility owner for earlier
+WinApp 2.0.0 defaults to Qt when the independent `ui-backend.json` preference
+is absent. Its two existing identifiers still preserve saved choices.
+Malformed or unreadable preferences select Legacy Tk. Backend selection is
+independent of credentials, queues and upload configuration. The one-launch
+CLI option leaves the saved selection alone. The desktop launcher owns the
+bounded, nonce-bound Qt startup. It verifies the shared configuration before
+handoff and requires child exit before a fresh fallback. Unreadable or damaged
+configuration is reported before launching a GUI backend. Qt absence,
+incompatible drivers and failed startup retain Legacy Tk and CLI operation.
+Both backends can resume an admitted Watcher from
+the exact installed update ticket. Legacy Tk is the compatibility owner for earlier
 continuations and pending work whose Qt recovery owner cannot be verified.
 Exact Watcher review keeps the saved target, queue identity and operator
 confirmation. Removal requires verified operator parity and an explicit

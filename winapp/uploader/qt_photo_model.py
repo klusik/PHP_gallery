@@ -185,6 +185,26 @@ class PhotoListModel(QAbstractListModel):
         if was_loading != bool(self.loading_ids):
             self.loadingChanged.emit()
 
+    def renew_rows(self, replacements: dict[int, PhotoRow]) -> None:
+        """Replace authorized descriptors without reordering or resetting the grid.
+
+        Args:
+            replacements (dict[int, PhotoRow]): Current catalogue IDs and their refreshed rows.
+        Returns:
+            None: Keeps scene slots and selection and notifies changed captions.
+        """
+        if not replacements:
+            return
+        rows = list(self.rows)
+        renamed: list[int] = []
+        for identity, row in replacements.items():
+            index = self.index_by_id[identity]
+            if rows[index].title != row.title:
+                renamed.append(index)
+            rows[index] = row
+        self.rows = tuple(rows)
+        self._notify_rows(renamed, _TITLE_ROLE, int(Qt.ItemDataRole.DisplayRole))
+
     def texture(self, identity: int, url: str) -> None:
         """Update an individual live scene slot or remove its source.
 
@@ -234,25 +254,26 @@ class PhotoListModel(QAbstractListModel):
         if was_loading != bool(wanted):
             self.loadingChanged.emit()
 
-    def _notify_rows(self, changed_rows: list[int], role: int) -> None:
-        """Notify the scene of exact contiguous model ranges for one role.
+    def _notify_rows(self, changed_rows: list[int], *roles: int) -> None:
+        """Notify the scene of exact contiguous model ranges for changed roles.
 
         Args:
             changed_rows (list[int]): Current indices whose value changed.
-            role (int): Qt model role to invalidate on those indices.
+            *roles (int): Each Qt model role to invalidate on those indices.
         Returns:
             None: Leaves other roles and noncontiguous rows intact.
         """
         if not changed_rows:
             return
+        changed_roles = list(roles)
         changed_rows.sort()
         first = last = changed_rows[0]
         for row in changed_rows[1:]:
             if row != last + 1:
-                self.dataChanged.emit(self.index(first, 0), self.index(last, 0), [role])
+                self.dataChanged.emit(self.index(first, 0), self.index(last, 0), changed_roles)
                 first = row
             last = row
-        self.dataChanged.emit(self.index(first, 0), self.index(last, 0), [role])
+        self.dataChanged.emit(self.index(first, 0), self.index(last, 0), changed_roles)
 
     def select(self, identities: set[int]) -> None:
         """Apply stable selection and notify only changed QModelIndex roles.

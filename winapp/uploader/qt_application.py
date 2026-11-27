@@ -309,6 +309,7 @@ class QtWindow(QMainWindow):
         self.photos = QtPhotos(
             profile, gallery_address, connections, self.transfer_busy,
             capture.start_contextual if capture is not None else None,
+            gallery_rename_busy=lambda: self.transfer_busy(allow_linked_rename=True),
         )
         self.photos.splitter_moved.connect(self._schedule_layout_save)
         self.operator = QtOperatorViews(
@@ -1471,15 +1472,18 @@ class QtWindow(QMainWindow):
             return False
         return not self.updater.installed or not capture.can_checkpoint()
 
-    def transfer_busy(self) -> bool:
+    def transfer_busy(self, *, allow_linked_rename: bool = False) -> bool:
         """Keep gallery access alive while another view owns a transfer.
 
+        Args:
+            allow_linked_rename (bool): Allow a title edit during steady linked
+                capture through the existing shared upload and writer fences.
         Returns:
-            bool: True if the Photos connection must stay available.
+            bool: True if an active operation must block this Photos action.
         """
         return ((self.import_flow is not None and self.import_flow.busy())
-                or (self.capture is not None and (
-                    self.capture.busy() or self.capture.commands.snapshot().context_cleanup_failed
+                or (self.capture is not None and self.capture.blocks_connection_action(
+                    allow_linked_rename=allow_linked_rename,
                 ))
                 or self.flight_reports.busy() or self.ai.has_work() or self.updater.gate.active)
 

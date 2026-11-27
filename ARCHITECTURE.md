@@ -113,10 +113,11 @@ their counters do not replace central SQL observations or establish worker exit.
 ## WinApp desktop composition
 
 WinApp reads the per-profile GUI choice before opening a desktop event loop.
-Tkinter is the default. The common PyInstaller onedir package includes both
-Tk and Qt, with one registered executable, interpreter, updater and profile.
+WinApp 2.0.0 defaults to Qt for profiles without a saved choice. The common
+PyInstaller onedir package includes both Qt and Legacy Tk, with one registered
+executable, interpreter, updater and profile.
 The startup supervisor starts the same executable with a backend-specific
-handshake and waits for a failed Qt startup to exit before starting Tk.
+handshake and waits for a failed Qt startup to exit before starting Legacy Tk.
 
 Tk and Qt present the same profile, Watcher queue, Flight recorder, upload mode,
 credential vault, gallery transport and update owners. Approved active capture

@@ -1221,6 +1221,107 @@ try {
         // that changes later public-preview assertions, even on failure.
         galleryEditRemovePublicationFixture($pdo, $publicationOwned);
     }
+
+    $stage = 'Picture manager protected subtree move';
+    $fixtureParent = row($pdo, 'SELECT folder_path FROM galleries WHERE id = ?', [$id]);
+    $moveFolder = $fixtureParent['folder_path'] . '/manager-move';
+    $expectedPath = $moveFolder . '/destination/selected';
+    $ownedIds = [];
+    try {
+        foreach ([
+            ['', $id, 'Manager move fixture', 'private'],
+            ['/destination', 'root', 'Destination', 'public'],
+            ['/selected', 'root', 'Selected unpublished gallery', 'unpublished'],
+            ['/selected/child', 'selected', 'Nested gallery', 'public'],
+        ] as $key => [$suffix, $parentId, $title, $visibility]) {
+            $path = $moveFolder . $suffix;
+            check(mkdir($directory . '/galleries/' . $path), 'Could not prepare owned gallery directory.');
+            $parent = match ($parentId) {
+                'root' => $ownedIds[0],
+                'selected' => $ownedIds[2],
+                default => $parentId,
+            };
+            // Slugs are globally unique even when two fixtures have a child folder.
+            $slug = 'manager-move-' . $id . '-' . basename($path);
+            try {
+                $stmt->execute([$parent, $path, hash('sha256', $path), $slug,
+                    $title, '', $visibility]);
+            } catch (PDOException $exception) {
+                check(false, 'Could not seed the move fixture at row ' . $key
+                    . ' (SQLSTATE ' . (string) $exception->getCode() . ').');
+            }
+            $ownedIds[$key] = (int) $pdo->lastInsertId();
+        }
+        [$sourceId, $destinationId, $selectedId, $descendantId] = $ownedIds;
+        $original = $directory . '/galleries/seed/sample-1.jpg';
+        check(copy($original, $directory . '/galleries/' . $moveFolder . '/selected/child/photo.jpg'),
+            'Could not prepare the owned original in the moved subtree.');
+        $moveRoute = '/index.php?page=picture_manager_move';
+        $moveFields = [
+            'csrf_token' => $adminA->token('/index.php?page=admin_new_gallery&panel=1'),
+            'source_gallery_id' => $sourceId,
+            'destination_gallery_id' => $destinationId,
+            'gallery_ids[]' => $selectedId,
+        ];
+        $visitor = new Http($origin);
+        $anonymousMove = $visitor->request($moveRoute, $moveFields, true);
+        check($anonymousMove['status'] === 403,
+            'Anonymous gallery move returned HTTP ' . $anonymousMove['status'] . '.');
+        check($adminA->request($moveRoute, array_replace($moveFields, [
+            'csrf_token' => 'invalid',
+        ]), true)['status'] === 400, 'Gallery move accepted an invalid CSRF token.');
+        foreach ([
+            ['destination_gallery_id' => $selectedId],
+            ['destination_gallery_id' => $descendantId],
+            ['gallery_ids[]' => $descendantId],
+            ['image_ids[]' => 1],
+        ] as $invalid) {
+            $refused = $adminA->request($moveRoute, array_replace($moveFields, $invalid), true);
+            check($refused['status'] === 422 && ($refused['json']['ok'] ?? null) === false,
+                'Invalid protected subtree move did not return its bounded refusal.');
+        }
+        // A move cannot relocate a descendant with pending visibility recovery.
+        $pendingVisibility = $directory . '/galleries/'
+            . $moveFolder . '/selected/child/.gallery-visibility-pending.json';
+        check(file_put_contents($pendingVisibility, '{}') !== false,
+            'Could not prepare the owned visibility recovery marker.');
+        try {
+            $refused = $adminA->request($moveRoute, $moveFields, true);
+            check($refused['status'] === 422 && ($refused['json']['ok'] ?? null) === false,
+                'Gallery move did not protect pending visibility recovery in a descendant.');
+        } finally {
+            check(unlink($pendingVisibility), 'Could not remove the owned recovery marker.');
+        }
+        check(row($pdo, 'SELECT folder_path FROM galleries WHERE id = ?', [$selectedId])['folder_path']
+            === $moveFolder . '/selected', 'A refused move changed the protected source.');
+        $moveResponse = $adminA->request($moveRoute, $moveFields, true);
+        $moved = envelope($moveResponse, 'Move protected subtree returned ' . $moveResponse['status'] . ', expected');
+        $stored = row($pdo, 'SELECT parent_id, folder_path, visibility FROM galleries WHERE id = ?', [$selectedId]);
+        $descendant = row($pdo, 'SELECT parent_id, folder_path FROM galleries WHERE id = ?', [$descendantId]);
+        check((int) $stored['parent_id'] === $destinationId && $stored['folder_path'] === $expectedPath
+            && $stored['visibility'] === 'unpublished'
+            && (int) $descendant['parent_id'] === $selectedId
+            && $descendant['folder_path'] === $expectedPath . '/child',
+            'Relocation changed a stable ID, explicit visibility or descendant ownership.');
+        check(!is_dir($directory . '/galleries/' . $moveFolder . '/selected')
+            && is_file($directory . '/galleries/' . $expectedPath . '/gallery.json')
+            && hash_file('sha256', $directory . '/galleries/' . $expectedPath . '/child/photo.jpg')
+                === hash_file('sha256', $original), 'Relocation failed to preserve the subtree bytes and sidecar.');
+        check($moved['mutation']['entity_ids'] === [$selectedId]
+            && $moved['contexts'][0]['gallery_id'] === $sourceId
+            && $moved['contexts'][0]['postcondition']['present'] === false
+            && $moved['contexts'][1]['gallery_id'] === $destinationId
+            && $moved['contexts'][1]['postcondition']['present'] === true,
+            'Completion omitted the confirmed ID or one of its public contexts.');
+        echo "PASS Picture manager protected subtree move, authorization, CSRF and invalid destinations\n";
+    } finally {
+        $deleteOwned = $pdo->prepare('DELETE FROM galleries WHERE id = ?');
+        $deleteOrder = array_reverse($ownedIds);
+        // The selected root may now reference the destination instead of the source.
+        foreach ($deleteOrder as $ownedId) {
+            $deleteOwned->execute([$ownedId]);
+        }
+    }
 } catch (Throwable $exception) {
     // Assertion messages and their call sites are test-authored; arbitrary
     // application/transport exceptions may contain private fixture details.

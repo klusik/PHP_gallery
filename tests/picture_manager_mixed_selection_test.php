@@ -16,7 +16,7 @@
  *   - Verify public physical gallery cards expose selection markup only through the physical-card renderer
  *   - Verify create-from-selection posts both photo and gallery IDs plus an explicit parent gallery
  *   - Verify physical subtree copies rebuild database state from copied folders instead of Smart Gallery rules
- *   - Verify move/copy remains photo-only when physical galleries are selected
+ *   - Verify physical-gallery moves use the subtree owner and Copy remains photo-only
  *
  * Author:
  *   Rudolf Klusal
@@ -291,16 +291,18 @@ picture_manager_mixed_assert(
     'Browser module must implement mixed-selection deletion.',
 );
 picture_manager_mixed_assert(
-    str_contains($browser, 'hasSelectedGalleries')
-        && str_contains($browser, 'move_copy_photos_only'),
-    'Move/copy controls must refuse mixed physical-gallery selections.',
+    str_contains($browser, 'canMoveGalleries && !hasSelectedImages')
+        && str_contains($browser, 'move_one_item_type')
+        && str_contains($browser, 'copy_photos_only')
+        && str_contains($controller, 'picture_manager_move_gallery_selection('),
+    'Move must admit gallery-only selections through the subtree owner and keep Copy photo-only.',
 );
 picture_manager_mixed_assert(
     str_contains($browser, 'card.draggable = !isGallery'),
     'Physical gallery cards must not become native drag sources.',
 );
 
-$cacheKey = '20261023-picture-manager-context-v1';
+$cacheKey = '20261127-gallery-move-v2';
 picture_manager_mixed_assert(
     str_contains($entrypoint, $cacheKey),
     'Main browser entrypoint must bust the Picture manager module cache.',

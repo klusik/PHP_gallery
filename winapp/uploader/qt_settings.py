@@ -153,7 +153,7 @@ class QtSettings(QScrollArea):
         self.backend.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         for candidate in GUI_BACKENDS:
             self.backend.addItem(backend_label(candidate), candidate)
-        # Reserve the actual localized label, including the PySide6 disclosure.
+        # Reserve the width of the longest localized backend name.
         self.backend.setFixedWidth(self.backend.sizeHint().width())
         self.backend.setAccessibleName(gettext("GUI backend"))
         self.backend.activated.connect(self.choose_backend)

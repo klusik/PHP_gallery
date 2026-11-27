@@ -1550,14 +1550,21 @@ class VisualParityTests(unittest.TestCase):
                         )
                     checks.assertIn("Visual fixture", tk_row["photo_info_text"])
                     checks.assertIn("Visual fixture", qt_row["photo_info_text"])
-                    size_prefix = tr('en', 'photos_workspace_field_size') + ': '
-                    size_lines = [
-                        tuple(line for line in row['photo_info_text'].splitlines()
-                              if line.startswith(size_prefix))
-                        for row in (tk_row, qt_row)
-                    ]
-                    checks.assertTrue(size_lines[0], 'The reference must expose its actual byte size.')
-                    checks.assertEqual(size_lines[0], size_lines[1], identity)
+                    size_label = tr('en', 'photos_workspace_field_size')
+                    size_prefix = size_label + ': '
+                    tk_sizes = tuple(
+                        line for line in tk_row['photo_info_text'].splitlines()
+                        if line.startswith(size_prefix)
+                    )
+                    # The native Qt document emits each table cell on its own line.
+                    qt_lines = qt_row['photo_info_text'].splitlines()
+                    qt_sizes = tuple(
+                        size_prefix + value for label, value in zip(qt_lines, qt_lines[1:])
+                        if label == size_label
+                    )
+                    checks.assertTrue(tk_sizes, 'The reference must expose its actual byte size.')
+                    checks.assertEqual(tk_sizes, qt_sizes, identity)
+                    checks.assertNotIn(size_prefix, qt_row['photo_info_summary'])
                 if identity[1] == "photos-context-menu":
                     checks.assertIn(tk_row["photo_info_action"],
                                   [action["caption"] for action in tk_row["actions"]])
@@ -6135,6 +6142,8 @@ def capture_qt_linked_variant(
         wait_qt(app, lambda: (
             photos._inspector_panel.isVisibleTo(window)
             and photos._inspector_panel.width() > 0
+            and photos._inspector_panel.card.x() == 0
+            and not photos._inspector_preview.image.isNull()
             and expected_title in photos._inspector.toPlainText()
         ))
     elif scenario == "photos-info-unavailable":
@@ -6144,6 +6153,7 @@ def capture_qt_linked_variant(
         wait_qt(app, lambda: (
             photos._inspector_panel.isVisibleTo(window)
             and photos._inspector_panel.width() > 0
+            and photos._inspector_panel.card.x() == 0
             and expected_failure in photos._inspector_summary.text()
             and expected_title in photos._inspector.toPlainText()
         ))

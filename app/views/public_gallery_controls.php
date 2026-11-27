@@ -176,7 +176,7 @@ function view_render_public_page_reorder_toolbar(array $viewModel): void
 /**
  * Render the logged-in public gallery Picture manager toolbar.
  *
- * @param array{gallery_id?:int,has_visible_drop_targets?:bool,
+ * @param array{gallery_id?:int,has_visible_drop_targets?:bool,can_move_galleries?:bool,
  *     csrf_token?:string,move_url?:string,copy_url?:string,create_url?:string,
  *     delete_url?:string,download_url?:string,destination_picker_html?:string,
  *     new_parent_picker_html?:string} $viewModel Prepared endpoints, source
@@ -199,6 +199,8 @@ function view_render_picture_manager_toolbar(array $viewModel): void
     echo
         '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="'
             . $galleryId
+            . '" data-picture-manager-can-move-galleries="'
+            . (!empty($viewModel['can_move_galleries']) ? '1' : '0')
             . '" data-csrf-token="'
             . e((string) ($viewModel['csrf_token'] ?? ''))
             . '" data-move-url="'
@@ -247,10 +249,8 @@ function view_render_picture_manager_toolbar(array $viewModel): void
     foreach ([
         t('picture_manager.help', 'Select photos or physical subgalleries with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one item.'),
         $dropHelp,
-        t('picture_manager.create_from_selection', 'Create physical gallery from selection'),
-        t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.'),
-        t('picture_manager.copy_warning', 'Creates a real file-based gallery under the selected parent. Photos and selected physical subgallery trees are copied; originals stay here.'),
         t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.'),
+        t('picture_manager.gallery_move_help', 'Move photos or galleries separately. A moved gallery takes its subgalleries and photos with it. Inherited access follows the new parent.'),
     ] as $hint) {
         echo '<p>' . e($hint) . '</p>';
     }
@@ -308,8 +308,9 @@ function view_render_picture_manager_toolbar(array $viewModel): void
                 'Destination gallery',
             ))
             . '</label>';
-    echo '<div class="picture-manager-inline-fields">';
+    echo '<div class="picture-manager-inline-fields picture-manager-destination-fields">';
     echo (string) ($viewModel['destination_picker_html'] ?? '');
+    echo '<div class="picture-manager-destination-actions">';
     echo
         '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-move title="'
             . e(t('picture_manager.move_selected', 'Move selected'))
@@ -328,9 +329,12 @@ function view_render_picture_manager_toolbar(array $viewModel): void
             . '</span></button>';
     echo '</div>';
     echo '</div>';
+    echo '</div>';
 
     echo '<details class="picture-manager-create-disclosure">';
-    echo '<summary><span aria-hidden="true">＋</span> '
+    echo '<summary title="'
+        . e(t('picture_manager.create_from_selection', 'Create physical gallery from selection'))
+        . '"><span aria-hidden="true">＋</span> '
         . e(t('picture_manager.hud_create', 'New gallery from selection'))
         . '</summary>';
     echo '<div class="picture-manager-action-card">';

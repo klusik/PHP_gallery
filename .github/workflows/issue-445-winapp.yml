@@ -10,7 +10,9 @@ name: Issue 445 WinApp GUI backends
 
 on:
   push:
-    branches: [feature/445-pyside6-winapp]
+    branches:
+      - feature/445-pyside6-winapp
+      - feature/446-winapp-qt-default-inspector
   workflow_call:
     inputs:
       candidate:

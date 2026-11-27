@@ -508,6 +508,10 @@ def _windows_command_arguments(command_line: str) -> list[str]:
             raise OSError(ctypes.get_last_error(), "Cannot release parsed helper arguments.")
 
 
+class HelperIdentityUnavailable(RuntimeError):
+    """Indicate a CIM snapshot that omitted a helper identity during teardown."""
+
+
 def _owned_helper_pids(
     root_pid: int, helper: Path, ticket: Path,
 ) -> list[int]:
@@ -521,6 +525,7 @@ def _owned_helper_pids(
         list[int]: Verified root or orphaned child and owned descendants.
     Raises:
         RuntimeError: WMI cannot prove the exact helper identity and ancestry.
+        HelperIdentityUnavailable: A candidate row lacks its image or command.
         subprocess.SubprocessError: The Windows process query failed.
     """
     script = (
@@ -552,11 +557,11 @@ def _owned_helper_pids(
         Returns:
             bool: Its executable resolves to the exact copied helper file.
         Raises:
-            RuntimeError: WMI omitted the executable identity needed for matching.
+            HelperIdentityUnavailable: WMI omitted the needed identity.
         """
         image = row.get("ExecutablePath")
         if not isinstance(image, str):
-            raise RuntimeError("WMI omitted helper executable identity.")
+            raise HelperIdentityUnavailable("WMI omitted helper executable identity.")
         return expected_helper.samefile(Path(image))
 
     def matches_ticket_command(row: dict[str, object]) -> bool:
@@ -566,12 +571,14 @@ def _owned_helper_pids(
             row (dict[str, object]): One WMI process record for the helper.
         Returns:
             bool: Parsed argv includes the exact helper mode and ticket file.
+        Raises:
+            HelperIdentityUnavailable: WMI omitted the image or command.
         """
-        command = row.get("CommandLine")
-        if not isinstance(command, str):
-            raise RuntimeError("WMI omitted helper command identity.")
         if not matches_helper_image(row):
             return False
+        command = row.get("CommandLine")
+        if not isinstance(command, str):
+            raise HelperIdentityUnavailable("WMI omitted helper command identity.")
         arguments = _windows_command_arguments(command)
         return (
             len(arguments) == 3
@@ -618,16 +625,24 @@ def _dismiss_owned_helper(
     Raises:
         RuntimeError: The exact owned helper process tree cannot be verified.
     """
+    incomplete: HelperIdentityUnavailable | None = None
     while time.monotonic() < deadline:
-        process_ids = _owned_helper_pids(process.pid, helper, ticket)
-        if process_ids:
-            for process_id in process_ids:
-                request_window_close(process_id)
-        elif process.poll() is not None:
-            return True
+        try:
+            process_ids = _owned_helper_pids(process.pid, helper, ticket)
+        except HelperIdentityUnavailable as exc:
+            # CIM can still list a finishing process after dropping its command.
+            # Wait for a complete snapshot before closing anything or accepting exit.
+            incomplete = exc
         else:
-            time.sleep(PROCESS_POLL_SECONDS)
+            incomplete = None
+            if process_ids:
+                for process_id in process_ids:
+                    request_window_close(process_id)
+            elif process.poll() is not None:
+                return True
         time.sleep(PROCESS_POLL_SECONDS)
+    if incomplete is not None:
+        raise incomplete
     return process.poll() is not None and not _owned_helper_pids(
         process.pid, helper, ticket,
     )
@@ -2132,11 +2147,10 @@ def _run_real_helper(
         if (not resume_capture or continuation is None or active_backend is None
                 or observes_failure):
             raise RuntimeError("Native backend switching requires a successful resumed update.")
-        if before_version == "1.7.1" and (
-            load_gui_backend(app_profile) != "tkinter"
-            or (app_profile / GUI_BACKEND_FILE).exists()
-        ):
-            raise RuntimeError("The unified update did not preserve the implicit Tk default.")
+        preference = app_profile / GUI_BACKEND_FILE
+        if (load_gui_backend(app_profile) != active_backend
+                or preference.read_bytes() != profile_snapshot.get('roaming/' + GUI_BACKEND_FILE)):
+            raise RuntimeError("The update changed the saved backend before the Settings restart.")
         if staging is not None:
             staging['resumed_backend'] = active_backend
             staging.update(_measure_waiting_watcher(_restart_pids(executable)))
@@ -2667,6 +2681,9 @@ def qualify_updates(
         state, Path(environment["LOCALAPPDATA"]) / "PHPGalleryUploader",
         profile / "synthetic-watch-folder", synthetic_binding, credential_account,
     )
+    # The published onefile app ignores this independent preference. Pin the
+    # target's initial backend so the native journey still exercises Tk to Qt.
+    save_gui_backend(state, "tkinter")
     _mark_evidence(evidence, "stable-profile-preservation", "RUNNING", "Comparing saved settings and credential vault sentinel.")
     _mark_evidence(evidence, "stable-to-unified-helper", "RUNNING", "Updating authentic 1.7.1 to the common onedir setup with an exact Watcher continuation.")
     _mark_evidence(evidence, "active-watcher-tk-to-qt", "RUNNING", f"Switching the resumed {target_version} Watcher through installed Settings.")

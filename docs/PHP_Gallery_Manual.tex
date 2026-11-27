@@ -1775,10 +1775,10 @@ Choose \ui{Later} to~use it~the~next time WinApp opens.
 The~website language and~flight report PDF editions have separate settings.
 
 Under \ui{Settings} and~\ui{Interface}, \ui{GUI backend} selects the~next
-desktop frontend. Tkinter/ttk is~the~default. PySide6/Qt~6 is~highly experimental.
+desktop frontend. WinApp 2.0.0 uses \ui{Qt / PySide6} by~default.
 The~complete source requirements install the~Qt packages together with the~core.
-The~standard Windows setup includes both backends and~keeps Tkinter
-as~the~default. The~ordinary updater migrates an existing installation.
+The~standard Windows setup includes both Qt and~\ui{Legacy Tk}.
+The~ordinary updater migrates an existing installation and~keeps saved choices.
 Flights explicitly closed by~older versions remain available as~local history.
 Their retained photo queues stay inactive across a~backend switch.
 Both frontends use the~left icon rail and~the~compact connection header.
@@ -2827,15 +2827,19 @@ diagnostics with \texttt{Ctrl+Shift+D}, and~About. The~navigation tabs remain
 available. A~panel owning input suppresses menu commands and~these shortcuts
 until it closes.
 
-In~\ui{Settings > Interface > GUI backend}, Tkinter / ttk is the~default.
-The~standard Windows setup already includes
-\ui{PySide6 / Qt 6 (highly experimental)}. Source launches use
-the~optional Qt packages.
+In~\ui{Settings > Interface > GUI backend}, \ui{Qt / PySide6} is~the~default
+for a~profile without a~saved choice. \ui{Legacy Tk} is~also available.
+The~standard Windows setup includes Qt. Source launches use the~Qt dependencies
+from the~complete requirements.
 Apply the~choice with \ui{Restart WinApp}. Active work must settle or~have
 a~verified continuation before restart. Both frontends use the~same profile.
-If~Qt startup fails, Tkinter opens again. You can select Tkinter to~keep it
+If~Qt startup fails, Legacy Tk opens. You can select Legacy Tk to~keep it
 for~subsequent launches. On~macOS the~Qt Lightbox uses EDR when the~image and
 current display support it and~shows the~SDR rendition otherwise.
+
+The~Qt photo inspector slides open briefly and~shows a~larger preview above
+the~details. Compact groups share a~value column. Select the~arrow on~a~long
+name to~show and~copy the~full value.
 
 Settings, help, connection prompts and~notices appear inside the~main window.
 Informational notices use a~dismissible, scrollable, nonblocking strip. It~queues
@@ -7151,7 +7155,10 @@ physical gallery below a~chosen parent. Photo-only selections can~also
 be~dragged onto a~visible child gallery, moved or~copied through the~searchable
 destination picker, shared through the~native device share sheet where
 supported, or~downloaded. Native sharing falls back to~the~selected-photo ZIP
-when the~browser cannot share the~prepared files. Smart Galleries are~excluded
+when the~browser cannot share the~prepared files. An~administrator can~move
+a~gallery-only selection to~another parent with~\ui{Move}. The~original IDs,
+stored visibility settings and~all descendants travel with~the~galleries.
+Inherited access follows the~new parent. Smart Galleries are~excluded
 from~physical subtree operations. The~selection itself is~only browser state
 and~does not~grant permission. Every mutation/ZIP request rechecks the~normal
 logged-in account, CSRF token, source gallery, selected ownership,
@@ -7165,11 +7172,12 @@ physical-gallery creation, and~selection-export workflows.
 The~compact top toolbar shows the~selection count when visible. Open
 it~to~select
 all items, clear the~selection, share or~delete, and~choose a~destination
-for~moving or~copying photos. Expand \ui{New gallery from selection} only
+for~moving a~photo or~gallery selection or~copying photos. Expand \ui{New gallery from selection} only
 when creating a~gallery; its~parent defaults to~the~current gallery.
 The~plain \ui{?} control opens selection, drag, copy and~move guidance;
-click outside or~press Escape to~dismiss it. Picker instructions and~the~gallery
-directory link appear while the~picker has~focus. Progress, success and~errors
+click outside or~press Escape to~dismiss it. Search results expand below
+the~destination input, with~the~gallery directory link available beside
+empty or~unavailable results. Progress, success and~errors
 remain visible; the~idle ready message is~omitted.
 
 With no~selection, the~manager is~hidden above the~page. Move the~pointer

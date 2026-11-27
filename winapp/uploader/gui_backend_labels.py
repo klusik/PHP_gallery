@@ -14,16 +14,16 @@ from .localization import gettext
 
 
 def backend_label(backend: GuiBackend) -> str:
-    """Name one frontend for Settings, including its current support level.
+    """Name one frontend consistently in Settings and startup notices.
 
     Args:
         backend (GuiBackend): Stable identifier shared by the CLI and preference.
     Returns:
-        str: Localized toolkit name and support level.
+        str: Localized display name for the toolkit.
     """
     if backend == "pyside6":
-        return gettext("PySide6 / Qt 6 (highly experimental)")
-    return gettext("Tkinter / ttk (stable, default)")
+        return gettext("Qt / PySide6")
+    return gettext("Legacy Tk")
 
 
 def backend_status(effective: GuiBackend, requested: GuiBackend) -> str:
@@ -53,17 +53,17 @@ def fallback_notice(reason: GuiFallback) -> str:
     """
     if reason == "dependency_missing":
         return gettext(
-            "Qt dependencies could not load. WinApp opened with Tkinter. "
+            "Qt dependencies could not load. WinApp opened with Legacy Tk. "
             "Install the optional Qt requirements for this Python and retry in Settings.",
         )
     if reason == "pending_work":
         return gettext(
-            "WinApp opened with Tkinter to keep pending work available. "
+            "WinApp opened with Legacy Tk to keep pending work available. "
             "Review Watcher, Activity and Flight before switching to Qt.",
         )
     if reason == "update_continuation":
-        return gettext("WinApp opened with Tkinter to finish the update continuation.")
+        return gettext("WinApp opened with Legacy Tk to finish the update continuation.")
     return gettext(
-        "Qt did not become ready. WinApp opened with Tkinter. "
+        "Qt did not become ready. WinApp opened with Legacy Tk. "
         "Review the WinApp log and retry or cancel the change in Settings.",
     )

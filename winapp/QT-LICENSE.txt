@@ -1,4 +1,4 @@
-PHP Gallery Uploader – optional PySide6 / Qt 6 runtime
+PHP Gallery Uploader – PySide6 / Qt 6 runtime
 
 The application is licensed under MIT. This installer also includes
 PySide6 Essentials, shiboken6 and Qt 6.10.3, under their applicable LGPL v3
@@ -21,7 +21,8 @@ Third-party attribution and license index:
 Qt uses separately installed shared libraries and plugins in the common
 _internal directory. Shut down WinApp and replace the relevant files
 there with ABI-compatible builds, keeping their relative paths and filenames.
-Start WinApp and choose PySide6 / Qt 6 in Settings. The launcher accepts
+Start WinApp with the default Qt / PySide6 backend. If Legacy Tk is selected,
+choose Qt / PySide6 in Settings and restart. The launcher accepts
 ABI-compatible replacement libraries. The public uploader
 source, build tooling and installer script are available in this repository:
 https://github.com/klusik/PHP_gallery/tree/develop/winapp

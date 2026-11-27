@@ -12,7 +12,8 @@
  *
  * Responsibilities:
  *   - Validate CSRF and request ownership for public-view picture management
- *   - Move and copy selected pictures through existing gallery image services
+ *   - Move selected photos and physical subgalleries through shared services
+ *   - Copy selected pictures through the existing image copy service
  *   - Delete mixed photo and physical-subgallery selections through existing mutation services
  *   - Create physical galleries from mixed selections at a user-selected parent location
  *   - Return JSON responses for the public gallery JavaScript layer
@@ -42,6 +43,10 @@ use RuntimeException;
 use Throwable;
 use Gallery\Services\LinkedGalleryReservationUnavailable;
 use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\admin_mutation_descriptor;
+use function Gallery\Core\admin_mutation_gallery_membership_postcondition;
+use function Gallery\Core\admin_mutation_public_gallery_context;
+use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\current_user;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\verify_csrf;
@@ -65,6 +70,7 @@ use function Gallery\Services\picture_manager_assert_destination_outside_gallery
 ;
 use function Gallery\Services\picture_manager_copy_gallery_subtrees;
 use function Gallery\Services\picture_manager_cleanup_lease_owned;
+use function Gallery\Services\picture_manager_move_gallery_selection;
 use function Gallery\Services\picture_manager_normalize_gallery_ids;
 use function Gallery\Services\picture_manager_normalize_image_ids;
 use function Gallery\Services\picture_manager_owned_galleries_for_selection;
@@ -217,14 +223,23 @@ function picture_manager_copy_result_message(
 }
 
 /**
- * Move selected pictures from the current public gallery into another gallery.
+ * Move selected photos or direct physical subgalleries to a different gallery.
  *
  * @return void Processes the move request and sends its JSON or redirect response.
  */
 function cms_picture_manager_move(): void
 {
-    picture_manager_require_logged_in_user();
+    $user = picture_manager_require_logged_in_user();
     verify_csrf();
+    $galleryIds = picture_manager_gallery_ids_from_post();
+    if ($galleryIds !== [] && ($user['role'] ?? '') !== 'admin') {
+        picture_manager_json_response([
+            'ok' => false,
+            'message' => t('picture_manager.error_login_required',
+                'Picture manager is available only to logged-in users.'),
+        ], 403);
+        return;
+    }
 
     try {
         // $sourceGallery stores the gallery currently shown in the public view.
@@ -239,6 +254,10 @@ function cms_picture_manager_move(): void
             : null;
         if (!$destinationGallery) {
             throw new RuntimeException('Choose a valid destination gallery.');
+        }
+        if ($galleryIds !== []) {
+            picture_manager_move_galleries_response($sourceGallery, $destinationGallery, $galleryIds);
+            return;
         }
 
         // $imageIds stores selected photo IDs from the public grid.
@@ -298,8 +317,9 @@ function cms_picture_manager_move(): void
     } catch (Throwable $exception) {
         admin_log_event(
             'error',
-            'picture_manager.images_move_failed',
-            'Picture manager image move failed.',
+            $galleryIds === [] ? 'picture_manager.images_move_failed'
+                : 'picture_manager.galleries_move_failed',
+            'Picture manager move failed.',
             [
                 'source_gallery_id' => (int) ($_POST['source_gallery_id'] ?? 0),
                 'destination_gallery_id' => (int) (
@@ -311,9 +331,73 @@ function cms_picture_manager_move(): void
         );
         picture_manager_json_response([
             'ok' => false,
-            'message' => 'Image move failed: ' . $exception->getMessage(),
+            'message' => $galleryIds === [] ? 'Image move failed: ' . $exception->getMessage()
+                : t('picture_manager.gallery_move_unconfirmed',
+                    'Gallery move could not be confirmed. Refresh before retrying.'),
         ], 422);
     }
+}
+
+/**
+ * Return the standard in-place completion envelope for confirmed gallery moves.
+ *
+ * @param array{id:int|string,folder_path:string,...} $source Source gallery row.
+ * @param array{id:int|string,folder_path:string,...} $destination Destination gallery row.
+ * @param list<int> $galleryIds Selected direct physical subgallery IDs.
+ * @return void Emits a confirmed or partial result, or a bounded refusal.
+ */
+function picture_manager_move_galleries_response(
+    array $source,
+    array $destination,
+    array $galleryIds,
+): void {
+    if (picture_manager_image_ids_from_post(false) !== []) {
+        picture_manager_json_response([
+            'ok' => false,
+            'message' => t('picture_manager.move_one_item_type',
+                'Select only photos or only galleries to move.'),
+        ], 422);
+        return;
+    }
+    $sourceId = (int) $source['id'];
+    $destinationId = (int) $destination['id'];
+    $result = picture_manager_move_gallery_selection($sourceId, $destinationId, $galleryIds);
+    $movedIds = $result['moved_ids'];
+    $failure = $result['failure'];
+    if ($failure !== null && $movedIds === []) {
+        throw $failure;
+    }
+    admin_log_event(
+        $failure === null ? 'info' : 'warning',
+        'picture_manager.galleries_moved',
+        'Picture manager relocated selected gallery subtrees.',
+        [
+            'source_gallery_id' => $sourceId,
+            'destination_gallery_id' => $destinationId,
+            'moved_gallery_ids' => $movedIds,
+            'error' => $failure?->getMessage(),
+        ],
+    );
+    $message = $failure === null
+        ? t('picture_manager.galleries_moved_count', 'Moved {count} selected galleries.',
+            ['count' => count($movedIds)])
+        : t('picture_manager.galleries_moved_partial',
+            'Moved {count} selected galleries. The remaining moves could not be confirmed.',
+            ['count' => count($movedIds)]);
+    // Completion checks current membership counts as well as the final moved ID.
+    $movedId = $movedIds[array_key_last($movedIds)];
+    $sourceUrl = gallery_public_url($source);
+    $destinationUrl = gallery_public_url($destination);
+    $contexts = [
+        admin_mutation_public_gallery_context($sourceId, $sourceUrl,
+            admin_mutation_gallery_membership_postcondition($movedId, $sourceId, false)),
+        admin_mutation_public_gallery_context($destinationId, $destinationUrl,
+            admin_mutation_gallery_membership_postcondition($movedId, $destinationId, true)),
+    ];
+    picture_manager_json_response(admin_mutation_success_envelope(
+        $message, admin_mutation_descriptor('gallery.move', 'gallery', 'move', $movedIds),
+        null, $contexts, ['redirect_url' => $sourceUrl],
+    ) + ['partial' => $failure !== null]);
 }
 
 /**
