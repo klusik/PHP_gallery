@@ -48,6 +48,14 @@ class BenchmarkBlocked(RuntimeError):
     """Represent an explicit unavailable-environment benchmark outcome."""
 
 
+class CapacityTreatment(TypedDict):
+    """Describe one allowlisted decoded cache treatment sent to a child."""
+
+    name: str
+    max_bytes: int
+    max_entries: int
+
+
 class WorkloadEventExtras(TypedDict, total=False):
     """Describe optional per-event callback and dispatch observations."""
 
@@ -525,16 +533,21 @@ def select_pilot_scenarios(
     return tuple(scenario for scenario in scenarios if scenario in configured)
 
 
-def matrix_cells(scenarios: tuple[str, ...] = SCENARIOS) -> list[tuple[str, str]]:
+def matrix_cells(
+    scenarios: tuple[str, ...] = SCENARIOS,
+    cache_states: tuple[str, ...] = CACHE_STATES,
+) -> list[tuple[str, str]]:
     """Return the selected scenario/cache matrix.
 
     Args:
         scenarios (tuple[str, ...]): Canonically ordered scenario identifiers.
+        cache_states (tuple[str, ...]): Cold/warm by default, or warm only for
+            the separate gallery-return capacity experiment.
 
     Returns:
         list[tuple[str, str]]: Ordered scenario and cache-state pairs.
     """
-    return [(scenario, cache) for scenario in scenarios for cache in CACHE_STATES]
+    return [(scenario, cache) for scenario in scenarios for cache in cache_states]
 
 
 def validate_report(
@@ -544,6 +557,7 @@ def validate_report(
     trial: int,
     source: str,
     instrumentation: str,
+    capacity_case: tuple[str, str, CapacityTreatment] | None = None,
 ) -> ChildReport:
     """Validate identity, required fields, status, and numeric observations.
 
@@ -554,6 +568,9 @@ def validate_report(
         trial (int): Requested process trial number.
         source (str): Exact application commit SHA used by the child.
         instrumentation (str): on or off measurement mode.
+        capacity_case (tuple[str, str, CapacityTreatment] | None): Expected
+            renderer, phase and treatment for the same-source cache experiment,
+            or None for the historical source comparisons.
 
     Returns:
         ChildReport: Validated child report.
@@ -616,7 +633,7 @@ def validate_report(
         scenario in ("gallery", "lightbox") or scenario.startswith("scroll")
     ) and instrumentation == "on":
         required_metrics.add("image_publication_p95_ms")
-    if scenario.startswith("scroll") and instrumentation == "on":
+    if scenario.startswith("scroll") and instrumentation == "on" and capacity_case is None:
         required_metrics.update({
             "viewport_settle_p95_ms",
             "wheel_slow_p95_ms",
@@ -624,6 +641,41 @@ def validate_report(
             "drag_p95_ms",
             "resize_p95_ms",
         })
+    raw_required_metrics = required_metrics.copy()
+    if capacity_case is not None:
+        renderer, phase, treatment = capacity_case
+        extent = int(scenario.removeprefix("scroll"))
+        identity = {
+            "renderer": renderer,
+            "capacity_phase": phase,
+            "capacity_policy": treatment["name"],
+            "capacity_bytes": treatment["max_bytes"],
+            "capacity_entries": treatment["max_entries"],
+            "photo_count": extent,
+            "instrumentation": instrumentation,
+        }
+        if any(report["metadata"].get(key) != value for key, value in identity.items()):
+            raise RuntimeError("cache experiment renderer, capacity or extent mismatch")
+        expected_coverage = dict.fromkeys(
+            ("down_photos", "back_photos", "mounted_photos"), extent,
+        )
+        if report["operations"] != expected_coverage:
+            raise RuntimeError("cache experiment did not render and reopen the full extent")
+        required_metrics.update({
+            "mount_ms", "sweep_ms", "measured_cpu_ms",
+            "measured_peak_working_set_bytes", "decoded_cache_hits_count",
+            "decoded_cache_misses_count", "decoded_cache_evictions_count",
+            "decoded_cache_expirations_count", "decoded_cache_end_count",
+            "decoded_cache_end_bytes",
+            "thumbnail_decode_count", "tk_publication_count", "synthetic_batch_groups_count",
+        })
+        if instrumentation == "on":
+            capacity_latencies = {
+                "viewport_settle_p95_ms", "viewport_settle_p99_ms",
+                "image_publication_p99_ms",
+            }
+            required_metrics.update(capacity_latencies)
+            raw_required_metrics.update(capacity_latencies)
     if not required_metrics <= report["metrics"].keys():
         raise RuntimeError("instrumentation-specific metrics are missing")
     for name, value in report["metrics"].items():
@@ -670,12 +722,14 @@ def validate_report(
             "interaction_feedback_p95_ms": "interaction_feedback",
             "image_publication_p95_ms": "image_publication",
             "viewport_settle_p95_ms": "viewport_settle",
+            "viewport_settle_p99_ms": "viewport_settle",
+            "image_publication_p99_ms": "image_publication",
             "wheel_slow_p95_ms": "wheel_slow",
             "wheel_fast_p95_ms": "wheel_fast",
             "drag_p95_ms": "drag",
             "resize_p95_ms": "resize",
         }
-        required_raw_metrics = {raw_metric_names[name] for name in required_metrics}
+        required_raw_metrics = {raw_metric_names[name] for name in raw_required_metrics}
         if not required_raw_metrics <= measured_metrics:
             raise RuntimeError("instrumented metrics have no measured raw events")
     return cast(ChildReport, report)
@@ -696,6 +750,7 @@ def run_workload(
     fixture_bundle_sha256: str | None = None,
     fixture_bundle_photo_count: int | None = None,
     fixture_common_sha256: str | None = None,
+    capacity_case: tuple[str, str, CapacityTreatment] | None = None,
 ) -> RunRecord:
     """Run, preserve, and validate one independent workload process.
 
@@ -718,6 +773,8 @@ def run_workload(
             defaults to None only when no bundle is supplied.
         fixture_common_sha256 (str | None): Expected generator module digest;
             defaults to None only when no bundle is supplied.
+        capacity_case (tuple[str, str, CapacityTreatment] | None): Exact renderer,
+            phase and treatment for a capacity trial, or None for existing workloads.
 
     Returns:
         RunRecord: Validated process record.
@@ -736,7 +793,7 @@ def run_workload(
     )
     if any(value is not None for value in bundle_values) and (
         any(value is None for value in bundle_values)
-        or harness.name != "issue_399_tk_scroll.py"
+        or harness.name not in ("issue_399_tk_scroll.py", "issue_399_tk_cache.py")
     ):
         raise RuntimeError("incomplete or unsupported shared fixture bundle arguments")
     command = [
@@ -754,6 +811,12 @@ def run_workload(
             "--fixture-bundle-photo-count", str(fixture_bundle_photo_count),
             "--fixture-common-sha256", str(fixture_common_sha256),
             "--progress", str(progress_path),
+        ])
+    if capacity_case is not None:
+        renderer, phase, treatment = capacity_case
+        command.extend([
+            "--cache-renderer", renderer, "--capacity-phase", phase,
+            "--capacity-policy", treatment["name"],
         ])
     started = time.monotonic()
     timeout = min(PROCESS_TIMEOUT_SECONDS, max(1, int(deadline - started)))
@@ -822,7 +885,7 @@ def run_workload(
         raise RuntimeError("child omitted report: " + report_path.stem)
     report = validate_report(
         json.loads(report_path.read_text(encoding="utf-8")),
-        scenario, cache, trial, source_sha, instrumentation,
+        scenario, cache, trial, source_sha, instrumentation, capacity_case,
     )
     return {
         "source": source, "source_sha": source_sha, "scenario": scenario, "cache": cache,
@@ -887,12 +950,15 @@ def bootstrap_delta_ci(deltas: list[float], seed_text: str) -> list[float]:
 
 def summarize_comparison(
     records: list[RunRecord], scenarios: tuple[str, ...] = SCENARIOS,
+    cache_states: tuple[str, ...] = CACHE_STATES,
 ) -> ComparisonSummary:
     """Summarize each scenario/cache using paired independent run samples.
 
     Args:
         records (list[RunRecord]): Validated baseline and candidate records.
         scenarios (tuple[str, ...]): Scenario matrix to summarize.
+        cache_states (tuple[str, ...]): Cold/warm by default, or warm only for
+            the gallery-return capacity comparison.
 
     Returns:
         ComparisonSummary: Per-cell descriptive and paired statistics.
@@ -901,7 +967,7 @@ def summarize_comparison(
         RuntimeError: If a required group has fewer than ten complete pairs.
     """
     summary: ComparisonSummary = {}
-    for scenario, cache in matrix_cells(scenarios):
+    for scenario, cache in matrix_cells(scenarios, cache_states):
         samples: dict[str, dict[int, dict[str, float]]] = {
             "baseline": {}, "candidate": {},
         }
@@ -1193,14 +1259,16 @@ def run_stage() -> int:
     )
     protocol_paths = {
         "issue_361_tk_protocol.json", "issue_399_tk_protocol.json",
+        "issue_399_tk_cache_protocol.json",
     }
     if protocol_name not in protocol_paths:
         raise ValueError("unsupported benchmark protocol selection")
     protocol_path = here / protocol_name
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+    capacity_protocol = protocol_name == "issue_399_tk_cache_protocol.json"
     stage = os.environ.get("PHP_GALLERY_TK_PERF_STAGE", protocol["stage"])
     baseline_sha = os.environ.get(
-        "PHP_GALLERY_TK_PERF_BASELINE", protocol["baseline_sha"]
+        "PHP_GALLERY_TK_PERF_BASELINE", protocol.get("baseline_sha", "")
     )
     candidate_sha = os.environ.get(
         "PHP_GALLERY_TK_PERF_CANDIDATE", os.environ.get("GITHUB_SHA", "")
@@ -1217,6 +1285,23 @@ def run_stage() -> int:
         raise ValueError("protocol matrix.scenarios must contain scenario names")
     if len(set(scenarios)) != len(scenarios):
         raise ValueError("protocol matrix.scenarios must be unique")
+    capacity_renderer = ""
+    capacity_phase = ""
+    comparison_caches = CACHE_STATES
+    capacity_treatments: dict[str, CapacityTreatment] = {}
+    if capacity_protocol:
+        extent = os.environ.get("PHP_GALLERY_TK_CAPACITY_SCENARIO")
+        capacity_renderer = os.environ.get("PHP_GALLERY_TK_CAPACITY_RENDERER", "")
+        capacity_phase = os.environ.get("PHP_GALLERY_TK_CAPACITY_PHASE", "")
+        if stage != "compare" or baseline_sha != candidate_sha:
+            raise ValueError("capacity comparison requires one exact application SHA")
+        if (extent not in scenarios or capacity_renderer not in ("native", "canvas")
+                or capacity_phase not in ("sweep", "reopen")):
+            raise ValueError("unsupported decoded-cache matrix selection")
+        scenarios = (extent,)
+        if capacity_phase == "reopen":
+            comparison_caches = ("warm",)
+        capacity_treatments = protocol["capacity_treatments"]
     configured_scenarios = protocol.get("pilot_scenarios")
     if configured_scenarios is not None and (
         not isinstance(configured_scenarios, list)
@@ -1230,6 +1315,7 @@ def run_stage() -> int:
     pilot_cells = matrix_cells(selected_pilot_scenarios)
     harness_names = {
         "issue_361_tk_workloads.py", "issue_399_tk_scroll.py",
+        "issue_399_tk_cache.py",
     }
     harness_name = protocol.get(
         "workload_script", "issue_361_tk_workloads.py"
@@ -1262,6 +1348,13 @@ def run_stage() -> int:
         "runner_image_version": os.environ.get("ImageVersion"),
         "display": os.environ.get("DISPLAY"),
     }
+    if capacity_protocol:
+        metadata.update({
+            "capacity_renderer": capacity_renderer,
+            "capacity_phase": capacity_phase,
+            "capacity_scenario": scenarios[0],
+            "shared_scroll_support_sha256": sha256_file(here / "issue_399_tk_scroll.py"),
+        })
     records: list[RunRecord] = []
     comparison = None
     baseline_summary = None
@@ -1274,7 +1367,7 @@ def run_stage() -> int:
     fixture_bundle_photo_count: int | None = None
     fixture_common_sha256: str | None = None
     try:
-        if harness_name == "issue_399_tk_scroll.py":
+        if harness_name in ("issue_399_tk_scroll.py", "issue_399_tk_cache.py"):
             protocol_seed = protocol.get("seed")
             if type(protocol_seed) is not int or protocol_seed != WORKLOAD_SEED:
                 raise ValueError("issue 399 protocol seed must match the frozen driver seed")
@@ -1315,6 +1408,9 @@ def run_stage() -> int:
         if stage == "compare":
             sources.append(("candidate", candidate_sha))
         for label, sha in sources:
+            if capacity_protocol and label == "candidate":
+                roots[label] = roots["baseline"]
+                continue
             root = temporary / label
             root.mkdir()
             extract_commit(sha, root)
@@ -1334,7 +1430,7 @@ def run_stage() -> int:
         else:
             order = []
             for pair in range(MEASURED_REPETITIONS):
-                for scenario, cache in matrix_cells(scenarios):
+                for scenario, cache in matrix_cells(scenarios, comparison_caches):
                     pair_order = ("baseline", "candidate") if pair % 2 == 0 else (
                         "candidate", "baseline"
                     )
@@ -1343,6 +1439,11 @@ def run_stage() -> int:
                     )
         for source, scenario, cache, trial, instrumentation in order:
             source_sha = baseline_sha if source == "baseline" else candidate_sha
+            capacity_case = None
+            if capacity_protocol:
+                capacity_case = (
+                    capacity_renderer, capacity_phase, capacity_treatments[source],
+                )
             record = run_workload(
                 harness, roots[source], output, scenario, cache, trial,
                 instrumentation, source, source_sha, deadline,
@@ -1350,11 +1451,12 @@ def run_stage() -> int:
                 fixture_bundle_sha256=fixture_bundle_sha256,
                 fixture_bundle_photo_count=fixture_bundle_photo_count,
                 fixture_common_sha256=fixture_common_sha256,
+                capacity_case=capacity_case,
             )
             records.append(record)
             save_records(output, [record], append=True)
         if stage == "compare":
-            comparison = summarize_comparison(records, scenarios)
+            comparison = summarize_comparison(records, scenarios, comparison_caches)
             (output / "comparison.json").write_text(
                 json.dumps(comparison, indent=2) + "\n", encoding="utf-8"
             )

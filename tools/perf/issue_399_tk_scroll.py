@@ -166,11 +166,15 @@ JUMP_FRACTIONS = (0.25, 0.50, 0.90, 0.0)
 RESIZE_WIDTHS = (640, 960)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def parse_args(
+    argv: list[str] | None = None, *, capacity: bool = False,
+) -> argparse.Namespace:
     """Parse the Issue 361 compatible child interface.
 
     Args:
         argv (list[str] | None): Argument vector without executable name.
+        capacity (bool): Admit explicit cache treatment and renderer in the
+            separate capacity workload only.
 
     Returns:
         argparse.Namespace: Validated scenario and source identity.
@@ -189,6 +193,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fixture-bundle-photo-count", type=int, required=True)
     parser.add_argument("--fixture-common-sha256", required=True)
     parser.add_argument("--progress", required=True)
+    if capacity:
+        parser.add_argument(
+            "--cache-renderer", choices=("native", "canvas"), required=True,
+        )
+        parser.add_argument(
+            "--capacity-policy", choices=("small", "shipped"), required=True,
+        )
+        parser.add_argument(
+            "--capacity-phase", choices=("sweep", "reopen"), required=True,
+        )
     args = parser.parse_args(argv)
     if args.seed < 0 or args.trial < 0:
         parser.error("seed and trial must be nonnegative")

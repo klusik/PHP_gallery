@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "stage": "compare",
+  "source_policy": "One exact checkout for both capacity treatments",
+  "workload_script": "issue_399_tk_cache.py",
+  "media_fixture": "Verified public framed thumbnail batches from the offline fixture",
+  "measured_raw_events": ["callback", "event_loop_drift", "image_publication", "interaction_feedback", "thumbnail_prepare", "viewport_settle"],
+  "matrix": {
+    "scenarios": ["scroll100", "scroll500", "scroll2000"],
+    "cache": ["cold", "warm"],
+    "instrumentation": ["on"],
+    "renderers": ["native", "canvas"],
+    "phases": {"sweep": ["cold", "warm"], "reopen": ["warm"]},
+    "card_format": "21:9"
+  },
+  "seed": 3612026,
+  "capacity_treatments": {
+    "baseline": {"name": "small", "max_bytes": 16777216, "max_entries": 256},
+    "candidate": {"name": "shipped", "max_bytes": 268435456, "max_entries": 4096}
+  },
+  "compare": {
+    "minimum_pairs_per_scenario_cache_cell": 10,
+    "pair_order": "Shared driver alternates small/shipped and shipped/small",
+    "pairing": "Same Windows VM, renderer, app SHA, dependencies, seed and cache regime"
+  },
+  "timeouts": {"workload_process_seconds": 90, "total_driver_seconds": 2400}
+}

@@ -1742,6 +1742,7 @@ def build_gallery(
     gallery_id: int = GALLERY_ID,
     thumbnail_memory: "GalleryThumbnailMemory | None" = None,
     photo_count: int = PHOTO_COUNT,
+    prepare_session: Callable[[mock.Mock], None] | None = None,
 ) -> tuple[NativeViewerContract, mock.Mock, FixtureMediaInfo, GalleryFixtureState]:
     """Mount production Photos with protocol-sized pages and prebuilt 4K media.
 
@@ -1753,6 +1754,8 @@ def build_gallery(
         thumbnail_memory (GalleryThumbnailMemory | None): Session-owned decoded cache.
         photo_count (int): Positive whole-number catalogue size; defaults to the
             frozen Issue 361 workload count.
+        prepare_session (Callable[[mock.Mock], None] | None): Optional workload
+            callback to extend the strict LinkingSession fixture before mount.
 
     Returns:
         tuple[NativeViewerContract, mock.Mock, FixtureMediaInfo, GalleryFixtureState]:
@@ -1913,6 +1916,8 @@ def build_gallery(
 
     session.media_page.side_effect = read_page
     session.media_photo.side_effect = read_photo
+    if prepare_session is not None:
+        prepare_session(session)
     host = ttk.Frame(root)
     host.pack(fill="both", expand=True)
     frame = native.mount_native_gallery_view(

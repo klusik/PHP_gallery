@@ -1359,7 +1359,7 @@ decoded thumbnail cache belongs to the live Photos session and follows the
 current catalogue's validation. A legacy no-store 304
 causes one unconditional fetch. A refusal yields no stale body.
 
-The planned issue 399 cache-capacity comparison treats the single session-shared
+The issue 399 cache-capacity comparison treats the single session-shared
 decoded-PIL LRU as a separate bounded layer: 16 MiB / 256 entries versus
 256 MiB / 4,096 entries. The limit is not per viewer and is not an RSS cap:
 conservative accounting uses four bytes per pixel and excludes allocator, Tk and
@@ -1367,9 +1367,9 @@ widget overhead. PhotoImages may be recreated when bounded Tk slots re-admit
 viewport items; a shared PIL hit avoids decode work only when validation proof
 remains eligible. Session entries survive gallery switches and clear at
 workspace/session teardown; a standalone viewer's own cache clears on close.
-The planned experiment would leave the disk cache, photo-detail quota,
-validation and TTL unchanged. It has not run and no capacity result exists.
-Renderer measurements stay separate. The persisted renderer is now default-on
+The isolated hosted profile leaves the disk cache, photo-detail quota,
+validation and TTL unchanged. Renderer measurements stay separate. The
+persisted Tk Photos renderer is default-on
 for new/missing settings by the explicit 2026-11-17 owner decision, while saved
 False and the native environment override remain available. The historical G4
 NO-GO remains a measured result, not a current product default. See [the issue
