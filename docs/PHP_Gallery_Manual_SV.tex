@@ -2739,7 +2739,10 @@ utgången eller återkallad förnybar uppgift tar WinApp bort just den sparade
 uppgiften. Välj \ui{Anslut webbplats} för att godkänna en ny koppling i
 webbläsaren. Vid start väljer du själv om du vill godkänna den.
 Ett osäkert svar eller lagringsfel
-hindrar återanvändning av den gamla uppgiften. Granska serverns kopplingar och
+hindrar återanvändning av den gamla uppgiften. När en oavslutad förnyelse
+blockerar den sparade uppladdningslänken vid start visas
+\ui{Godkänn sparad länk igen} i Qt:s fotovy för samma konto, galleri och
+behörigheter. Granska serverns kopplingar och
 välj vid behov \ui{Forget saved link} före ny koppling. Lokal borttagning
 återkallar inte serverbehörigheten och den aktuella sessionen kan fortsätta.
 Den sparade \texttt{pgu\_}-nyckeln är oberoende. Riktig Windows och
@@ -3212,7 +3215,8 @@ oberoende av kolumnsortering. Uppdatering behåller expanderade flygningar och
 versioner samt filvalet. Denna vy flyttar eller byter inte namn på filer på
 disk.
 
-För en stoppad flygning skapar \ui{Skapa lokal PDF} en ny numrerad version i
+För en stoppad flygning skapar \ui{Skapa bara PDF-filer} i Qt eller
+\ui{Skapa lokal PDF} i Tk en ny numrerad version i
 \filepath{reports/}. Tidigare PDF-filer,
 rådata och uppladdningskvittenser behålls. Ingen nyckel, uppladdning eller
 återkallelse behövs; en annan pågående flygning fortsätter. Delrapporter
@@ -3279,6 +3283,10 @@ behåller anslutningen till nästa session. Hantera servernycklar i PHP Gallery
 Admin. Länkade sessioner använder godkännandet från webbläsaren. Efter
 omstart förifylls den verifierade adressen i dialogen för återanslutning.
 
+I Qt avslutar \ui{Överge flygning} bredvid slutförandet i Watcher den aktuella
+länkade inspelningen efter bekräftelse. Pågående anrop avslutas först.
+Inspelningen, oskickade foton, befintliga PDF-filer och kvittenser sparas lokalt.
+
 I API-nyckelläget visas \ui{Överge flygning} i Watcher, Import och förloppet.
 Åtgärden
 erbjuder lokal återställning när galleriet raderats eller nyckeln återkallats.
@@ -3293,8 +3301,10 @@ behåller nyckeln och möjligheten att försöka igen.
 Starta bevakaren för målgalleriet med ett länkat konto eller en API-nyckel.
 \ui{Skapa och ladda upp} sparar en ny version och skickar den till galleriet
 bredvid knappen. Vid uppladdningsfel kan samma version skickas igen.
-Välj en stoppad flygning och \ui{Ladda upp sparade PDF-filer} i menyn
-för att se versioner, datum och språk. Ctrl/Skift väljer flera versioner
+Välj en stoppad flygning och \ui{Skicka bara PDF-filer} i Qt eller
+\ui{Ladda upp sparade PDF-filer} i menyn. Ett anslutet uppladdningsgalleri
+är tillgängligt i Qt även när Watcher står still. Väljaren bekräftar målet
+och visar versioner, datum och språk. Ctrl/Skift väljer flera versioner
 eller enskilda PDF-filer från samma flygning. Sparade filer skickas medan
 en annan flygning fortsätter. Separata
 \filepath{upload-receipts.json} sparar bekräftade kontrollsummor; nya försök
@@ -4046,9 +4056,17 @@ Valfri inläsning från SimBrief finns bredvid flygstart/-avslut; kugghjulet
 ändrar pilot-ID eller användarnamn i ett fält. Identiteten sparas först efter
 en lyckad OFP-hämtning. Inspelning kräver ingen OFP. En förinläst plan används
 bara för nästa flygning; en plan som läses in under inspelning tillhör den
-flygningen. Vald sparad flygning kan direkt kopplas till senaste
-OFP eller en arkiverad SimBrief-export i JSON/XML. Enbart PDF ger inte
-strukturerade data. Skapa därefter en ny lokal PDF-version; äldre PDF-filer
+flygningen. I Qt-gränssnittet på Windows visas \ui{Läs in SimBrief}
+i Watcher och ovanför bilderna i ett länkat galleri med uppladdningsbehörighet
+när WinApp upptäcker en flygsimulator. Under pågående bevakning av ett länkat
+galleri visas knappen ovanför bilderna i det bevakade galleriet. Efter
+inläsningen visas flygplatskoderna bredvid knappen.
+
+Välj en avslutad flygning i Qt och använd \ui{Läs in SimBrief} bredvid
+\ui{Skapa bara PDF-filer}. Bekräfta att den senaste OFP:n hör till den valda
+flygningen. Menyn för den sparade flygningen kan också koppla en arkiverad
+SimBrief-export i JSON/XML. Skapa en ny lokal PDF-version för att använda
+den sparade planen för beräkningar och jämförelser i rapporten. Äldre PDF-filer
 och överföringskvitton bevaras.
 Rapporter visar inspelade OpenStreetMap-rutter även utan OFP. OFP lägger till
 en separat planerad rutt, planerat passagerarantal och rampbränsle utan att
@@ -10837,6 +10855,8 @@ samman. Saknade, ofullständiga, felaktiga, dubbla, misslyckade eller
 överskridna resultat innebär underkänt. Den vanliga fullständiga ägaren behåller
 sin tidigare enkla process och tidsgräns; tidigare timeout för hela sviten och
 med två, tre och fyra processer förblir misslyckade körningar.
+Den valfria sviten \codeword{winapp-simbrief-preview} kör galleriscenariot i
+Windows och sparar skärmbilder före och efter inläsning av en testplan.
 Den valda processens logg skriver hela felspårningen direkt efter det avslutande
 FAIL/ERROR-inlägget, så att orsaken bevaras om en senare timeout hindrar den
 slutliga JSON-rapporten.

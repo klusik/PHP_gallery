@@ -321,9 +321,11 @@ class QtWindow(QMainWindow):
         )
         self.flight_reports = QtFlightReports(
             profile / 'flights', self.operator.selected_flight_directory, capture, self._sanitize_worker,
+            upload_selection=self.operator.saved_report_upload_selection,
         )
         self.flight_reports.finished.connect(self.operator.refresh)
         self.operator.flights.layout_body.addWidget(self.flight_reports)
+        self.flight_reports.add_dispatch_action(self.operator.saved_flight_simbrief_button)
         self.import_flow: QtImport | None = None
         if import_actions is not None:
             self.import_flow = QtImport(
@@ -401,8 +403,8 @@ class QtWindow(QMainWindow):
                 upload=lambda: self.flight_reports.upload_selected(
                     *self.operator.saved_report_upload_selection(),
                 ),
-                load_dispatch=lambda: self.capture.load_saved_dispatch(
-                    self.operator.selected_flight_directory(),
+                load_dispatch=lambda flight: self.capture.load_saved_dispatch(
+                    flight, parent=self.flight_reports,
                 ),
                 attach_dispatch=self.capture.attach_dispatch,
                 finish=self.capture.finish,
@@ -443,6 +445,7 @@ class QtWindow(QMainWindow):
             self.capture.reports_requested.connect(self._show_saved_flight_reports)
             self.capture.saved_dispatch_attached.connect(self.operator.refresh)
             self.capture.dispatch_status_changed.connect(self._show_operation_status)
+            self.capture.dispatch_status_changed.connect(self.flight_reports.show_dispatch_status)
             self.capture.credentials_changed.connect(self.settings.reload_saved_connection)
             self.capture.credentials_changed.connect(self._refresh_capture_context)
             self.photos.gallery_context_changed.connect(self._photos_presence_context_changed)
@@ -450,9 +453,13 @@ class QtWindow(QMainWindow):
             self.settings.connection_changed.connect(self._refresh_capture_context)
             self.photos.simbrief_available = self.capture.simbrief_available
             self.photos.simbrief_action = self.capture.photos_simbrief_action
+            self.photos.load_simbrief_action = self.capture.load_simbrief
+            self.capture.simbrief_route_changed.connect(self.photos.set_simbrief_route)
+            self.capture.replay_simbrief_route()
             self.capture.simbrief_context_changed.connect(
                 self.photos.update_simbrief_context,
             )
+            self.photos.update_simbrief_context(self.capture.simbrief_available())
             self._sync_import_capture_actions()
         if self.import_flow is None:
             self.operator.activity.retry.hide()
@@ -1299,6 +1306,7 @@ class QtWindow(QMainWindow):
             except (OSError, RuntimeError, ValueError):
                 delete_uploaded_files = None
             self.capture.set_source_disposition(delete_uploaded_files)
+            self.operator.refresh_flight_target()
         if self.import_flow is not None:
             self.import_flow.target.setText(
                 gettext('Upload gallery: ') + target_label if target_label
@@ -1306,10 +1314,10 @@ class QtWindow(QMainWindow):
             )
 
     def _photos_presence_context_changed(self, visible: bool) -> None:
-        """Demand cached detection only while a linked Photos action is open.
+        """Demand cached detection while linked Photos offers a SimBrief action.
 
         Args:
-            visible (bool): Whether a gallery options or contextual card is open.
+            visible (bool): Whether an eligible linked photo grid or its menu is shown.
         Returns:
             None: GamePresence also retains window and active-owner visibility gates.
         """
@@ -1417,7 +1425,7 @@ class QtWindow(QMainWindow):
         Args:
             _changed (bool): One participating writer's state notification.
         Returns:
-            None: Independent PDF uploads retain their exact active capture target.
+            None: Report uploads retain their exact admitted destination.
         """
         exclusive = self.photos.busy() or self.updater.gate.active
         capture_owned = self.capture is not None and self.capture.busy()

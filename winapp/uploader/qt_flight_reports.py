@@ -39,13 +39,13 @@ REPORT_OBSERVE_MS = 250
 
 @dataclass(frozen=True)
 class PreparedReport:
-    """Transfer the validated local worker together with its actual workspace lease."""
+    """Transfer a validated report worker and any independent workspace lease."""
 
     worker: FinalizationWorker
     lease: WorkspaceLease | None
 
     def release(self) -> None:
-        """Release only the independent workspace owned by a local render.
+        """Release the independently owned report workspace.
 
         Returns:
             None: Leaves a borrowed active capture workspace with its owner.
@@ -73,6 +73,9 @@ class QtFlightReports(QWidget):
     def __init__(
         self, root: Path, selected: Callable[[], Path | None],
         capture: CaptureCommands | None = None, redact: Callable[[str], str] | None = None,
+        *, upload_selection: Callable[
+            [], tuple[Path | None, tuple[tuple[str, str], ...], bool, bool]
+        ] | None = None,
     ) -> None:
         """Create report controls for the current native flight selection.
 
@@ -80,8 +83,11 @@ class QtFlightReports(QWidget):
             root (Path): Existing per-profile root of the owned flight workspace.
             selected (Callable[[], Path | None]): Current verified catalog row
                 directory, or None while no flight is selected.
-            capture (CaptureCommands | None): Current owner of a live Watcher target.
+            capture (CaptureCommands | None): Shared capture and upload destination owner.
             redact (Callable[[str], str] | None): Credential-aware status redaction.
+            upload_selection (Callable[[], tuple[Path | None, tuple[tuple[str, str], ...], bool, bool]] | None):
+                Selected flight, revision and language pairs, multiple-flight
+                flag and explicit-selection flag.
         Returns:
             None: Starts idle with no workspace write ownership.
         """
@@ -89,6 +95,7 @@ class QtFlightReports(QWidget):
         self._root = root
         self._selected = selected
         self._capture = capture
+        self._upload_selection = upload_selection
         self._redact = redact or (lambda message: message)
         self._language = current_language()
         self._preparing = False
@@ -103,16 +110,23 @@ class QtFlightReports(QWidget):
         self._timer.setInterval(REPORT_OBSERVE_MS)
         self._timer.timeout.connect(self._observe)
         layout = QVBoxLayout(self)
-        commands = QHBoxLayout()
+        self._commands = commands = QHBoxLayout()
         commands.addStretch()
-        self.create_button = ActionButton(tr(self._language, 'create_local_pdf'), self.create)
+        self.create_button = ActionButton(
+            tr(self._language, 'report_generate_only'), self.create,
+        )
+        self.send_button = ActionButton(
+            tr(self._language, 'report_send_only'), self._send_selected, primary=True,
+        )
         self.create_upload_button = ActionButton(
-            tr(self._language, 'report_create_upload'), self.create_and_upload, primary=True,
+            tr(self._language, 'report_create_upload'), self.create_and_upload,
         )
         self.create_upload_button.setVisible(capture is not None)
         self.create_upload_button.setEnabled(False)
+        self.send_button.setVisible(capture is not None and upload_selection is not None)
         self.cancel_button = ActionButton(tr(self._language, 'cancel_pdf'), self.cancel)
         commands.addWidget(self.create_button)
+        commands.addWidget(self.send_button)
         commands.addWidget(self.create_upload_button)
         commands.addWidget(self.cancel_button)
         layout.addLayout(commands)
@@ -138,6 +152,28 @@ class QtFlightReports(QWidget):
         layout.addWidget(self.status)
         self.cancel_button.setEnabled(False)
         self.cancel_button.hide()
+        self._sync_commands()
+
+    def add_dispatch_action(self, action: ActionButton) -> None:
+        """Place the saved flight's SimBrief action beside local PDF creation.
+
+        Args:
+            action (ActionButton): Shared control owned by the saved flight selection.
+        Returns:
+            None: Mounts the action in the existing report command row.
+        """
+        self._commands.insertWidget(self._commands.indexOf(self.create_button), action)
+
+    def show_dispatch_status(self, message: str) -> None:
+        """Show SimBrief feedback in the visible saved flights workflow.
+
+        Args:
+            message (str): Localized loading, attachment or refusal message.
+        Returns:
+            None: Updates the visible status while the render lane is idle.
+        """
+        if self.isVisible() and not self.busy():
+            self._set_status(message)
 
     def busy(self) -> bool:
         """Report whether any real render or workspace admission is still owned.
@@ -172,7 +208,7 @@ class QtFlightReports(QWidget):
             return
         self._preparing = True
         self._set_status(gettext('Loading…'))
-        self.create_button.setEnabled(False)
+        self._sync_commands()
         self._lane.submit(lambda cancelled, publish: self._prepare(directory, cancelled, publish))
 
     def set_capture_busy(self, busy: bool) -> None:
@@ -184,8 +220,34 @@ class QtFlightReports(QWidget):
             None: Leaves explicit saved PDF upload available to the same target.
         """
         self._capturing = busy
-        self.create_button.setEnabled(not busy and not self.busy())
-        self.create_upload_button.setEnabled(busy and not self.busy())
+        self._sync_commands()
+
+    def _send_selected(self) -> None:
+        """Send only the exact saved report selection from the operator tree.
+
+        Returns:
+            None: Delegates the captured flight and edition identities to upload.
+        """
+        selection = self._upload_selection
+        if selection is None:
+            return
+        directory, editions, multiple_flights, has_selection = selection()
+        self.upload_selected(directory, editions, multiple_flights, has_selection)
+
+    def _sync_commands(self) -> None:
+        """Enable report actions from current operation ownership.
+
+        Returns:
+            None: Keeps generation, sending and combined work independently gated.
+        """
+        busy = self.busy()
+        self.create_button.setEnabled(not busy and not self._capturing)
+        self.send_button.setEnabled(
+            self._upload_selection is not None and not busy,
+        )
+        self.create_upload_button.setEnabled(
+            not busy and self._capturing,
+        )
 
     def create_and_upload(self) -> None:
         """Render a new revision and deliver it to the currently captured gallery.
@@ -200,13 +262,12 @@ class QtFlightReports(QWidget):
         if directory is None:
             self._set_status(tr(self._language, 'select_saved_flight'))
             return
-        if target is None:
+        if not self._capturing or target is None:
             self._set_status(tr(self._language, 'report_start_watcher'))
             return
         self._preparing = True
         self._set_status(gettext('Loading…'))
-        self.create_button.setEnabled(False)
-        self.create_upload_button.setEnabled(False)
+        self._sync_commands()
         self._lane.submit(lambda cancel, publish: publish(PreparedReport(
             capture.prepare_report_creation(directory, target[0]), None,
         )) if not cancel.is_set() else None)
@@ -225,7 +286,7 @@ class QtFlightReports(QWidget):
             multiple_flights (bool): Whether selected catalog rows span sessions.
             has_selection (bool): Whether the caller captured explicit tree rows.
         Returns:
-            None: Approves only one stopped flight and current Watcher destination.
+            None: Approves one stopped flight and verified upload destination.
         """
         if self._capture is None or self.busy():
             return
@@ -241,11 +302,10 @@ class QtFlightReports(QWidget):
             self._set_status(tr(self._language, 'select_saved_flight'))
             return
         if target is None:
-            self._set_status(tr(self._language, 'report_start_watcher'))
+            self._set_status(tr(self._language, 'report_upload_target_unavailable'))
             return
         self._preparing = True
-        self.create_button.setEnabled(False)
-        self.create_upload_button.setEnabled(False)
+        self._sync_commands()
         requested_editions = editions if has_selection else None
 
         def list_editions(cancelled: Event, publish: Callable[[ReportChoices], None]) -> None:
@@ -289,14 +349,15 @@ class QtFlightReports(QWidget):
         if not self._upload_admitted:
             self._prepared('')
         self._upload_admitted = False
+        self._sync_commands()
 
     def _choose_upload(self, choice: ReportChoices) -> None:
-        """Confirm the exact saved editions and their current Watcher destination.
+        """Confirm exact saved editions and the current verified destination.
 
         Args:
-            choice (ReportChoices): Verified catalogue and original target fingerprint.
+            choice (ReportChoices): Verified catalogue and original target binding.
         Returns:
-            None: Submits only the files selected in the explicit confirmation.
+            None: Prepares only the editions from the approved selection.
         """
         if not choice.editions or self._capture is None:
             self._set_status(tr(self._language, 'no_saved_pdf'))
@@ -304,7 +365,10 @@ class QtFlightReports(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle(tr(self._language, 'upload_saved_pdf'))
         layout = QVBoxLayout(dialog)
-        label = QLabel(tr(self._language, 'confirm_saved_upload') + '\n' + choice.destination)
+        label = QLabel(
+            tr(self._language, 'report_confirm_send_only')
+            + '\n' + choice.destination,
+        )
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -375,10 +439,40 @@ class QtFlightReports(QWidget):
         if not selected:
             return
         source = self._capture
+        if source is None:
+            self._set_status(tr(self._language, 'report_upload_target_unavailable'))
+            return
+        current_target = source.report_target()
+        if current_target is None or current_target[0] != choice.binding:
+            self._set_status(tr(self._language, 'report_upload_target_changed'))
+            return
         self._upload_admitted = True
-        self._lane.submit(lambda cancel, publish: publish(PreparedReport(
-            source.prepare_report_upload(choice.directory, selected, choice.binding), None,
-        )) if not cancel.is_set() else None)
+
+        def prepare_upload(
+            cancelled: Event, publish: Callable[[PreparedReport], None],
+        ) -> None:
+            """Prepare an exact saved-edition upload with its workspace owner.
+
+            Args:
+                cancelled (Event): Current preparation and view lifetime fence.
+                publish (Callable[[PreparedReport], None]): Worker and lease
+                    receipt for the Qt render lane.
+            Returns:
+                None: Transfers or releases the prepared worker's lease.
+            """
+            if cancelled.is_set():
+                return
+            worker, lease = source.prepare_report_upload(
+                choice.directory, selected, choice.binding,
+            )
+            report = PreparedReport(worker, lease)
+            try:
+                publish(report)
+            except BaseException:
+                report.release()
+                raise
+
+        self._lane.submit(prepare_upload)
 
     def _prepare(
         self, directory: Path, cancelled: Event, publish: Callable[[PreparedReport], None],
@@ -449,8 +543,7 @@ class QtFlightReports(QWidget):
             self._set_status(tr(self._language, 'phase_failed'))
         elif self.status.text() == gettext('Loading…'):
             self._set_status('')
-        self.create_button.setEnabled(self._current is None and not self._capturing)
-        self.create_upload_button.setEnabled(self._current is None and self._capturing)
+        self._sync_commands()
         self.cancel_button.setEnabled(self._current is not None)
         self.cancel_button.setVisible(self._current is not None)
 
@@ -488,8 +581,7 @@ class QtFlightReports(QWidget):
         report.release()
         self._current = None
         self.progress.hide()
-        self.create_button.setEnabled(not self._capturing)
-        self.create_upload_button.setEnabled(self._capturing)
+        self._sync_commands()
         self.cancel_button.setEnabled(False)
         self.cancel_button.hide()
         self.finished.emit()

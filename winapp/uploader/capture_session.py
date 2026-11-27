@@ -454,23 +454,26 @@ class CaptureCommands(Protocol):
         """
 
     def report_target(self) -> tuple[str, str] | None:
-        """Project the active Watcher's confirmed report destination.
+        """Project an active Watcher or current verified upload destination.
 
         Returns:
-            tuple[str, str] | None: Exact binding and display name, when available.
+            tuple[str, str] | None: Exact binding and display name, when
+                available without restoring or starting a connection.
         """
 
     def prepare_report_upload(
         self, directory: Path, editions: tuple[tuple[str, str], ...], binding: str,
-    ) -> FinalizationWorker:
-        """Verify selected saved report editions and the active Watcher target.
+    ) -> tuple[FinalizationWorker, WorkspaceLease | None]:
+        """Verify saved editions and return their worker plus lease ownership.
 
         Args:
             directory (Path): Exact approved stopped flight.
             editions (tuple[tuple[str, str], ...]): Selected revision and language IDs.
             binding (str): Destination shown in the approval dialog.
         Returns:
-            FinalizationWorker: Existing unstarted delivery worker for those editions.
+            tuple[FinalizationWorker, WorkspaceLease | None]: Unstarted report-only
+                delivery worker and an independent lease to release after it ends;
+                None means the active capture owner retains the lease.
         """
 
     def prepare_report_creation(self, directory: Path, binding: str) -> FinalizationWorker:

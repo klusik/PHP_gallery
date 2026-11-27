@@ -2390,6 +2390,14 @@ identifiers and filenames must wrap without a horizontal scrollbar, while
 vertical scrolling keeps both preview images reachable above the fixed decision
 controls. The desktop and narrow captures are `watcher-review.png` and
 `watcher-review-narrow.png` in the Qt native artifact.
+
+The opt-in Windows SimBrief preview in `issue-445-winapp.yml` retains
+`01-nacist-simbrief.png` and `02-simbrief-nacten.png` for review. The
+`[simbrief-preview]` commit marker enables it on the SimBrief feature branch.
+The central `winapp-simbrief-preview` suite checks the exact named Qt case. It
+supplies the same synthetic linked Photos view to both captures and drives
+the actual load action.
+
 The Finish fixtures distinguish unknown results, known blockers, and scheduled
 transport retry. The manual upload overlap fixture keeps the exact same-target
 uncertainty marker for identical bytes and for a changed original. It checks

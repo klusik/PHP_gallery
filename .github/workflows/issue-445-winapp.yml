@@ -14,6 +14,7 @@ on:
       - feature/445-pyside6-winapp
       - feature/446-winapp-qt-default-inspector
       - feature/381-qt-watch-recovery
+      - feature/winapp-watcher-simbrief
   workflow_call:
     inputs:
       candidate:
@@ -88,9 +89,87 @@ jobs:
           # Consumers: qualification review. Rationale: 60 matches issue 434.
           retention-days: 60
 
+  simbrief-preview:
+    name: SimBrief Photos preview (Windows)
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feature/winapp-watcher-simbrief' &&
+      contains(github.event.head_commit.message, '[simbrief-preview]')
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: opt-in Windows preview.
+    # Consumers: Actions scheduler. Rationale: seven minutes covers a cold
+    # Qt install and the central audit's bounded single preview process.
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install WinApp source dependencies
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+      - name: Capture the before and after Photos states through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_REQUIRE_QT: '1'
+          PHP_GALLERY_NATIVE_QT_FIXTURES: '1'
+          PHP_GALLERY_SIMBRIEF_PREVIEW_DIR: ${{ github.workspace }}/cache/simbrief-preview
+          QT_QPA_PLATFORM: windows
+          QT_QUICK_BACKEND: software
+          PYTHONFAULTHANDLER: '1'
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) {
+            throw 'Checkout does not match the preview SHA.'
+          }
+          git merge-base --is-ancestor $env:PHP_GALLERY_SOURCE_BASE HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The immutable source base is missing from the preview history.'
+          }
+          php scripts/audit.php --suite=winapp-simbrief-preview --json=cache/test-audit/winapp-simbrief-preview.json
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          foreach ($file in '01-nacist-simbrief.png', '02-simbrief-nacten.png') {
+            $path = Join-Path $env:PHP_GALLERY_SIMBRIEF_PREVIEW_DIR $file
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "The hosted preview did not produce $file."
+            }
+          }
+      - name: Upload the two synthetic WinApp screenshots
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: winapp-simbrief-preview-${{ github.sha }}
+          path: cache/simbrief-preview/*.png
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: opt-in synthetic preview images.
+          # Consumers: review artifact. Rationale: 30 days allows design feedback.
+          retention-days: 30
+      - name: Retain the central audit and child diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: winapp-simbrief-preview-diagnostics-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: diagnostics for the preview audit.
+          # Consumers: failed-run review. Rationale: retain with the preview for 30 days.
+          retention-days: 30
+
   backends:
     name: ${{ matrix.label }}
-    if: ${{ !startsWith(github.event.head_commit.message, '[gui-baseline]') }}
+    if: >-
+      !startsWith(github.event.head_commit.message, '[gui-baseline]') &&
+      (inputs.candidate || github.ref != 'refs/heads/feature/winapp-watcher-simbrief')
     runs-on: ${{ matrix.runner }}
     # Type: int. Units: minutes. Scope: one exact-SHA desktop regression.
     # Consumers: Actions scheduler. Rationale: 18 gives the bounded WinApp

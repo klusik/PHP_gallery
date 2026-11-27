@@ -8792,6 +8792,7 @@ class DesktopCapture:
         self._context_starting = False
         self._revocation_operation: FinalizationWorker | None = None
         self._abandon_config: WatcherConfig | None = None
+        self._linked_abandon_session_path: Path | None = None
         profile = WatcherProfile.load(self.root)
         self._utc_sync_enabled = (
             profile.preferences['sync_utc_time'] if profile is not None
@@ -9058,6 +9059,8 @@ class DesktopCapture:
             raise RuntimeError('Confirmed revocation cleanup must finish first.')
         if self._abandon_config is not None:
             raise RuntimeError('Retry local key cleanup before starting another capture action.')
+        if self._linked_abandon_session_path is not None:
+            raise RuntimeError('Retry flight abandonment before starting another capture action.')
         if self.finalizer is not None and self.finalizer.is_alive():
             if revoke:
                 raise RuntimeError('Wait for the current operation to finish.')
@@ -9278,18 +9281,65 @@ class DesktopCapture:
             binding = connection_binding(url, key)
         lease = self._workspace()
         plans = pending_sessions(self.root, binding)
-        if not plans:
-            raise ValueError('No unambiguous pending Watcher session is available.')
+        pending_cohort = tuple(plans)
         worker = self.worker
-        if worker is not None and worker.is_alive():
+        recorder = self.recorder
+        retry_path = self._linked_abandon_session_path if linked else None
+        live_recorder = recorder is not None and recorder.is_alive()
+        live_worker = worker is not None and worker.is_alive()
+        active_directory: Path | None = None
+        if linked:
+            if live_recorder and recorder is not None:
+                active_directory = recorder.directory.resolve(strict=True)
+            if live_worker and worker is not None:
+                if (worker._queue is None or worker._queue.binding != binding
+                        or worker.drain_manifest is None):
+                    raise ValueError('The active linked flight could not be verified.')
+                worker_directory = worker.drain_manifest.parent.resolve(strict=True)
+                if active_directory is not None and active_directory != worker_directory:
+                    raise ValueError('The active linked flight could not be verified.')
+                active_directory = worker_directory
+        if linked and retry_path is None and active_directory is not None:
+            active_plans = [
+                plan for plan in plans
+                if plan.directory.resolve(strict=True) == active_directory
+            ]
+            if len(active_plans) != 1:
+                raise ValueError('The active linked flight could not be verified.')
+            plans = active_plans
+            retry_path = active_directory
+            self._linked_abandon_session_path = retry_path
+        elif retry_path is not None:
+            resolved_retry_path = retry_path.resolve(strict=True)
+            if (retry_path.is_symlink()
+                    or resolved_retry_path.parent != self.root.resolve(strict=True)):
+                raise ValueError('The linked flight closure could not be verified.')
+            if active_directory is not None and active_directory != resolved_retry_path:
+                raise ValueError('The active linked flight changed during closure.')
+            plans = [
+                plan for plan in plans
+                if plan.directory.resolve(strict=True) == resolved_retry_path
+            ]
+            if not plans:
+                completed = SessionPlan.load(retry_path)
+                if (completed.binding != binding or not completed.completed
+                        or not completed.abandoned):
+                    raise ValueError('The linked flight closure could not be verified.')
+        if not plans and retry_path is None:
+            raise ValueError('No unambiguous pending Watcher session is available.')
+        if not linked and worker is not None and worker.is_alive():
             if (worker._queue is None or worker._queue.binding != binding
                     or worker.drain_manifest is None
                     or not any(worker.drain_manifest.parent == plan.directory for plan in plans)):
                 raise ValueError('Pending photographs belong to another gallery connection.')
-        if state.alive:
+        if any(active is not None and active.is_alive()
+               for active in (worker, recorder, self.utc)):
             self.interrupt()
             deadline = time.monotonic() + FINALIZATION_DRAIN_SECONDS
-            while self.snapshot().alive:
+            while any(
+                active is not None and active.is_alive()
+                for active in (self.worker, self.recorder, self.utc)
+            ):
                 if time.monotonic() >= deadline:
                     raise TimeoutError('Workers are still stopping; local key retained.')
                 time.sleep(CAPTURE_DRAIN_POLL_SECONDS)
@@ -9311,9 +9361,13 @@ class DesktopCapture:
             persist_retained_capture_closure(
                 CONFIG_DIR, lease, plan, linked, cutoff, lambda _step: None,
             )
+        self._linked_abandon_session_path = None
         self.worker, self.recorder, self.finalizer = None, None, None
         self.capture_closed = True
-        self.more_retained = False
+        closed_ids = {plan.session_id for plan in plans}
+        self.more_retained = any(
+            plan.session_id not in closed_ids for plan in pending_cohort
+        )
         self._context_cleanup_due = linked
         if config is None:
             self.emit('success', tr(current_language(), 'flight_abandoned'))
@@ -9457,6 +9511,8 @@ class DesktopCapture:
             raise RuntimeError('Confirmed key cleanup must finish before Force Finish.')
         if self._abandon_config is not None:
             raise RuntimeError('Local key cleanup must finish before Force Finish.')
+        if self._linked_abandon_session_path is not None:
+            raise RuntimeError('Retry flight abandonment before Force Finish.')
         if self._context_cleanup_failed:
             raise RuntimeError('Watcher access cleanup must finish before Force Finish.')
         plans = {plan.directory.resolve(): plan for plan in operation.plans}
@@ -9645,6 +9701,8 @@ class DesktopCapture:
             raise RuntimeError('Confirmed revocation cleanup must finish first.')
         if self._abandon_config is not None:
             raise RuntimeError('Retry local key cleanup before resetting the Watcher.')
+        if self._linked_abandon_session_path is not None:
+            raise RuntimeError('Retry flight abandonment before resetting the Watcher.')
         self.reset_completed = False
         lease = self._workspace()
         values = WatcherConfig().to_dict()
@@ -10094,6 +10152,8 @@ class DesktopCapture:
         Returns:
             WatchedReportTarget | None: Same live gallery and credentials as Watcher.
         """
+        if self._linked_abandon_session_path is not None:
+            return None
         worker = self.worker
         if (worker is None or not worker.is_alive() or not worker.initial_captured
                 or worker.drain_only or worker.stop_event.is_set() or worker.drain_event.is_set()
@@ -10110,13 +10170,84 @@ class DesktopCapture:
             return None
         return WatchedReportTarget(endpoint, upload_url=endpoint, api_key=key, gui_admission=worker._gui_admission)
 
-    def report_target(self) -> tuple[str, str] | None:
-        """Project only the current destination identity and operator caption.
+    def _report_capture_active(self) -> bool:
+        """Refuse idle report routing while capture lifecycle work is active.
 
         Returns:
-            tuple[str, str] | None: Target fingerprint and caption without credentials.
+            bool: True while a Watcher, recorder, finalizer, UTC worker,
+                contextual cleanup or connection transition could own state.
+        """
+        return bool(
+            self._context_starting
+            or self._context_cleanup_failed or self._abandon_config is not None
+            or self._linked_abandon_session_path is not None
+            or (self._revocation_operation is not None
+                and self._revocation_operation.local_cleanup_pending)
+            or any(
+                worker is not None and worker.is_alive()
+                for worker in (
+                    self.worker, self.recorder, self.finalizer, self.utc,
+                    self._context_cleanup, self._revocation_operation,
+                )
+            )
+        )
+
+    def _current_report_target(self) -> WatchedReportTarget | None:
+        """Capture only the currently verified linked or legacy upload mode.
+
+        Returns:
+            WatchedReportTarget | None: Exact current upload authority without
+                starting a connection or restoring a saved grant.
+        Raises:
+            ModeCoordinatorError: The current upload mode cannot be verified.
+            OSError: The saved legacy connection cannot be read.
+            RuntimeError: The selected linked grant is unavailable.
+            ValueError: The current upload configuration is invalid.
+        """
+        mode = self.owner.view()
+        if mode.state == 'linked_active':
+            record = mode.record
+            target = self.target()
+            if (record is None or record.mode != 'linked' or target is None
+                    or not target.session.available()
+                    or not target.session.can_upload()
+                    or not target.session.matches_issuer(target.issuer)
+                    or record.issuer != target.issuer
+                    or record.account_id != target.user_id
+                    or record.gallery_id != target.gallery_id
+                    or record.scope != target.session.approved_scope()
+                    or target.watch_key is not None):
+                return None
+            return WatchedReportTarget(
+                target.title or f'{target.issuer} #{target.gallery_id}',
+                linked_target=target,
+            )
+        if mode.state in LEGACY_UPLOAD_STATES:
+            config = capture_worker_config(self.saved())
+            endpoint = normalize_upload_url(config.gallery_url)
+            key = config.api_key.strip()
+            if not endpoint or not key:
+                return None
+            port = self.store.mode_port(config)
+            return WatchedReportTarget(
+                endpoint, upload_url=endpoint, api_key=key,
+                gui_admission=(self.owner, port),
+            )
+        return None
+
+    def report_target(self) -> tuple[str, str] | None:
+        """Project the active Watcher or verified idle destination for review.
+
+        Returns:
+            tuple[str, str] | None: Exact binding and display name, or None
+                when mode evidence or active capture state is unavailable.
         """
         target = self._watched_report_target()
+        if target is None and not self._report_capture_active():
+            try:
+                target = self._current_report_target()
+            except (ModeCoordinatorError, OSError, RuntimeError, ValueError):
+                return None
         return (target.binding(), target.label) if target is not None else None
 
     def inspect_watch_folder(
@@ -10156,34 +10287,77 @@ class DesktopCapture:
 
     def prepare_report_upload(
         self, directory: Path, editions: tuple[tuple[str, str], ...], binding: str,
-    ) -> FinalizationWorker:
-        """Build the existing saved report worker under the active capture lease.
+    ) -> tuple[FinalizationWorker, WorkspaceLease | None]:
+        """Build a report-only worker under active or independent lease ownership.
 
         Args:
             directory (Path): Exact stopped flight selected in the catalogue.
             editions (tuple[tuple[str, str], ...]): Approved revision and language pairs.
             binding (str): Verified active destination shown to the operator.
         Returns:
-            FinalizationWorker: Unstarted writer for the exact existing report files.
+            tuple[FinalizationWorker, WorkspaceLease | None]: Unstarted writer
+                and its independently owned lease, or None when the active
+                capture owner already retains the workspace lease.
+        Raises:
+            OSError: The stopped flight workspace cannot be leased or read.
+            ValueError: Mode, target, session or selected edition changed.
+            RuntimeError: Capture lifecycle work prevents independent admission.
         """
-        plan, target = self._verified_active_report(directory, binding)
-        revisions = {revision.report_id: revision for revision in report_revisions(directory)}
-        chosen = {}
-        for identifier, language in editions:
-            revision = revisions.get(identifier)
-            if revision is None or language not in revision.files:
+        active_target = self._watched_report_target()
+        if active_target is not None:
+            if active_target.binding() != binding:
+                raise ValueError('The current Watcher destination changed.')
+            plan, target = self._verified_active_report(directory, binding)
+            lease = None
+        else:
+            if self._report_capture_active():
+                raise RuntimeError('Wait for the current Watcher operation to finish.')
+            target = self._current_report_target()
+            if target is None or target.binding() != binding:
+                raise ValueError('The selected report destination changed.')
+            if self.lease is not None:
+                self.lease.verify()
+                self.lease.release()
+                self.lease = None
+            lease = WorkspaceLease(self.root)
+            try:
+                plan = self._verified_saved_report(directory, lease)
+                current = self._current_report_target()
+                if current is None or current.binding() != binding:
+                    raise ValueError('The selected report destination changed.')
+                target = current
+            except BaseException:
+                lease.release()
+                raise
+
+        try:
+            revisions = {
+                revision.report_id: revision
+                for revision in report_revisions(directory)
+            }
+            chosen = {}
+            for identifier, language in editions:
+                revision = revisions.get(identifier)
+                if revision is None or language not in revision.files:
+                    raise ValueError('The selected report is unavailable.')
+                subset = chosen.setdefault(identifier, replace(revision, files={}))
+                subset.files[language] = revision.files[language]
+            if not chosen:
                 raise ValueError('The selected report is unavailable.')
-            subset = chosen.setdefault(identifier, replace(revision, files={}))
-            subset.files[language] = revision.files[language]
-        if not chosen:
-            raise ValueError('The selected report is unavailable.')
-        plan = replace(plan, languages=tuple(dict.fromkeys(
-            language for revision in chosen.values() for language in revision.files
-        )))
-        return FinalizationWorker(
-            [plan], '', '', lambda _cancel, _deadline: None, lambda: None, False,
-            saved_revisions=tuple(chosen.values()), watched_target=target, emit=self.emit,
-        )
+            plan = replace(plan, languages=tuple(dict.fromkeys(
+                language for revision in chosen.values()
+                for language in revision.files
+            )))
+            worker = FinalizationWorker(
+                [plan], '', '', lambda _cancel, _deadline: None,
+                lambda: None, False, saved_revisions=tuple(chosen.values()),
+                watched_target=target, emit=self.emit,
+            )
+            return worker, lease
+        except BaseException:
+            if lease is not None:
+                lease.release()
+            raise
 
     def prepare_report_creation(self, directory: Path, binding: str) -> FinalizationWorker:
         """Generate and deliver a new local edition through the active Watcher.
@@ -10211,14 +10385,30 @@ class DesktopCapture:
         target = self._watched_report_target()
         if target is None or target.binding() != binding or self.lease is None:
             raise ValueError('The current Watcher session could not be verified.')
-        self.lease.verify()
+        return self._verified_saved_report(directory, self.lease), target
+
+    def _verified_saved_report(
+        self, directory: Path, lease: WorkspaceLease,
+    ) -> SessionPlan:
+        """Verify one stopped saved session while holding its workspace lease.
+
+        Args:
+            directory (Path): Exact selected session below the flight workspace.
+            lease (WorkspaceLease): Active or independently acquired workspace owner.
+        Returns:
+            SessionPlan: Validated immutable session plan for report-only delivery.
+        Raises:
+            OSError: The workspace or saved session cannot be read safely.
+            ValueError: The selected path is not a confined stopped session.
+        """
+        lease.verify()
         if (directory.parent != self.root or directory.is_symlink()
                 or directory.resolve(strict=True).parent != self.root.resolve(strict=True)
                 or not _local_entry(directory / 'session.json')
                 or not _local_entry(directory / 'completion.json')
                 or read_document(directory / 'session.json').get('recording_ended') is not True):
             raise ValueError('Select a saved flight.')
-        return SessionPlan.load(directory), target
+        return SessionPlan.load(directory)
 
     def reconcile_workers(self, *, retire_context: bool = True) -> None:
         """Stop native acquisition when the photo worker has actually ended.
@@ -10323,7 +10513,10 @@ class DesktopCapture:
             and self._revocation_operation.server_revocation_confirmed
             and self._revocation_operation.snapshot().phase != 'completed'
         )
-        abandon_pending = self._abandon_config is not None
+        abandon_pending = (
+            self._abandon_config is not None
+            or self._linked_abandon_session_path is not None
+        )
         try:
             mode = self.owner.view()
             legacy_mode = mode.state in LEGACY_UPLOAD_STATES

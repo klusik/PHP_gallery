@@ -54,6 +54,18 @@ const AUDIT_WINAPP_DELEGATED_VISUAL_CLASS =
     'test_gui_visual_parity.VisualParityTests';
 
 /**
+ * Identify the independent Qt case that captures both SimBrief Photos previews.
+ * @var string
+ * Units: fully qualified unittest ID.
+ * Scope: opt-in SimBrief Photos screenshot audit.
+ * Consumers: audit_run_winapp() and audit_validate_winapp_report().
+ * Rationale: Use the exact before-and-after case for selection and evidence
+ * validation. The delegated visual class has its own identity.
+ */
+const AUDIT_WINAPP_SIMBRIEF_PREVIEW_TEST_ID =
+    'test_qt_backend.QtBackendTests.test_photos_simbrief_gallery_preview_screenshots';
+
+/**
  * Validate a complete version-one WinApp unittest evidence document.
  *
  * The report records unittest callbacks; aggregate counts alone never establish
@@ -67,7 +79,7 @@ const AUDIT_WINAPP_DELEGATED_VISUAL_CLASS =
  * @param bool $nativeOnly Require the explicit native-viewer diagnostic pattern instead of complete discovery; default false never accepts a diagnostic as full evidence.
  * @param bool $partitioned Require the configured partition count and complete identity proof; default false retains the original schema contract.
  * @param bool $delegatedVisual Require the split proof with exactly one delegated visual class.
- * @param list<string>|null $selectedTestIds Require this exact ordered selected-ID child report when non-null.
+ * @param list<string>|null $selectedTestIds Require the exact ordered visual child IDs or the single SimBrief preview ID, when non-null.
  */
 function audit_validate_winapp_report(
     array $report,
@@ -645,12 +657,14 @@ function audit_validate_winapp_report(
             || array_column($tests, 'id') !== $selectedTestIds) {
             return $invalid('selected-test-identities-do-not-match');
         }
-        foreach ($selectedTestIds as $testId) {
-            if (!str_starts_with(
-                $testId,
-                AUDIT_WINAPP_DELEGATED_VISUAL_CLASS . '.',
-            )) {
-                return $invalid('unexpected-selected-test-class');
+        if ($selectedTestIds !== [AUDIT_WINAPP_SIMBRIEF_PREVIEW_TEST_ID]) {
+            foreach ($selectedTestIds as $testId) {
+                if (!str_starts_with(
+                    $testId,
+                    AUDIT_WINAPP_DELEGATED_VISUAL_CLASS . '.',
+                )) {
+                    return $invalid('unexpected-selected-test-class');
+                }
             }
         }
     }

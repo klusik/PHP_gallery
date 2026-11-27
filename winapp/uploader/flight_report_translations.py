@@ -382,6 +382,13 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "report_watcher_off": "No gallery is being watched",
         "report_start_watcher": "Start Watcher on the gallery you want to upload to.",
         "report_watched_gallery": "Watched upload gallery",
+        "report_upload_destination": "Upload destination",
+        "report_no_upload_destination": "No upload gallery connected",
+        "report_upload_target_unavailable": "Connect an upload gallery to send saved PDFs.",
+        "report_upload_target_changed": "The upload gallery changed. Select the original destination and try again.",
+        "report_confirm_send_only": "Send the selected saved PDFs to this gallery?",
+        "report_generate_only": "Generate PDFs only",
+        "report_send_only": "Send PDFs only…",
         "report_create_upload": "Create and upload",
         "report_choose_revisions": "Select revisions for this gallery. Use Ctrl or Shift to select more than one.",
         "report_upload_selected": "Upload selected revisions",
@@ -667,6 +674,13 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "report_watcher_off": "Žádná galerie se nesleduje",
         "report_start_watcher": "Spusťte Sledovátko pro galerii, do které chcete nahrávat.",
         "report_watched_gallery": "Sledovaná galerie pro nahrání",
+        "report_upload_destination": "Cíl odeslání",
+        "report_no_upload_destination": "Galerie pro nahrávání není připojená",
+        "report_upload_target_unavailable": "Pro odeslání uložených PDF připojte galerii pro nahrávání.",
+        "report_upload_target_changed": "Cílová galerie se změnila. Vyberte původní cíl a zkuste to znovu.",
+        "report_confirm_send_only": "Odeslat vybraná uložená PDF do této galerie?",
+        "report_generate_only": "Jen generovat PDF",
+        "report_send_only": "Jen odeslat PDF…",
         "report_create_upload": "Vytvořit a nahrát",
         "report_choose_revisions": "Vyberte revize pro tuto galerii. Pomocí Ctrl nebo Shift vyberete více revizí.",
         "report_upload_selected": "Nahrát vybrané revize",
@@ -952,6 +966,13 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "report_watcher_off": "Keine Galerie wird überwacht",
         "report_start_watcher": "Starten Sie die Überwachung für die gewünschte Zielgalerie.",
         "report_watched_gallery": "Überwachte Zielgalerie",
+        "report_upload_destination": "Upload-Ziel",
+        "report_no_upload_destination": "Keine Zielgalerie verbunden",
+        "report_upload_target_unavailable": "Verbinden Sie eine Zielgalerie, um gespeicherte PDFs zu senden.",
+        "report_upload_target_changed": "Die Zielgalerie wurde geändert. Wählen Sie das ursprüngliche Ziel und versuchen Sie es erneut.",
+        "report_confirm_send_only": "Die ausgewählten gespeicherten PDFs an diese Galerie senden?",
+        "report_generate_only": "Nur PDFs erstellen",
+        "report_send_only": "Nur PDFs senden…",
         "report_create_upload": "Erstellen und hochladen",
         "report_choose_revisions": "Wählen Sie Versionen für diese Galerie. Mit Strg oder Umschalt wählen Sie mehrere Versionen.",
         "report_upload_selected": "Ausgewählte Versionen hochladen",
@@ -1237,6 +1258,13 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "report_watcher_off": "Inget galleri bevakas",
         "report_start_watcher": "Starta bevakaren för galleriet som du vill ladda upp till.",
         "report_watched_gallery": "Bevakat uppladdningsgalleri",
+        "report_upload_destination": "Uppladdningsmål",
+        "report_no_upload_destination": "Inget uppladdningsgalleri är anslutet",
+        "report_upload_target_unavailable": "Anslut ett uppladdningsgalleri för att skicka sparade PDF-filer.",
+        "report_upload_target_changed": "Målgalleriet har ändrats. Välj det ursprungliga målet och försök igen.",
+        "report_confirm_send_only": "Skicka de valda sparade PDF-filerna till det här galleriet?",
+        "report_generate_only": "Skapa bara PDF-filer",
+        "report_send_only": "Skicka bara PDF-filer…",
         "report_create_upload": "Skapa och ladda upp",
         "report_choose_revisions": "Välj versioner för det här galleriet. Använd Ctrl eller Skift för att välja flera.",
         "report_upload_selected": "Ladda upp valda versioner",
@@ -1516,6 +1544,7 @@ _LANGUAGE_NAMES = ("en", "cs", "de", "sv")
 
 _TRANSLATIONS["en"].update({
     "simbrief_load": "Load from SimBrief",
+    "simbrief_load_quick": "Load SimBrief",
     "simbrief_identity": "SimBrief pilot ID or username",
     "simbrief_loading": "Loading the latest SimBrief OFP…",
     "simbrief_loaded": "OFP loaded. Re-create PDFs to include the plan.",
@@ -1543,6 +1572,7 @@ _TRANSLATIONS["en"].update({
 })
 _TRANSLATIONS["cs"].update({
     "simbrief_load": "Načíst ze SimBriefu",
+    "simbrief_load_quick": "Načíst SimBrief",
     "simbrief_identity": "SimBrief ID pilota nebo uživatelské jméno",
     "simbrief_loading": "Načítám nejnovější OFP ze SimBriefu…",
     "simbrief_loaded": "OFP načteno. Plán zahrnete vytvořením nové verze PDF.",
@@ -1570,6 +1600,7 @@ _TRANSLATIONS["cs"].update({
 })
 _TRANSLATIONS["de"].update({
     "simbrief_load": "Aus SimBrief laden",
+    "simbrief_load_quick": "SimBrief laden",
     "simbrief_identity": "SimBrief-Piloten-ID oder Benutzername",
     "simbrief_loading": "Neuester SimBrief-OFP wird geladen…",
     "simbrief_loaded": "OFP geladen. PDFs neu erstellen, um den Plan einzubeziehen.",
@@ -1597,6 +1628,7 @@ _TRANSLATIONS["de"].update({
 })
 _TRANSLATIONS["sv"].update({
     "simbrief_load": "Läs in från SimBrief",
+    "simbrief_load_quick": "Läs in SimBrief",
     "simbrief_identity": "SimBrief pilot-ID eller användarnamn",
     "simbrief_loading": "Läser in senaste OFP från SimBrief…",
     "simbrief_loaded": "OFP inläst. Skapa PDF-filerna igen för att inkludera planen.",
@@ -2146,6 +2178,7 @@ def supported_languages() -> tuple[str, ...]:
 _TRANSLATIONS["en"].update({
     "linking_requesting": 'Checking gallery support…',
     "linking_approve_browser": 'In your browser, sign in as an administrator if prompted, then approve the connection.',
+    "linking_saved_refresh_pending": 'The saved link could not finish renewing. Approve the connection again in your browser.',
     "linking_expired": 'The connection request expired. Close this window and retry.',
     "linking_start": 'Connect',
     "linking_open_browser": 'Open browser',
@@ -2221,6 +2254,7 @@ _TRANSLATIONS["en"].update({
 _TRANSLATIONS["cs"].update({
     "linking_requesting": 'Ověřuji podporu galerie…',
     "linking_approve_browser": 'V prohlížeči se podle potřeby přihlaste jako správce a připojení schvalte.',
+    "linking_saved_refresh_pending": 'Obnova uloženého propojení se nedokončila. Schvalte propojení znovu v prohlížeči.',
     "linking_expired": 'Žádost o připojení vypršela. Zavřete toto okno a zkuste to znovu.',
     "linking_start": 'Připojit',
     "linking_open_browser": 'Otevřít prohlížeč',
@@ -2296,6 +2330,7 @@ _TRANSLATIONS["cs"].update({
 _TRANSLATIONS["de"].update({
     "linking_requesting": 'Galerieunterstützung wird geprüft…',
     "linking_approve_browser": 'Melden Sie sich im Browser bei Bedarf als Administrator an und bestätigen Sie die Verbindung.',
+    "linking_saved_refresh_pending": 'Die Erneuerung der gespeicherten Verknüpfung wurde nicht abgeschlossen. Genehmigen Sie die Verknüpfung erneut im Browser.',
     "linking_expired": 'Die Verbindungsanfrage ist abgelaufen. Schließen Sie dieses Fenster und versuchen Sie es erneut.',
     "linking_start": 'Verbinden',
     "linking_open_browser": 'Browser öffnen',
@@ -2372,6 +2407,7 @@ _TRANSLATIONS["de"].update({
 _TRANSLATIONS["sv"].update({
     "linking_requesting": 'Kontrollerar galleristödet…',
     "linking_approve_browser": 'Logga in som administratör i webbläsaren om du uppmanas till det och godkänn anslutningen.',
+    "linking_saved_refresh_pending": 'Den sparade länken kunde inte förnyas. Godkänn anslutningen igen i webbläsaren.',
     "linking_expired": 'Anslutningsbegäran har löpt ut. Stäng det här fönstret och försök igen.',
     "linking_start": 'Anslut',
     "linking_open_browser": 'Öppna webbläsaren',

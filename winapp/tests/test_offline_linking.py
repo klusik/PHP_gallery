@@ -59,10 +59,10 @@ class _Transaction:
             _Transaction: Active simulated transaction.
 
         Raises:
-            RuntimeError: A previous refresh is still pending.
+            CredentialRefreshPending: A previous refresh is still pending.
         """
         if self.store.pending:
-            raise RuntimeError('pending')
+            raise credentials.CredentialRefreshPending('Credential refresh needs recovery.')
         self.store.events.append('enter')
         return self
 
@@ -360,15 +360,23 @@ class OfflineLinkingTests(unittest.TestCase):
         """Never commit a replacement when live identity cannot be checked.
 
         Returns:
-            None: The response failure leaves the original credential fenced.
+            None: The response failure leaves the original credential fenced
+                for explicit recovery and a subsequent attempt sends no request.
         """
-        with patch.object(offline, '_request_json',
-                          side_effect=[self.response, TimeoutError('private')]) as send:
-            with self.assertRaises(offline.OfflineLinkingError):
+        with (
+            patch.object(offline, '_request_json',
+                         side_effect=[self.response, TimeoutError('private')]) as send,
+            self.assertLogs(level='WARNING') as diagnostic,
+        ):
+            with self.assertRaises(offline.OfflineRefreshPending):
+                self._rotate()
+            with self.assertRaises(offline.OfflineRefreshPending):
                 self._rotate()
         self.assertEqual(2, send.call_count)
         self.assertTrue(self.store.pending)
         self.assertNotIn('commit', self.store.events)
+        self.assertIn('phase=identity_verification detail=TimeoutError', diagnostic.output[0])
+        self.assertNotIn('private', diagnostic.output[0])
 
     def test_initial_requires_offline_scope_and_bounded_lifetime(self) -> None:
         """Refuse implicit offline permission or impossible server lifetimes.

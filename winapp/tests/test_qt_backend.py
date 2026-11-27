@@ -28,7 +28,7 @@ from typing import Callable
 import unittest
 from unittest import mock
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from native_qt_fixture import NativeQtTestCase
 from qualify_loopback_authority import (
@@ -39,7 +39,7 @@ from test_loopback_linked_switch_fixture import _MemoryCredentialStore
 from uploader import app_linking, flight_workflow
 from uploader.app_linking import LinkedMediaDetails
 from uploader.capture_session import CaptureReview, CaptureStatus
-from uploader.config import BYTES_PER_GIB
+from uploader.config import BYTES_PER_GIB, save_ui_language
 from uploader.credential_store import CredentialStoreUnavailable
 from uploader.desktop_connection import (
     ConnectionActions, ConnectionTestResult, DependencyActions, DesktopLinkedSite,
@@ -80,7 +80,7 @@ from uploader.localization import configure_language, current_language, gettext
 from uploader.media import MediaCapability
 from uploader.models import ImportItem, ImportJob, ImportPlan
 from uploader.offline_linking import (
-    OfflineBinding, load_offline_binding, offline_binding_path,
+    OfflineBinding, OfflineRefreshPending, load_offline_binding, offline_binding_path,
     save_offline_binding,
 )
 from uploader.self_update import ReleaseAsset
@@ -107,7 +107,7 @@ try:
     from PySide6.QtQml import QQmlError
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
-        QApplication, QCheckBox, QComboBox, QDialog, QFrame, QLabel, QScrollArea,
+        QApplication, QCheckBox, QComboBox, QDialog, QFrame, QInputDialog, QLabel, QScrollArea,
         QLineEdit, QMessageBox, QPushButton, QTreeView, QTreeWidget, QTreeWidgetItem,
         QSplitter, QToolTip, QWidget,
     )
@@ -2055,11 +2055,12 @@ class QtBackendTests(_NativeQtAppFixture):
         """Use the real report worker and filesystem lease from native Qt.
 
         Returns:
-            None: New independent editions appear after explicit creation,
-                accepted delivery bytes survive and restart waits for the lease.
+            None: SimBrief attaches through DesktopCapture, the new revision
+                uses that plan, prior bytes survive and report work holds a lease.
         """
         entered = Event()
         released = Event()
+        rendered_dispatches: list[DispatchPlan | None] = []
 
         def render(
             _analysis: FlightAnalysis, destinations: dict[str, Path],
@@ -2080,6 +2081,7 @@ class QtBackendTests(_NativeQtAppFixture):
             Returns:
                 dict[str, Path]: Dummy edition files admitted through the actual worker.
             """
+            rendered_dispatches.append(_analysis.dispatch)
             entered.set()
             released.wait(QT_CHILD_SECONDS)
             for language, destination in destinations.items():
@@ -2101,15 +2103,50 @@ class QtBackendTests(_NativeQtAppFixture):
             previous = directory / 'reports' / 'previous.pdf'
             previous.parent.mkdir()
             previous.write_bytes(b'previous report edition')
-            window = QtWindow(profile, '1.7.1', '', 500, False)
-            with (mock.patch.object(flight_workflow, 'analyze_session', return_value=mock.Mock(samples=[True])),
-                  mock.patch.object(flight_workflow, 'render_report_variants', side_effect=render),
-                  mock.patch.object(flight_workflow.flight_delivery, 'deliver_report') as deliver):
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            planned = DispatchPlan('LKPR', 'ESSA', '', '', '', '', '', '', '')
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+                window = QtWindow(profile, '1.7.1', '', 500, False, capture=capture)
+            view = window.capture
+            assert view is not None
+            with (
+                mock.patch.object(
+                    flight_workflow, 'analyze_session',
+                    side_effect=lambda selected: mock.Mock(
+                        samples=[True], dispatch=load_dispatch(selected),
+                    ),
+                ),
+                mock.patch.object(flight_workflow, 'render_report_variants', side_effect=render),
+                mock.patch.object(flight_workflow.flight_delivery, 'deliver_report') as deliver,
+                mock.patch.object(
+                    QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes,
+                ) as confirm,
+                mock.patch.object(
+                    QInputDialog, 'getText', return_value=('fixture-pilot', True),
+                ) as identity,
+                mock.patch.object(MAIN, 'fetch_dispatch', return_value=planned) as fetch,
+            ):
                 try:
                     window.show_page('flight')
-                    self.wait_for(lambda: bool(window.operator.flights.model.rows))
-                    window.operator.flights.table.selectRow(0)
+                    tree = window.operator.report_tree
+                    self.wait_for(lambda: bool(tree.topLevelItemCount()))
+                    tree.setCurrentItem(tree.topLevelItem(0))
+                    load_button = window.operator.saved_flight_simbrief_button
+                    self.wait_for(load_button.isVisible)
+                    load_button.click()
+                    self.wait_for(lambda: not view.busy())
+                    self.assertEqual(planned, load_dispatch(directory))
                     reports = window.flight_reports
+                    self.wait_for(reports.create_button.isEnabled)
+                    confirm.assert_called_once()
+                    identity.assert_called_once()
+                    fetch.assert_called_once_with('fixture-pilot')
+                    capture_lease = WorkspaceLease(root)
+                    capture_lease.release()
                     reports.create_button.click()
                     self.wait_for(entered.is_set)
                     self.assertTrue(reports.busy())
@@ -2120,9 +2157,15 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.assertTrue(window.isVisible())
                     released.set()
                     self.wait_for(lambda: not reports.busy())
+                    self.assertEqual([planned], rendered_dispatches)
                     self.assertEqual(before, completion.read_bytes())
                     self.assertEqual(b'previous report edition', previous.read_bytes())
                     self.assertEqual(len(REPORT_LANGUAGES) + 1, len(tuple(previous.parent.glob('*.pdf'))))
+                    self.assertTrue(any(
+                        'LKPR-ESSA' in path.name
+                        for path in previous.parent.glob('*.pdf')
+                        if path != previous
+                    ))
                     deliver.assert_not_called()
                     lease = WorkspaceLease(root)
                     lease.release()
@@ -2582,6 +2625,288 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.assertIsNone(photos._create_draft)
                 finally:
                     window.exit_window()
+
+    def test_photos_load_simbrief_is_independent_of_gallery_menu_context(self) -> None:
+        """Expose the load-only action for eligible linked Photos grids.
+
+        Returns:
+            None: Cached simulator presence controls the above-grid action,
+                unrelated Watcher gallery context hides it, and clicking it
+                delegates only to the existing load callback.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            issuer = 'https://gallery.example.test/'
+            path = photos_account_tree_path(profile, issuer, 1)
+            session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+            session.available.return_value = True
+            session.can_read_media.return_value = True
+            session.can_upload.return_value = True
+            row = PhotoRow(7, 'Synthetic photo', LinkedPhoto(7, 'Synthetic photo'))
+            window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False)
+            photos = window.photos
+            available = mock.Mock(return_value=True)
+            load_plan = mock.Mock()
+            photos.simbrief_available = available
+            photos.load_simbrief_action = load_plan
+            with (
+                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=(row,)),
+                mock.patch('uploader.qt_photos.stream_thumbnails'),
+            ):
+                try:
+                    window.show()
+                    window.tabs.setCurrentWidget(photos)
+                    photos._receive_catalogue(LinkedPhotos(
+                        session, issuer, 1, (LinkedGallery(1, None, 'Root'),),
+                        load_photos_tree_preferences(path),
+                    ))
+                    self.wait_for(lambda: photos.model.rows == (row,))
+                    button = photos.findChild(QPushButton, 'photosLoadSimBrief')
+                    self.assertIsNotNone(button)
+                    self.wait_for(button.isVisible)
+                    button.click()
+                    load_plan.assert_called_once_with()
+
+                    available.return_value = False
+                    photos.update_simbrief_context(False)
+                    self.assertFalse(button.isVisible())
+                    available.return_value = True
+                    photos.update_simbrief_context(True)
+                    photos.set_capture_target((issuer, 1, 2))
+                    self.assertFalse(button.isVisible())
+                    load_plan.assert_called_once_with()
+                finally:
+                    window.exit_window()
+
+    def test_photos_simbrief_gallery_preview_screenshots(self) -> None:
+        """Capture the actual Czech Photos gallery before and after SimBrief load.
+
+        Returns:
+            None: Real Qt gallery and capture controls show synthetic photo cards,
+                then the route from a real DesktopCapture command and stubbed API.
+        """
+        language = current_language()
+        route = 'LKPR → ESSA'
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder).resolve()
+            save_ui_language(profile, 'cs')
+            issuer = 'https://scenic-air.example.test/'
+            account_id = 1704
+            preference_path = photos_account_tree_path(profile, issuer, account_id)
+            session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+            session.available.return_value = True
+            session.can_read_media.return_value = True
+            session.can_upload.return_value = True
+            rows = (
+                PhotoRow(401, 'Přiblížení na dráhu 24 · LKPR', LinkedPhoto(
+                    401, 'Přiblížení na dráhu 24 · LKPR',
+                )),
+                PhotoRow(402, 'Podvečerní stojánka · Praha', LinkedPhoto(
+                    402, 'Podvečerní stojánka · Praha',
+                )),
+                PhotoRow(403, 'Výstup nad pobřeží · Island', LinkedPhoto(
+                    403, 'Výstup nad pobřeží · Island',
+                )),
+            )
+            # These 360 × 220 RGB rasters are synthetic fixture photos, not user data.
+            mountain_color = (62, 103, 87)
+
+            def synthetic_photo(base: tuple[int, int, int]) -> QImage:
+                """Render one small in-memory aviation thumbnail for the gallery.
+
+                Args:
+                    base (tuple[int, int, int]): Synthetic sky color for this photo.
+                Returns:
+                    QImage: Detached Qt raster with synthetic runway and landscape art.
+                """
+                canvas = Image.new('RGB', (360, 220), base)
+                drawing = ImageDraw.Draw(canvas)
+                drawing.rectangle((0, 150, 360, 220), fill=(39, 52, 54))
+                drawing.polygon(
+                    ((0, 150), (92, 86), (168, 150)), fill=(54, 89, 78),
+                )
+                drawing.polygon(
+                    ((114, 151), (220, 69), (332, 151)), fill=mountain_color,
+                )
+                drawing.rectangle((170, 151, 191, 220), fill=(79, 84, 81))
+                drawing.ellipse((278, 26, 316, 64), fill=(240, 194, 105))
+                return QImage(
+                    canvas.tobytes(), 360, 220, 360 * 3,
+                    QImage.Format.Format_RGB888,
+                ).copy()
+
+            frames = {
+                row.identity: synthetic_photo(color)
+                for row, color in zip(rows, (
+                    (93, 157, 190), (211, 126, 91), (88, 147, 175),
+                ))
+            }
+
+            def stream_synthetic_thumbnails(
+                group: tuple[PhotoRow, ...], _linked: LinkingSession | None,
+                _gallery_id: int | None, cancelled: Event,
+                publish: Callable[
+                    [PhotoFrame | ThumbnailActivity | ThumbnailGroup], None
+                ],
+            ) -> None:
+                """Publish synthetic decoded pixels through the real Qt thumbnail lane.
+
+                Args:
+                    group (tuple[PhotoRow, ...]): Exact visible gallery rows.
+                    _linked (LinkingSession | None): Current synthetic gallery grant.
+                    _gallery_id (int | None): Current synthetic gallery identity.
+                    cancelled (Event): Real view-generation cancellation fence.
+                    publish (Callable[[PhotoFrame | ThumbnailActivity | ThumbnailGroup], None]):
+                        QtReadLane receiver for thumbnail activity and pixels.
+                Returns:
+                    None: Delivers only current in-memory synthetic frames.
+                """
+                identities = tuple(row.identity for row in group)
+                publish(ThumbnailActivity(identities))
+                for row in group:
+                    if cancelled.is_set():
+                        return
+                    frame = frames[row.identity]
+                    publish(PhotoFrame(row, frame, frame.size()))
+                publish(ThumbnailActivity(()))
+                publish(ThumbnailGroup(True))
+
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture_owner = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+            process_presence = mock.Mock()
+            process_presence.flight_detected = True
+            process_presence.action_label.return_value = 'Let ukončit'
+            process_presence.text.return_value = 'Let ukončit'
+            planned = DispatchPlan(
+                'LKPR', 'ESSA', 'DCT', 'Airbus A320', '148', '8900', 'kg',
+                '2406', '2026-11-27T12:00:00Z', flight_number='CSA204',
+                callsign='CSA204',
+                origin_name='Praha Ruzyně', destination_name='Stockholm Arlanda',
+            )
+            preview_dir = os.environ.get('PHP_GALLERY_SIMBRIEF_PREVIEW_DIR')
+            configure_language('cs')
+            try:
+                with (
+                    mock.patch(
+                        'uploader.qt_application.GamePresence',
+                        return_value=process_presence,
+                    ),
+                    mock.patch.object(MAIN, 'fetch_dispatch', return_value=planned) as fetch,
+                    mock.patch(
+                        'uploader.qt_photos.read_gallery_photos', return_value=rows,
+                    ),
+                    mock.patch(
+                        'uploader.qt_photos.stream_thumbnails',
+                        side_effect=stream_synthetic_thumbnails,
+                    ),
+                    mock.patch.object(
+                        QInputDialog, 'getText', return_value=('simbrief-demo', True),
+                    ) as identity,
+                ):
+                    window = QtWindow(
+                        profile, MAIN.APP_VERSION, '', 500, False,
+                        capture=capture_owner,
+                    )
+                    capture = window.capture
+                    assert capture is not None
+                    if capture._presence is None:
+                        capture._presence = process_presence
+                    photos = window.photos
+                    photos.update_simbrief_context(capture.simbrief_available())
+                    # A desktop fixture viewport with room for all three photos.
+                    window.resize(1080, 640)
+                    window.show()
+                    window.show_page('photos')
+
+                    def thumbnails_painted() -> bool:
+                        """Verify the current rendered frame contains each fixture photo.
+
+                        Returns:
+                            bool: Each visible card has its actual raster and the
+                                thumbnail loading strip has cleared.
+                        """
+                        if photos.progress.isVisible():
+                            return False
+                        grid = photos.quick.rootObject().findChild(QQuickItem, 'photosGrid')
+                        if grid is None:
+                            return False
+                        tiles = tuple(
+                            tile for tile in grid.property('contentItem').childItems()
+                            if tile.objectName() == 'photoTile' and not tile.property('pooled')
+                        )
+                        frame = photos.quick.grabFramebuffer()
+                        if len(tiles) != len(rows) or frame.isNull():
+                            return False
+                        x_scale = frame.width() / photos.quick.width()
+                        y_scale = frame.height() / photos.quick.height()
+                        for tile in tiles:
+                            thumbnail = tile.findChild(QQuickItem, 'photoThumbnail')
+                            if thumbnail is None:
+                                return False
+                            center = thumbnail.mapToScene(QPointF(
+                                thumbnail.width() / 2, thumbnail.height() / 2,
+                            ))
+                            pixel = frame.pixelColor(
+                                int(center.x() * x_scale), int(center.y() * y_scale),
+                            )
+                            if pixel.getRgb()[:3] != mountain_color:
+                                return False
+                        return True
+
+                    try:
+                        photos._receive_catalogue(LinkedPhotos(
+                            session, issuer, account_id,
+                            (LinkedGallery(1, None, 'Scenic Aviation · Fotogalerie'),),
+                            load_photos_tree_preferences(preference_path),
+                        ))
+                        button = photos.findChild(QPushButton, 'photosLoadSimBrief')
+                        self.wait_for(lambda: (
+                            photos._photos_active and button is not None
+                            and button.isVisible()
+                            and len(photos.model.texture_urls) == len(rows)
+                        ))
+                        self.assertIsNotNone(button)
+                        self.assertEqual('cs', current_language())
+                        self.assertEqual(tr('cs', 'simbrief_load_quick'), button.text())
+                        self.assertEqual('', photos._simbrief_status.text())
+                        if preview_dir:
+                            self.wait_for(thumbnails_painted)
+                            destination = Path(preview_dir)
+                            destination.mkdir(parents=True, exist_ok=True)
+                            before = window.grab()
+                            self.assertFalse(before.isNull())
+                            self.assertTrue(before.save(
+                                str(destination / '01-nacist-simbrief.png'),
+                            ))
+
+                        button.click()
+                        self.wait_for(lambda: not capture.busy())
+                        self.wait_for(lambda: photos._simbrief_route == route)
+                        self.assertTrue(photos._simbrief_status.isVisible())
+                        self.assertEqual(
+                            tr('cs', 'simbrief_ready') + ' · ' + route,
+                            photos._simbrief_status.text(),
+                        )
+                        identity.assert_called_once()
+                        fetch.assert_called_once_with('simbrief-demo')
+                        self.assertEqual(planned, capture_owner.dispatch)
+                        if preview_dir:
+                            self.wait_for(thumbnails_painted)
+                            after = window.grab()
+                            self.assertFalse(after.isNull())
+                            self.assertTrue(after.save(
+                                str(destination / '02-simbrief-nacten.png'),
+                            ))
+                    finally:
+                        window.exit_window()
+            finally:
+                configure_language(language)
 
     def test_native_switch_pixmap_preserves_all_rows_of_tk_artwork(self) -> None:
         """Check the native adapter does not misalign or alter any switch row.
@@ -3363,6 +3688,51 @@ class QtBackendTests(_NativeQtAppFixture):
                     rotate.assert_not_called()
                     browser.assert_not_called()
                     session.close.assert_not_called()
+            finally:
+                window.exit_window()
+
+    def test_pending_startup_refresh_offers_exact_saved_link_reapproval(self) -> None:
+        """Recover a fenced startup link through explicit matching browser consent.
+
+        Returns:
+            None: Startup offers recovery without authorizing automatically. The
+                action accepts the original selection and refuses a changed mode.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            issuer = 'https://gallery.example/recovery'
+            saved = ModeRecord(
+                'a' * 32, 'b' * 32, 'linked', 'c' * 64,
+                issuer, FIXTURE_ADMIN_ID, ROLLING_UPLOAD_SCOPE, 29,
+            )
+            binding = OfflineBinding(issuer, FIXTURE_ADMIN_ID, ROLLING_UPLOAD_SCOPE)
+            read_mode = mock.Mock(return_value=saved)
+            connections = ConnectionActions(mock.Mock(), mock.Mock(), read_mode, lambda: None)
+            window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False, connections=connections)
+            photos = window.photos
+            try:
+                window.show()
+                with (
+                    mock.patch('uploader.qt_photos.sys', mock.Mock(platform='win32')),
+                    mock.patch(
+                        'uploader.qt_photos.restore_desktop_gallery_link',
+                        side_effect=OfflineRefreshPending('Fixture pending refresh.'),
+                    ),
+                    mock.patch('uploader.qt_photos.saved_desktop_gallery_binding', return_value=binding),
+                    mock.patch.object(photos, '_authorize') as authorize,
+                ):
+                    photos.resume_saved_browse()
+                    self.wait_for(lambda: not photos._load.busy())
+                    self.assertEqual(gettext('Reapprove saved link'), photos.link_button.text())
+                    self.assertEqual(tr(photos.language, 'linking_saved_refresh_pending'), photos.status.text())
+                    authorize.assert_not_called()
+                    photos.link_button.click()
+                    authorize.assert_called_once_with(True, saved, reapprove=True)
+
+                    read_mode.return_value = replace(saved, generation='d' * 32)
+                    photos.link()
+                    self.assertEqual(tr(photos.language, 'linking_start'), photos.link_button.text())
+                    authorize.assert_called_once_with(True, saved, reapprove=True)
             finally:
                 window.exit_window()
 

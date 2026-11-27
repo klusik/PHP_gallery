@@ -76,7 +76,7 @@ and Settings. Flight and its saved reports belong to the Watcher workspace.
 Watcher opens capture progress and saved reports separately, using nonmodal
 panels so reviewing live progress never owns a capture decision by itself.
 Saved Reports shows a sortable flight tree, an optional flights-only filter,
-the followed target, and a verified local folder action. Each selected flight
+the verified upload destination, and a verified local folder action. Each selected flight
 opens its saved revisions and their available language editions. Report delivery
 confirms the exact selected editions from one stopped flight and its destination. The Qt
 progress panels display per-edition status from the shared finalizer snapshots.
@@ -308,7 +308,9 @@ can also be read from Keychain until its original expiry. If the Keychain
 requires an unlock or permission prompt, startup leaves manual approval to the
 operator. An explicit Photos connection can use temporary browser consent
 while the existing saved credential and upload selection stay available for
-recovery. An uncertain refresh still uses the saved-link recovery controls.
+recovery. When startup detects a pending refresh for the saved upload link,
+Photos offers **Reapprove saved link**. After browser consent, WinApp checks
+the saved account, gallery and scope before replacing the local credential.
 Explicitly reconnecting a saved upload destination always verifies the precise gallery,
 account and scope. It can use an already verified live grant for those checks.
 Idle rolling sessions use the shared identity route at the existing cadence
@@ -507,9 +509,12 @@ provable first-seen order. A journal from before linked scopes were recorded
 cannot validate a linked capture. Read-only admission leaves both untouched
 for the existing compatibility path.
 
-A stopped flight can create a new set of local editions and deliver it through
-the currently active Watcher in one action. The worker verifies the exact target
-and selected flight under the existing lease before rendering.
+In Qt, a stopped flight can create a local revision with **Generate PDFs only**.
+**Send PDFs only…** delivers selected existing editions to the confirmed
+destination. The sender borrows the live Watcher lease when available, or
+acquires its own workspace lease for a connected upload destination while
+Watcher is idle. **Create and upload** uses the live Watcher destination to
+create and deliver a revision in one action.
 
 An explicit ordinary restart during admissible live capture saves the
 existing matching continuation pair after all writers settle. The original

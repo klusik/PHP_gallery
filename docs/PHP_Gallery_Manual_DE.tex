@@ -2966,7 +2966,11 @@ Server abgelaufene oder widerrufene verlängerbare Zugangsdaten ausdrücklich ab
 entfernt WinApp diese gespeicherten Daten. Wählen Sie \ui{Website verbinden} für
 eine neue Genehmigung im Browser. Beim Start bleibt die Genehmigung Ihnen
 überlassen. Eine unklare Antwort oder ein
-Speicherfehler sperrt die Wiederverwendung der alten Daten. Prüfen Sie die
+Speicherfehler sperrt die Wiederverwendung der alten Daten. Wenn eine
+ausstehende Erneuerung beim Start die gespeicherte Upload-Verknüpfung sperrt,
+bietet die Qt-Fotoansicht
+\ui{Gespeicherte Verknüpfung erneut genehmigen} für dasselbe Konto, dieselbe
+Galerie und dieselben Berechtigungen an. Prüfen Sie die
 Verbindungen auf dem Server und wählen Sie bei Bedarf \ui{Forget saved link}
 vor einer erneuten Verknüpfung. Lokales Vergessen widerruft den Server-Grant
 nicht; die aktuelle Sitzung kann aktiv bleiben. Der gespeicherte
@@ -3467,7 +3471,8 @@ Versionen erscheinen als aufklappbare Gruppen, immer numerisch absteigend
 aufgeklappte Flüge/Versionen und die~Dateiauswahl. Diese Anzeige verschiebt
 oder benennt keine Dateien auf dem Datenträger um.
 
-Für einen gestoppten Flug erzeugt \ui{Lokale PDF erstellen} eine neue Revision in
+Für einen gestoppten Flug erzeugt \ui{Nur PDFs erstellen} in Qt oder
+\ui{Lokale PDF erstellen} in Tk eine neue Revision in
 \filepath{reports/}. Frühere PDFs, Rohdaten und Uploadbestätigungen
 bleiben erhalten. Kein Schlüssel, Upload oder Widerruf ist beteiligt; ein
 anderer laufender Flug bleibt aktiv. Teilberichte bleiben unvollständig;
@@ -3542,6 +3547,10 @@ Serverschlüssel verwalten Sie in der PHP-Gallery-Verwaltung. Verknüpfte
 Sitzungen verwenden die Zustimmung im Browser. Nach einem Neustart steht
 die geprüfte gespeicherte Adresse bereits im Dialog zur Wiederverbindung.
 
+In Qt beendet \ui{Flug aufgeben} neben der Abschlussaktion im Watcher nach
+Bestätigung die aktuelle verknüpfte Aufnahme. Laufende Anfragen enden zuerst.
+Die Aufzeichnung, ungesendete Fotos, vorhandene PDFs und Belege bleiben lokal.
+
 Im API-Schlüsselmodus steht \ui{Flug aufgeben} in Watcher, Import und Fortschritt
 ermöglicht lokale Wiederherstellung bei gelöschter Galerie oder widerrufenem
 Schlüssel. Nach Bestätigung stoppen die Worker und laufende Anfragen enden;
@@ -3555,8 +3564,10 @@ enden; Stopp- oder Speicherfehler behalten Schlüssel und Wiederholung bei.
 Die Überwachung für die Zielgalerie per Kontoverknüpfung oder API-Schlüssel
 starten. \ui{Erstellen und hochladen} speichert eine neue Revision und sendet
 sie an die neben der Aktion angezeigte Galerie. Bei einem Uploadfehler kann
-dieselbe Revision erneut gesendet werden. Für einen gestoppten Flug zeigt
-\ui{Gespeicherte PDFs hochladen} im Menü Versionen, Datum und Sprachen.
+dieselbe Revision erneut gesendet werden. Für einen gestoppten Flug wählen Sie
+\ui{Nur PDFs senden} in Qt oder \ui{Gespeicherte PDFs hochladen} im Menü.
+Eine verbundene Zielgalerie ist in Qt auch bei angehaltenem Watcher verfügbar.
+Die Auswahl bestätigt das Ziel und zeigt Versionen, Datum und Sprachen.
 Strg/Umschalt wählt mehrere Versionen oder einzelne PDFs desselben Flugs.
 Die gespeicherten Dateien werden gesendet, während ein anderer Flug läuft.
 \filepath{upload-receipts.json} speichert getrennte
@@ -4366,10 +4377,19 @@ Optionales Laden aus SimBrief steht neben Flugbeginn/-abschluss; das Zahnrad
 ändert Piloten-ID oder Benutzername in einem Feld. Erst ein erfolgreicher
 OFP-Abruf speichert die Identität. Aufzeichnung benötigt keinen OFP. Ein vorab
 geladener Plan gilt nur für den nächsten Flug, ein während der Aufzeichnung
-geladener Plan nur für diesen Flug. Dem ausgewählten gespeicherten Flug lässt
-sich direkt der neueste OFP oder ein archivierter SimBrief-JSON/XML-Export
-zuordnen. Ein PDF allein liefert keine strukturierten Daten. Anschließend eine
-neue lokale PDF-Version erstellen; ältere PDFs und Übertragungsbelege bleiben.
+geladener Plan nur für diesen Flug. Unter Windows zeigt die Qt-Oberfläche
+\ui{SimBrief laden} im Watcher und über den Fotos einer verknüpften Galerie
+mit Upload-Berechtigung an, sobald WinApp einen Flugsimulator erkennt.
+Während einer verknüpften Watcher-Aufnahme erscheint die Aktion über den
+Fotos der überwachten Galerie. Neben der Schaltfläche erscheint nach dem
+Laden das Flughafenpaar.
+
+In Qt einen beendeten Flug auswählen und \ui{SimBrief laden} neben
+\ui{Nur PDFs erstellen} wählen. Bestätigen, dass der neueste OFP zum
+ausgewählten Flug gehört. Das Menü des gespeicherten Flugs nimmt auch einen
+archivierten SimBrief-JSON/XML-Export an. Eine neue lokale PDF-Version verwendet
+den gespeicherten Plan für Berechnungen und Vergleiche im Bericht. Ältere PDFs
+und Übertragungsbelege bleiben erhalten.
 Berichte zeigen aufgezeichnete OpenStreetMap-Routen auch ohne OFP. Ein OFP
 ergänzt
 eine getrennte Planroute, geplante Passagiere und Rampentreibstoff, ohne
@@ -11543,6 +11563,8 @@ Fehlende, unvollständige, fehlerhafte, doppelte, fehlgeschlagene oder
 abgelaufene Nachweise führen zum Fehlschlag. Der normale Vollsuite-Owner behält
 sein bisheriges Einzelprozessverhalten und Limit; frühere Gesamt-, Zwei-, Drei-
 und Vier-Prozess-Timeouts bleiben fehlgeschlagene Läufe.
+Die optionale Suite \codeword{winapp-simbrief-preview} führt die Galerie unter
+Windows aus und speichert Aufnahmen vor und nach dem Laden eines Testplans.
 Das ausgewählte Prozessprotokoll gibt den vollständigen Fehler-Traceback direkt
 nach dem FAIL/ERROR-Endeintrag aus; so bleibt der Grund erhalten, wenn ein
 späteres Timeout den abschließenden JSON-Bericht verhindert.

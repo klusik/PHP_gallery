@@ -19,6 +19,7 @@ remote revocation.
 
 import hashlib
 import hmac
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,11 +60,13 @@ from .app_linking import (
     _issuer_valid,
     _request_json,
     _valid_token,
-    LinkedIdentity, LinkingError, LinkingReconnectRequired, LinkingRefreshRejected, LinkingSession,
+    LinkedIdentity, LinkingError, LinkingReconnectRequired, LinkingRefreshRejected,
+    LinkingResponseError, LinkingSession,
     discover_linking_capabilities,
 )
 from .credential_store import (
-    CREDENTIAL_ACCOUNT_ID_MAX, CredentialStoreUnavailable, NativeCredentialStore,
+    CREDENTIAL_ACCOUNT_ID_MAX, CredentialRefreshPending,
+    CredentialStoreUnavailable, NativeCredentialStore,
 )
 
 # Purpose: Bound a rotated access credential to the current server policy.
@@ -100,6 +103,10 @@ _OFFLINE_SCOPES = (
 
 class OfflineLinkingError(RuntimeError):
     """Report a generic offline-linking refusal without credential contents."""
+
+
+class OfflineRefreshPending(OfflineLinkingError):
+    """Report that refresh recovery is required without exposing credentials."""
 
 
 @dataclass(frozen=True)
@@ -246,6 +253,8 @@ def rotate_offline_access(
         OfflineAccess: Validated in-memory bearer after replacement is committed.
 
     Raises:
+        OfflineRefreshPending: A verified refresh fence blocks access or a
+            newly established fence remains after an incomplete rotation.
         OfflineLinkingError: Binding, identity, transport or secure storage fails.
         CredentialStoreUnavailable: The native credential is absent or
             inaccessible before any new refresh fence was attempted.
@@ -254,6 +263,8 @@ def rotate_offline_access(
     if not _binding_valid(issuer, account_id, scope):
         raise OfflineLinkingError('Offline connection is invalid.')
     fence_attempted = False
+    rotation_pending = False
+    phase = 'vault_fence'
     try:
         with store.refresh_transaction(issuer, account_id) as transaction:
             record = transaction.read_current()
@@ -269,7 +280,9 @@ def rotate_offline_access(
             }).encode('ascii')
             fence_attempted = True
             transaction.begin_rotation()
+            rotation_pending = True
             started = time.monotonic()
+            phase = 'token_exchange'
             response = _request_json(
                 issuer, 'app_linking_token', 'POST', body, None,
                 cancelled=cancelled,
@@ -278,6 +291,7 @@ def rotate_offline_access(
             replacement = response.get('refresh_token')
             lifetime = response.get('expires_in')
             refresh_lifetime = response.get('refresh_expires_in')
+            phase = 'token_response_validation'
             if (set(response) != {'access_token', 'token_type', 'expires_in',
                                  'scope', 'refresh_token', 'refresh_expires_in'}
                     or not _valid_token(access, TOKEN_PREFIX)
@@ -291,6 +305,7 @@ def rotate_offline_access(
                     or not 0 < refresh_lifetime <= OFFLINE_REFRESH_MAX_SECONDS
                     or time.monotonic() >= started + lifetime):
                 raise OfflineLinkingError('Offline response was not accepted.')
+            phase = 'identity_verification'
             identity = _request_json(
                 issuer, 'app_linking_identity', 'GET', None, access,
                 cancelled=cancelled,
@@ -306,7 +321,9 @@ def rotate_offline_access(
                     or time.monotonic() >= started + lifetime
                     or time.monotonic() >= started + refresh_lifetime):
                 raise OfflineLinkingError('Offline identity was not accepted.')
+            phase = 'vault_commit'
             transaction.commit_rotated(_pack_refresh(scope, replacement))
+            rotation_pending = False
             if ((cancelled is not None and cancelled.is_set())
                     or time.monotonic() >= started + lifetime
                     or time.monotonic() >= started + refresh_lifetime):
@@ -319,11 +336,22 @@ def rotate_offline_access(
         if scope.endswith(ROLLING_SCOPE_SUFFIX):
             raise
         raise OfflineLinkingError('Offline refresh did not complete safely.') from None
+    except CredentialRefreshPending:
+        raise OfflineRefreshPending('Credential refresh needs recovery.') from None
     except Exception as error:
         if not fence_attempted and isinstance(error, CredentialStoreUnavailable):
             # A separate browser approval can proceed without touching the
             # saved grant when local access fails before any rotation work.
             raise
+        if rotation_pending:
+            detail = (
+                error.safe_summary if isinstance(error, LinkingResponseError)
+                else type(error).__name__
+            )
+            logging.warning(
+                '[offline-refresh] incomplete phase=%s detail=%s', phase, detail,
+            )
+            raise OfflineRefreshPending('Credential refresh needs recovery.') from None
         # A timeout or malformed reply may follow a committed server rotation.
         # Never expose exception text, repeat the token request or clear a fence.
         raise OfflineLinkingError('Offline refresh did not complete safely.') from None
