@@ -59,13 +59,16 @@ media, source-review, FTP or interactive mode in the production builder.
 ## Inventory and updater compatibility
 
 Production packaging uses the sorted union of `production_files`,
-`companion_files` and the optional `companion_resource_files` and
-`companion_locale_files` lists. The resource list admits the reviewed DejaVu
-font and its license. The locale list admits the exact Czech, German and Swedish
-WinApp gettext catalogs. The lists are disjoint, and CMS updater ownership comes
-from the updater list. WinApp private
-settings, logs, caches, tests, unlisted modules and build/dist outputs are
-excluded. Installers retain their independent build and version ownership.
+`companion_files` and the optional `companion_resource_files`,
+`companion_locale_files` and `companion_backend_files` lists. The resource
+list admits the reviewed DejaVu font and its license. The locale list admits
+the Czech, German and Swedish WinApp gettext catalogs. The backend list admits
+the locked requirements files referenced by `winapp/requirements.txt`, the Qt
+Quick scene, license texts and the reviewed shared onedir build inputs. The
+lists are disjoint, and CMS updater ownership comes from the updater list.
+WinApp private settings, logs, caches, tests, benchmark-only dependencies,
+unlisted modules and build/dist outputs are excluded. Installers retain their
+independent build and version ownership.
 
 `updater_files` is a sorted subset of `production_files`. Installed custom CSS
 presets remain protected. The schema-1 `source_review_files` field remains for
@@ -76,11 +79,13 @@ closed; no incoming archive PHP is executed to obtain a newer validator.
 
 Keep each serialized companion field within the allowlist of installed readers
 that recognize it. The locale list keeps the catalogs out of the font/license
-field that 1.5.7 validates. Current readers validate exact paths, ordering,
-collisions and updater scope for both resource lists. They also retain the
-previously published shape with font resources in `companion_files`. Any
-malformed present field is refused. Compatibility fixtures use trusted
-installed-reader code and the published font/license constraint.
+field that 1.5.7 validates. The backend list keeps the additional inputs out
+of the published companion, resource and locale field shapes. Current readers
+validate exact paths, ordering, collisions and updater scope for each list.
+They also retain the previously published shape with font resources in
+`companion_files`. Any malformed present field is refused. Compatibility
+fixtures use trusted installed-reader code and the published font/license
+constraint.
 
 The updater supports direct upgrades using a complete newer package and all
 pending migrations, rather than requiring every intermediate release. This

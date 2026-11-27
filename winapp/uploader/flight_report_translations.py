@@ -2177,6 +2177,9 @@ _TRANSLATIONS["en"].update({
     "linking_gallery_tools": 'More gallery actions',
     "linking_refresh_galleries": 'Refresh list',
     "linking_next_page": 'Next page',
+    "flight_history_previous": 'Newer flights',
+    "flight_history_next": 'Older flights',
+    "flight_history_range": 'Flights {start}–{end} of {total}',
     "linking_upload_approval_needed": 'For uploads, approve access in Manage link.',
     "linking_select_gallery": 'Select gallery',
     "linking_use_for_upload": 'Use for uploads',
@@ -2201,6 +2204,14 @@ _TRANSLATIONS["en"].update({
     ),
     "linking_review_unavailable": 'No current unknown upload could be reviewed. Stop active work and check the gallery again.',
     "linking_review_done": 'Review recorded. Other files may continue; the original remains uncertain and will not be retried.',
+    "linking_recovery_observed": (
+        'Matching bytes were observed. The original upload and its registration '
+        'remain unconfirmed. Review the gallery.'
+    ),
+    "linking_recovery_unknown": (
+        'The observation is unknown. The upload and its registration remain '
+        'unconfirmed. Review the gallery.'
+    ),
 })
 
 _TRANSLATIONS["cs"].update({
@@ -2241,6 +2252,9 @@ _TRANSLATIONS["cs"].update({
     "linking_gallery_tools": 'Další možnosti galerie',
     "linking_refresh_galleries": 'Obnovit seznam',
     "linking_next_page": 'Další stránka',
+    "flight_history_previous": 'Novější lety',
+    "flight_history_next": 'Starší lety',
+    "flight_history_range": 'Lety {start}–{end} z {total}',
     "linking_upload_approval_needed": 'Nahrávání povolte ve správě propojení.',
     "linking_select_gallery": 'Vybrat galerii',
     "linking_use_for_upload": 'Použít pro nahrávání',
@@ -2265,6 +2279,14 @@ _TRANSLATIONS["cs"].update({
     ),
     "linking_review_unavailable": 'Žádný nejasný upload teď nelze zkontrolovat. Zastavte práci a ověřte galerii znovu.',
     "linking_review_done": 'Kontrola uložena. Ostatní soubory mohou pokračovat; výsledek původního uploadu zůstává nejasný.',
+    "linking_recovery_observed": (
+        'Byly nalezeny shodné bajty. Původní upload ani jeho zápis do galerie '
+        'zatím nejsou potvrzené. Zkontrolujte galerii.'
+    ),
+    "linking_recovery_unknown": (
+        'Výsledek kontroly je nejasný. Stav uploadu i jeho zápisu zůstává '
+        'neověřený. Zkontrolujte galerii.'
+    ),
 })
 
 _TRANSLATIONS["de"].update({
@@ -2305,6 +2327,9 @@ _TRANSLATIONS["de"].update({
     "linking_gallery_tools": 'Weitere Galerieaktionen',
     "linking_refresh_galleries": 'Liste aktualisieren',
     "linking_next_page": 'Nächste Seite',
+    "flight_history_previous": 'Neuere Flüge',
+    "flight_history_next": 'Ältere Flüge',
+    "flight_history_range": 'Flüge {start}–{end} von {total}',
     "linking_upload_approval_needed": 'Erlauben Sie Uploads in der Linkverwaltung.',
     "linking_select_gallery": 'Galerie auswählen',
     "linking_use_for_upload": 'Für Uploads nutzen',
@@ -2330,6 +2355,14 @@ _TRANSLATIONS["de"].update({
     ),
     "linking_review_unavailable": 'Kein aktueller unklarer Upload konnte geprüft werden. Stoppen Sie laufende Arbeit und prüfen Sie die Galerie erneut.',
     "linking_review_done": 'Prüfung gespeichert. Andere Dateien können weiterlaufen; der ursprüngliche Upload bleibt unklar und wird nicht wiederholt.',
+    "linking_recovery_observed": (
+        'Übereinstimmende Bytes wurden gefunden. Der ursprüngliche Upload und '
+        'seine Registrierung sind weiterhin unbestätigt. Prüfen Sie die Galerie.'
+    ),
+    "linking_recovery_unknown": (
+        'Das Ergebnis ist unklar. Der Upload und seine Registrierung sind '
+        'weiterhin unbestätigt. Prüfen Sie die Galerie.'
+    ),
 })
 
 _TRANSLATIONS["sv"].update({
@@ -2370,6 +2403,9 @@ _TRANSLATIONS["sv"].update({
     "linking_gallery_tools": 'Fler galleriåtgärder',
     "linking_refresh_galleries": 'Uppdatera listan',
     "linking_next_page": 'Nästa sida',
+    "flight_history_previous": 'Nyare flygningar',
+    "flight_history_next": 'Äldre flygningar',
+    "flight_history_range": 'Flygningar {start}–{end} av {total}',
     "linking_upload_approval_needed": 'Godkänn uppladdning i länkhanteringen.',
     "linking_select_gallery": 'Välj galleri',
     "linking_use_for_upload": 'Använd för uppladdning',
@@ -2394,6 +2430,14 @@ _TRANSLATIONS["sv"].update({
     ),
     "linking_review_unavailable": 'Ingen aktuell osäker uppladdning kunde granskas. Stoppa pågående arbete och kontrollera galleriet igen.',
     "linking_review_done": 'Granskningen sparades. Andra filer kan fortsätta; den ursprungliga uppladdningen förblir osäker och upprepas inte.',
+    "linking_recovery_observed": (
+        'Matchande byte hittades. Den ursprungliga uppladdningen och dess '
+        'registrering är fortfarande obekräftade. Granska galleriet.'
+    ),
+    "linking_recovery_unknown": (
+        'Resultatet är oklart. Uppladdningen och dess registrering är fortfarande '
+        'obekräftade. Granska galleriet.'
+    ),
 })
 
 # Native viewer labels and server discovery status.
@@ -2487,6 +2531,9 @@ _TRANSLATIONS["en"].update({
     "photos_workspace_cache_partial": "Some photos cached",
     "photos_workspace_cache_cloud": "No authorized photos cached",
     "photos_workspace_cache_unknown": "Photo cache coverage unknown",
+    "photos_workspace_cache_marker_pinned": "Marked to keep this gallery in the local cache.",
+    "photos_workspace_cache_marker_watcher": "Watcher is monitoring this gallery for uploads.",
+    "photos_workspace_cache_marker_watcher_descendant": "Watcher is monitoring a gallery inside this collapsed branch.",
     "photos_workspace_creation_uncertain": "The gallery creation could not be confirmed. Check its status before trying again.",
     "photos_workspace_manage": "Manage link…",
     "photos_workspace_edit_gallery": "Edit gallery",
@@ -2635,6 +2682,9 @@ _TRANSLATIONS["cs"].update({
     "photos_workspace_cache_partial": "Některé fotky v mezipaměti",
     "photos_workspace_cache_cloud": "Žádné dostupné fotky v mezipaměti",
     "photos_workspace_cache_unknown": "Pokrytí mezipaměti fotek neznámé",
+    "photos_workspace_cache_marker_pinned": "Galerie je označená k ponechání v místní mezipaměti.",
+    "photos_workspace_cache_marker_watcher": "Watcher sleduje tuto galerii pro nahrávání.",
+    "photos_workspace_cache_marker_watcher_descendant": "Watcher sleduje galerii uvnitř této sbalené větve.",
     "photos_workspace_creation_uncertain": "Vytvoření galerie se nepodařilo potvrdit. Před dalším pokusem ověřte její stav.",
     "photos_workspace_manage": "Spravovat propojení…",
     "photos_workspace_edit_gallery": "Upravit galerii",
@@ -2783,6 +2833,9 @@ _TRANSLATIONS["de"].update({
     "photos_workspace_cache_partial": "Einige Fotos im Cache",
     "photos_workspace_cache_cloud": "Keine freigegebenen Fotos im Cache",
     "photos_workspace_cache_unknown": "Foto-Cache-Abdeckung unbekannt",
+    "photos_workspace_cache_marker_pinned": "Diese Galerie soll im lokalen Cache bleiben.",
+    "photos_workspace_cache_marker_watcher": "Watcher überwacht diese Galerie für Uploads.",
+    "photos_workspace_cache_marker_watcher_descendant": "Watcher überwacht eine Galerie in diesem eingeklappten Zweig.",
     "photos_workspace_creation_uncertain": "Die Galerieerstellung konnte nicht bestätigt werden. Prüfen Sie den Status, bevor Sie es erneut versuchen.",
     "photos_workspace_manage": "Verknüpfung verwalten…",
     "photos_workspace_edit_gallery": "Galerie bearbeiten",
@@ -2931,6 +2984,9 @@ _TRANSLATIONS["sv"].update({
     "photos_workspace_cache_partial": "Vissa foton cachade",
     "photos_workspace_cache_cloud": "Inga behöriga foton cachade",
     "photos_workspace_cache_unknown": "Fotocachens täckning är okänd",
+    "photos_workspace_cache_marker_pinned": "Galleriet är markerat för att behållas i den lokala cachen.",
+    "photos_workspace_cache_marker_watcher": "Watcher bevakar det här galleriet för uppladdningar.",
+    "photos_workspace_cache_marker_watcher_descendant": "Watcher bevakar ett galleri i den här infällda grenen.",
     "photos_workspace_creation_uncertain": "Galleriskapningen kunde inte bekräftas. Kontrollera statusen innan du försöker igen.",
     "photos_workspace_manage": "Hantera länk…",
     "photos_workspace_edit_gallery": "Redigera galleri",

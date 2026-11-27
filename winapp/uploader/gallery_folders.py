@@ -10,14 +10,14 @@
 # License: MIT License (see LICENSE file in repository)
 """Inline folder cards for the current server-backed gallery."""
 
-import io
 import queue
 import threading
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 
-from .app_linking import LinkedGallery, LinkedMediaPage, LinkingError, LinkingSession
+from .app_linking import LinkedGallery, LinkingSession
+from .gallery_folder_cover import cached_folder_cover, folder_cover_size, read_folder_cover
 from .gallery_view_preferences import (
     GALLERY_FOLDER_SHARE_BOUNDS, GALLERY_FOLDER_SHARE_SCALE,
     normalize_card_format,
@@ -27,16 +27,9 @@ from .ui_theme import (
 )
 
 try:
-    from PIL import Image, ImageOps, ImageTk
+    from PIL import Image, ImageTk
 except ImportError:
-    Image = ImageOps = ImageTk = None
-
-
-# Purpose: Bound the default cover before the shared folder rim is added.
-# Type: tuple[int, int]. Units: pixels. Scope: one folder card's cover content.
-# Consumers: GalleryFolderShelf._image_size.
-# Rationale: 112 by 68 leaves room for several folders at minimum window width.
-FOLDER_IMAGE_SIZE = (112, 68)
+    Image = ImageTk = None
 
 # Purpose: Preserve space for photos when the folder inventory is large.
 # Type: float. Units: fraction of pane height. Scope: a mixed gallery shelf.
@@ -56,12 +49,6 @@ FOLDER_PHOTO_RESERVE = 128
 # Rationale: 48 leaves a visible folder fragment and its vertical scroll target.
 FOLDER_MIN_HEIGHT = 48
 
-# Purpose: Keep folder cards compact and their cover retention bounded.
-# Type: int. Units: pixels. Scope: explicit folder proportions and cover decode.
-# Consumers: GalleryFolderShelf._image_size and _normalize_cover.
-# Rationale: 112 retains the original folder width and bounds every crop edge.
-FOLDER_FORMAT_EDGE = 112
-
 # Purpose: Separate adjacent folder rims without stretching spare row width.
 # Type: int. Units: Tk pixels. Scope: wrapped folder layout.
 # Consumers: GalleryFolderShelf._viewport_changed.
@@ -79,13 +66,6 @@ FOLDER_TITLE_LIMIT = 18
 # Consumers: GalleryFolderShelf._schedule.
 # Rationale: 80 batches viewport changes while keeping cover feedback prompt.
 FOLDER_POLL_MS = 80
-
-# Purpose: Reject pathological raster dimensions before allocating cover pixels.
-# Type: int. Units: decoded pixels. Scope: a server-authorized cover image.
-# Consumers: GalleryFolderShelf._request_cover.
-# Rationale: 36 megapixels matches the native photo viewer's decode limit.
-FOLDER_COVER_MAX_PIXELS = 36_000_000
-
 
 class GalleryFolderShelf(ttk.Frame):
     """Wrap authorized child folders with independent vertical navigation."""
@@ -292,11 +272,7 @@ class GalleryFolderShelf(ttk.Frame):
         Returns:
             tuple[int, int]: Actual image width and height in logical Tk pixels.
         """
-        if self._card_format == 'default':
-            return FOLDER_IMAGE_SIZE
-        width, height = (int(part) for part in self._card_format.split(':'))
-        scale = FOLDER_FORMAT_EDGE / max(width, height)
-        return max(1, round(width * scale)), max(1, round(height * scale))
+        return folder_cover_size(self._card_format)
 
     def _folder_icon(self, cover: bytes | None) -> 'ImageTk.PhotoImage | None':
         """Paint the folder silhouette with an optional normalized preview.
@@ -505,7 +481,7 @@ class GalleryFolderShelf(ttk.Frame):
             for gallery_id in gallery_ids:
                 if cancelled.is_set():
                     return
-                cover = self._cached_cover(session, gallery_id, cancelled)
+                cover = cached_folder_cover(session, gallery_id, cancelled)
                 if cover is not None and not cancelled.is_set():
                     self._results.put((generation, gallery_id, cover, False))
 
@@ -514,32 +490,6 @@ class GalleryFolderShelf(ttk.Frame):
         )
         self._worker.start()
         self._schedule()
-
-    def _cached_cover(
-        self, session: LinkingSession, gallery_id: int,
-        cancelled: threading.Event,
-    ) -> bytes | None:
-        """Resolve disk bytes only through a still-current session descriptor.
-
-        Args:
-            session (LinkingSession): Active scope and validator authority.
-            gallery_id (int): Exact child gallery whose first photo is needed.
-            cancelled (threading.Event): Current shelf cancellation boundary.
-        Returns:
-            bytes | None: Normalized verified cover, or no admissible disk hit.
-        """
-        try:
-            recent = session.recent_media_page(gallery_id)
-            if isinstance(recent, LinkedMediaPage) and recent.photos:
-                cached = session.cached_media_photo(
-                    gallery_id, recent.photos[0], cancelled=cancelled,
-                )
-                if cached is not None and not cancelled.is_set():
-                    return self._normalize_cover(cached[0])
-        except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
-            # A refused/expired descriptor never authorizes an unscoped copy.
-            pass
-        return None
 
     def _request_cover(self, session: LinkingSession, gallery_id: int) -> None:
         """Resolve one visible child’s first authorized photo in a worker.
@@ -559,66 +509,13 @@ class GalleryFolderShelf(ttk.Frame):
             Returns:
                 None: Puts the current cover outcome on the Tk result queue.
             """
-            cover = None
-            try:
-                # The session owns descriptor freshness and disk authorization.
-                # Never persist a second unscoped cover cache or trust saved IDs.
-                page = session.media_page(
-                    gallery_id, cancelled=cancelled, cover_only=True,
-                )
-                if page.photos and not cancelled.is_set():
-                    photo = page.photos[0]
-                    try:
-                        cached = session.cached_media_photo(
-                            gallery_id, photo, cancelled=cancelled,
-                        )
-                    except LinkingError:
-                        cached = None
-                    payload, _mime = cached if cached is not None else session.media_photo(
-                        gallery_id, photo.image_id, thumbnail=True,
-                        cancelled=cancelled,
-                        cache_eligible=photo.cache_eligible,
-                        thumbnail_etag=photo.thumbnail_etag,
-                        thumbnail_verified_at=photo.thumbnail_verified_at,
-                        preload_eligible=photo.preload_eligible,
-                        preload_thumbnail_etag=photo.preload_thumbnail_etag,
-                        preload_verified_at=photo.preload_verified_at,
-                    )
-                    cover = self._normalize_cover(payload)
-                elif not cancelled.is_set():
-                    cover = None
-            except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
-                # A transient metadata failure may retain a verified current
-                # cover. Known permission refusals revoke the session's page,
-                # so the same owner also refuses this fallback after revocation.
-                cover = self._cached_cover(session, gallery_id, cancelled)
+            cover = read_folder_cover(session, gallery_id, cancelled)
             if not cancelled.is_set():
                 self._results.put((generation, gallery_id, cover, True))
 
         self._worker = threading.Thread(target=fetch, name='PHPGalleryFolderCover', daemon=True)
         self._worker.start()
         self._schedule()
-
-    def _normalize_cover(self, payload: bytes) -> bytes | None:
-        """Retain a small uncropped raster for all local folder proportions.
-
-        Args:
-            payload (bytes): Authorized encoded thumbnail from the session cache.
-        Returns:
-            bytes | None: Bounded PNG, or None for excessive raster dimensions.
-        """
-        with Image.open(io.BytesIO(payload)) as image:
-            if image.width * image.height > FOLDER_COVER_MAX_PIXELS:
-                return None
-            # JPEG draft reduces camera-sized fallback renditions before RGB.
-            image.draft('RGB', (FOLDER_FORMAT_EDGE, FOLDER_FORMAT_EDGE))
-            with ImageOps.exif_transpose(image) as oriented:
-                preview = ImageOps.contain(
-                    oriented.convert('RGB'), (FOLDER_FORMAT_EDGE, FOLDER_FORMAT_EDGE),
-                )
-                with preview, io.BytesIO() as output:
-                    preview.save(output, format='PNG')
-                    return output.getvalue()
 
     def _on_unmap(self, _event: tk.Event) -> None:
         """Cancel cover work while the photo pane is hidden.

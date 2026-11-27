@@ -70,6 +70,10 @@ RECOVERABLE_ITEM_STATES = {
 LINKED_UPLOAD_UNCERTAIN_REASON = (
     "Linked upload outcome may be uncertain; review the gallery before retrying."
 )
+# An unconfirmed legacy mutation is neither absence evidence nor a retry grant.
+LEGACY_UPLOAD_UNCERTAIN_REASON = (
+    "Upload outcome is unconfirmed; review the gallery before retrying."
+)
 
 
 @dataclass

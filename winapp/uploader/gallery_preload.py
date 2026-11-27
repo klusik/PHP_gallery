@@ -16,7 +16,7 @@ import json
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Callable, Literal, TypeAlias
 
 from .app_linking import (
     MEDIA_PRELOAD_RETRY_MAX_ATTEMPTS, LinkedPhoto, LinkingError,
@@ -28,12 +28,31 @@ from .diagnostics import format_safe_photos_failure
 _PreloadDiagnosticStage = Literal[
     'listing', 'cache', 'fetch', 'verify', 'storage', 'setup',
 ]
+_CacheAdmissionRefusal: TypeAlias = Literal[
+    'public_cache_disallowed', 'admin_preload_metadata_missing',
+    'admin_preload_disallowed', 'admin_preload_disallowed_nsfw_photo',
+    'admin_media_unavailable', 'admin_preload_unsupported',
+    'nsfw_preload_intent_required', 'unverified_nsfw_preload_intent_required',
+]
 
 # Purpose: Bound a complete direct-photo preload and its final verification.
 # Type: int. Units: direct photo descriptors. Scope: one worker run.
 # Consumers: GalleryPreloadWorker._list_photos. Rationale: 100,000 admits
 # large galleries while bounding descriptor memory and two-rendition work.
 PRELOAD_MAX_PHOTOS = 100_000
+# Purpose: Name the shared cache-status result state set.
+# Type: Literal. Units: fixed status names. Scope: one loaded gallery snapshot.
+# Consumers: GalleryCacheProbeRow and probe_gallery_cache_status.
+# Rationale: Keep the lightweight tree indicator vocabulary identical to preload.
+CacheProbeState: TypeAlias = Literal['local', 'partial', 'cloud', 'unknown'] | None
+# Purpose: Carry one bounded local-cache observation back to a UI owner.
+# Type: tuple[CacheProbeState, int, int, bool, bool | None]. Units: state, counts,
+# completeness and optional persisted pin. Scope: one gallery snapshot.
+# Consumers: PhotosWorkspace and QtPhotos. Rationale: No toolkit state belongs
+# in the shared cache inspection result.
+GalleryCacheProbeRow: TypeAlias = tuple[
+    CacheProbeState, int, int, bool, bool | None,
+]
 # Purpose: Space cancelable waits while showing server-directed delay progress.
 # Type: float. Units: seconds. Scope: one Retry-After countdown.
 # Consumers: GalleryPreloadWorker._wait_before_retry. Rationale: One-second
@@ -87,6 +106,60 @@ class PreloadProgress:
     stored: int = 0
     stored_bytes: int = 0
     wait_reason: str = ''
+
+
+def probe_gallery_cache_status(
+    session: LinkingSession, gallery_id: int,
+    photos: tuple[LinkedPhoto, ...] | None, complete: bool,
+    cancelled: threading.Event,
+) -> GalleryCacheProbeRow | None:
+    """Read rendition presence and pin state from an already loaded snapshot.
+
+    This function is intentionally local-only: it never requests a catalogue or
+    downloads media. Callers run it on their existing background read lane and
+    publish the result only if the captured session/generation remains current.
+
+    Args:
+        session (LinkingSession): Exact authorized media session for the rows.
+        gallery_id (int): Physical gallery owning the loaded descriptors.
+        photos (tuple[LinkedPhoto, ...] | None): Already loaded rows, or None
+            when the viewer has not supplied any page yet.
+        complete (bool): Whether the loaded rows represent the final page.
+        cancelled (threading.Event): Generation-owned cancellation signal.
+    Returns:
+        GalleryCacheProbeRow | None: Cache state, complete-photo count, total
+            rows, completeness and pin state; None if cancelled while probing.
+    """
+    if cancelled.is_set():
+        return None
+    try:
+        pin_reader = getattr(session, 'gallery_pinned', None)
+        pinned = pin_reader(gallery_id) is True if callable(pin_reader) else False
+        if photos is None:
+            return None, 0, 0, False, pinned
+        if len(photos) > PRELOAD_MAX_PHOTOS:
+            return 'unknown', 0, 0, False, None
+        cached = 0
+        any_cached = False
+        for photo in photos:
+            if cancelled.is_set():
+                return None
+            thumbnail_cached = (
+                session.has_cached_photo(gallery_id, photo, thumbnail=True) is True
+            )
+            detail_cached = session.has_cached_photo(gallery_id, photo) is True
+            cached += int(thumbnail_cached and detail_cached)
+            any_cached = any_cached or thumbnail_cached or detail_cached
+        state: CacheProbeState = (
+            'local' if complete and photos and cached == len(photos)
+            else 'partial' if any_cached
+            else 'cloud' if complete else 'unknown'
+        )
+        return state, cached, len(photos), complete, pinned
+    except Exception:
+        if cancelled.is_set():
+            return None
+        return 'unknown', 0, 0, False, None
 
 
 class GalleryPreloadWorker(threading.Thread):
@@ -440,7 +513,8 @@ class GalleryPreloadWorker(threading.Thread):
             else 'local' if complete and total
             else 'partial' if any_cached else 'cloud'
         )
-        ineligible = sum(not self._eligible(photo) for photo in photos)
+        exclusions = self._cache_admission_exclusions(photos)
+        ineligible = sum(exclusions.values())
         reason = transfer_reason or (
             '' if complete else 'no_store'
             if verified + ineligible == total else 'unavailable'
@@ -454,6 +528,7 @@ class GalleryPreloadWorker(threading.Thread):
             reason, total=total,
             completed=total, cached=verified, skipped=skipped,
             prepared_bytes=prepared_bytes, pinned=pinned, cache_state=state,
+            cache_exclusions=exclusions,
         )
 
     def _list_photos(self) -> list[LinkedPhoto] | None:
@@ -508,28 +583,59 @@ class GalleryPreloadWorker(threading.Thread):
         Returns:
             bool: True only when its independent cache eligibility permits storage.
         """
-        if photo.cache_eligible is True:
-            return True
-        if self._session.can_read_admin_media():
-            return self._private_candidate(photo)
-        return photo.cache_eligible is not False
+        return self._cache_admission_refusal(photo) is None
 
-    def _private_candidate(self, photo: LinkedPhoto) -> bool:
-        """Check eligibility for automatic thumbnails or saved full preload.
+    def _cache_admission_refusal(
+        self, photo: LinkedPhoto,
+    ) -> _CacheAdmissionRefusal | None:
+        """Name the first failed gate for the same public or Admin cache policy.
 
         Args:
-            photo (LinkedPhoto): Current server-authorized Admin photo.
+            photo (LinkedPhoto): Current descriptor from the verified listing.
 
         Returns:
-            bool: True for an eligible non-NSFW thumbnail or a photo covered by
-                saved full-media intent; rendition checks still own persistence.
+            _CacheAdmissionRefusal | None: Fixed rejection code, or None when the
+                descriptor can proceed to the existing rendition checks.
         """
-        return (photo.cache_eligible is not True
-                and photo.preload_eligible is True
-                and self._session.can_read_admin_media()
-                and self._session.supports_admin_preload()
-                and (photo.nsfw is False
-                     or self._session.gallery_preload_intent(self._gallery_id)))
+        if photo.cache_eligible is True:
+            return None
+        if not self._session.can_read_admin_media():
+            return 'public_cache_disallowed' if photo.cache_eligible is False else None
+        if photo.preload_eligible is False:
+            if photo.nsfw is True:
+                return 'admin_preload_disallowed_nsfw_photo'
+            return 'admin_preload_disallowed'
+        if photo.preload_eligible is not True:
+            return 'admin_preload_metadata_missing'
+        # Keep the previous Admin recheck after the descriptor gates.
+        if not self._session.can_read_admin_media():
+            return 'admin_media_unavailable'
+        if not self._session.supports_admin_preload():
+            return 'admin_preload_unsupported'
+        if photo.nsfw is not False and not self._session.gallery_preload_intent(self._gallery_id):
+            if photo.nsfw is True:
+                return 'nsfw_preload_intent_required'
+            return 'unverified_nsfw_preload_intent_required'
+        return None
+
+    def _cache_admission_exclusions(
+        self, photos: list[LinkedPhoto],
+    ) -> dict[_CacheAdmissionRefusal, int]:
+        """Aggregate only the final admission failures of the current listing.
+
+        Args:
+            photos (list[LinkedPhoto]): Bounded direct-photo listing for this worker.
+
+        Returns:
+            dict[_CacheAdmissionRefusal, int]: Photo counts by the first failed
+                gate, with no descriptors or transport data retained.
+        """
+        counts: dict[_CacheAdmissionRefusal, int] = {}
+        for photo in photos:
+            reason = self._cache_admission_refusal(photo)
+            if reason is not None:
+                counts[reason] = counts.get(reason, 0) + 1
+        return counts
 
     def _run_thumbnail_photos(
         self, photos: list[LinkedPhoto], pinned: bool,
@@ -660,13 +766,15 @@ class GalleryPreloadWorker(threading.Thread):
                 time.perf_counter() - started
             ) * 1000.0
         complete = verified == total and skipped == 0 and not reason
-        ineligible = sum(not self._eligible(photo) for photo in photos)
+        exclusions = self._cache_admission_exclusions(photos)
+        ineligible = sum(exclusions.values())
         self._finish(
             'complete' if complete else 'partial' if verified else 'error',
             reason or ('' if complete else 'no_store'
                        if verified + ineligible == total else 'unavailable'),
             total=total, completed=completed, cached=verified, skipped=skipped,
             cache_state='partial' if verified else 'cloud',
+            cache_exclusions=exclusions,
         )
 
     def _record_failure(self, error: Exception) -> None:
@@ -871,6 +979,7 @@ class GalleryPreloadWorker(threading.Thread):
         completed: int | None = None, cached: int | None = None,
         skipped: int | None = None, prepared_bytes: int | None = None,
         pinned: bool | None = None, cache_state: str | None = None,
+        cache_exclusions: dict[_CacheAdmissionRefusal, int] | None = None,
     ) -> None:
         """Publish one fixed safe terminal reason and progress snapshot.
 
@@ -884,6 +993,8 @@ class GalleryPreloadWorker(threading.Thread):
             prepared_bytes (int | None): Bytes fetched during this run.
             pinned (bool | None): Effective retained preference, if known.
             cache_state (str | None): Final canonical cache state, if checked.
+            cache_exclusions (dict[_CacheAdmissionRefusal, int] | None): Final
+                counts of rejected photo descriptors by fixed cache rule.
 
         Returns:
             None: Replaces the latest snapshot exactly once per terminal path.
@@ -904,6 +1015,10 @@ class GalleryPreloadWorker(threading.Thread):
             f'scope={"thumbnails" if progress.thumbnails_only else "all"}; '
             f'reason={progress.reason or "none"}'
         )
+        if cache_exclusions:
+            outcome += '; cache_admission=' + ','.join(
+                f'{condition}:{count}' for condition, count in sorted(cache_exclusions.items())
+            )
         summary = (
             f'{self._failure_summary}; {outcome}'
             if self._failure_summary is not None else outcome

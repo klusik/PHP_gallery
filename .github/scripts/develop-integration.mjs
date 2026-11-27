@@ -17,7 +17,8 @@ import {readCoverageArtifact,loadIntegrationQualification} from './coverage-arti
 import {fullMatrixOwners,requireCurrentWorkflowOwners,advisoryMatrixOwners} from './ci-owner-contract.mjs';
 import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
-import {loadFeatureExecution,verifyFeatureOwners,verifyFeatureBasic} from './feature-qualification.mjs';
+import {loadFeatureExecution,verifyFeatureOwners,verifyFeatureBasic,
+    verifyFeatureJobInventory} from './feature-qualification.mjs';
 import {createHash} from 'node:crypto';
 
 /** Bound the complete semantic version text admitted from an immutable Git blob.
@@ -828,7 +829,7 @@ function validateFeatureIntegration(request,context,call,tree,basic,develop) {
         ...FULL_OWNERS.map(name=>'Develop integration / '+name),'Develop integration / Authoritative release audit',
         ...advisoryMatrixOwners().map(name=>'Develop integration / '+name)]);
     if (request.qualifiedRun) allowed.add('Develop integration');
-    if (jobs.some(job=>!allowed.has(job.name))) throw new Error('BLOCKED unexpected native feature qualification job.');
+    verifyFeatureJobInventory(jobs,allowed,Number(runId),Number(attempt));
     const record={schema_version:2,repository,source_branch:request.branch,source_sha:request.sourceSha,
         candidate_sha:request.candidateSha,candidate_tree:tree,expected_develop_sha:request.expectedDevelopSha,
         source_base:request.sourceBase,workflow_sha:context.headSha,workflow_path:WORKFLOW_PATH,

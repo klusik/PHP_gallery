@@ -408,8 +408,10 @@ FTP-driftsättning har tagits bort. Se \filepath{docs/PRODUCTION_FILES.md}.
 
 WinApps typsnitt och~licens finns i~det valfria fältet
 \codeword{companion_resource_files}. Gettext-katalogerna finns i~fältet
-\codeword{companion_locale_files}. Installerade läsare hanterar de~fält de
-känner igen. Paketpolicyn verifierar de~exakta sökvägarna i~båda listorna.
+\codeword{companion_locale_files}. Beroendefilerna, Qt Quick-scenen,
+licensinformationen och~underlaget för~det gemensamma onedir-bygget finns i
+\codeword{companion_backend_files}. Installerade läsare hanterar de~fält de
+känner igen. Paketpolicyn verifierar de~exakta sökvägarna i~varje lista.
 Uppdateringsinventariet avgör vilka CMS-filer som ersätts. Direkta
 uppdateringar använder ett~fullständigt nyare paket och~alla
 väntande migreringar utan varje mellanversion. Detta kvalificerar inte
@@ -1829,6 +1831,72 @@ språket nästa gång WinApp öppnas.
 \ui{Starta om WinApp} finns kvar i~\ui{Inställningar} tills valet tillämpas.
 Webbplatsens språk och~språkutgåvorna för flygrapporter i~PDF ställs in separat.
 
+Välj GUI-backend för nästa start under \ui{Gränssnitt} i~\ui{Inställningar}.
+Tkinter/ttk är standard. PySide6/Qt~6 är mycket experimentellt.
+De fullständiga källkodsberoendena installerar Qt-paketen och~den gemensamma kärnan.
+Standardinstallationen för Windows innehåller båda gränssnitten och~behåller
+Tkinter som standard.
+Det vanliga uppdateringsprogrammet tar hand om befintliga installationer.
+Flyg som uttryckligen avslutats i~äldre versioner finns kvar i~lokal historik.
+Deras fotoköer sparas och~förblir inaktiva när du~byter gränssnitt.
+Båda gränssnitten har en vänsterlist med ikoner och~en kompakt anslutningsrad.
+Flygkontroller och~sparade flyg finns i~\ui{Watcher}.
+Förlopp och~sparade rapporter öppnas separat. På~panelen \ui{AI} finns
+arbetarens inställningar och~valfria beroendeåtgärder i~båda gränssnitten.
+Gallerimenyn i~Qt Foton visar godkända uppgifter och~erbjuder förladdning
+och~lokal lagring. Fotomenyn visar uppgifter och~låter en godkänd administratör
+ändra synlighet eller bekräfta borttagning av~markerade foton.
+Bekräftelsen visas intill fotot som du~öppnade menyn från.
+I~Qt markerar en~roterande pil varje miniatyrbild som läses in. Väntande
+miniatyrbilder visar en~statisk symbol. Förloppskortet för mappbevakning
+samlar tillgängliga åtgärder på en~separat yta med en~synlig skugga.
+För SDR-foton kan Lightbox växla mellan den upptäckta bildytan och~hela
+originalbilden. Den systemspecifika HDR-vyn visar hela bilden.
+Om du godkänner förnybar uppladdningsåtkomst i~webbläsaren sparar WinApp
+behörigheten i~Windows Autentiseringshanteraren och~kan verifiera samma galleri
+igen efter omstart.
+Gallerimenyn kan starta mappbevakning med en tillfällig nyckel för galleriet.
+Öppna valet av~länkade gallerier från verktygsmenyn eller med
+\codeword{Ctrl+Shift+G}.
+En~säker omstart stänger nyckeln och verifierar ny tillfällig åtkomst innan
+samma session fortsätter.
+Importgranskningen visar godkända byte, överhoppade format, avvisade ZIP-poster
+och~tillgängliga lokala avkodare. I~importdetaljerna kan du~granska enskilda
+filer och~välja var miniatyrbilderna skapas.
+Qt kan öppna en verifierad avbruten import för granskning. Obekräftade
+uppladdningar förblir pausade. Efter avbruten PDF-generering kan du skapa
+en~ny lokal utgåva för en avslutad flygning.
+Med aktiv bevakning kan \ui{Skapa och ladda upp} skicka en~ny PDF-version
+för en avslutad flygning till galleriet som bevakas.
+En~godkänd galleripresentation styr intervallet för det manuellt startade
+bildspelet i~Qt. På~Windows och~macOS kan du spela MP3 och~WAV från den
+godkända spellistan.
+Qt-inställningarna visar vanlig och sparad fotocache och låter dig ändra
+den gemensamma gränsen för miniatyrbilder.
+Testa anslutningen med API-nyckel via \ui{Spara och testa}.
+Återkallning av~den sparade nyckeln kräver bekräftelse och~att den verifierade
+Watcher-kön slutförs. Den lokala nyckeln tas bort när servern har bekräftat åtgärden.
+Qt-uppdateraren verifierar rätt installationsfil och väntar tills pågående
+arbete har avslutats eller sparar en aktiv inspelning som kan återupptas.
+Gränssnittet visar gallerier
+och~historik och~skapar lokala PDF-filer för sparade flygningar.
+Båda gränssnitten delar sparat galleriträd och~gallerival.
+I~Windows kan det starta manuella importer, Watcher, SimConnect-inspelning
+och~den konfigurerade AI-processen med~en verifierad, sparad API-nyckel.
+Slutförandet tömmer den ursprungliga kön och~levererar konfigurerade rapporter.
+En matchande sparad Watcher-kö öppnas för uttrycklig granskning.
+En sparad inspelning kan stängas lokalt och~en SimBrief-plan kan läggas till
+i~flygningen.
+Vid omstart kan WinApp återuppta samma aktiva inspelning efter kontroll.
+En fabriksåterställning återställer Watchers standardvärden. Valda PDF-filer
+kan laddas upp till det galleri som Watcher använder.
+I~Windows kan du även länka för uppladdning och välja galleri i~Foton.
+Med rätt behörighet kan du skapa gallerier och redigera deras metadata.
+Efter omstart öppnas en verifierad, oavslutad import för granskning och~ett
+uttryckligt nytt försök.
+WinApp öppnas med Tkinter om Qt inte startar eller om väntande arbete
+kräver Tkinter. Kör med \codeword{--gui-backend tkinter} för en~enstaka start.
+
 \subsection{Beständig capture-kö och återställning}
 
 Anslut en gång, starta capture och välj \ui{Finish} en gång på slutet.
@@ -2033,6 +2101,7 @@ fortfarande startvärden. Windows reparse-punkter och beständighet vid strömav
 Klicka på \ui{Anslut webbplats} i huvudfönstret. Bekräfta den sparade
 API-anslutningens adress eller ange adressen till din PHP Gallery-webbplats
 med eventuell installationssökväg. Välj galleri efter anslutningen.
+Välj \ui{Byt webbplats} för en webbplats med aktiv anslutning.
 Värdnamn och installationssökväg kan också anges utan protokoll.
 Vid bekräftelse lägger WinApp till \texttt{https://} och visar den
 normaliserade adressen innan galleriet kontrolleras. På samma dator kan
@@ -2085,6 +2154,12 @@ Krysset \ui{Koppla från webbplats} avslutar den aktuella länken. Anslut samma
 konto efter omstart och välj galleriet igen. Hantera avancerad åtkomst i
 \ui{Manage link…} i inställningarna. Uppladdning med API-nyckel använder en
 egen \ui{Gallery URL} och en galleribegränsad nyckel.
+Vyn för länkhantering visar endast behörigheter som stöds av galleriet och den
+aktuella plattformen. En aktiv behörighet visas som skrivskyddad tills den
+kopplas från. Säker lagring kräver separat samtycke i webbläsaren och ett
+inbyggt valv som stöds. Uppladdningsbehörighet väljer inte målgalleri; välj och
+verifiera det separat. Serverbehörigheter kan granskas eller återkallas via
+\ui{Manage gallery links}.
 
 Välj \ui{Read gallery details} separat och godkänn
 läsbehörigheten. Med \ui{Read selected details} visas det valda galleriets ID,
@@ -2114,6 +2189,8 @@ reparse och strömavbrott är ännu inte kvalificerade.
 Originala ZIP-filer och extraherade staging-kataloger behålls för manuell
 granskning oavsett ålder eller uppladdningsbekräftelse; automatisk åldersbaserad
 städning är avstängd eftersom synliga jobb-ID:n inte bevisar fullständig historik.
+Båda skrivbordsgränssnitten erbjuder återställning för länkade uppladdningar
+i galleriväljaren när det ursprungliga uppladdningsmålet återanslutits.
 För exakt en osäker länkad uppladdning frågar \ui{Check uncertain upload}
 efter filstorleken i byte upp till 64~MiB och kontrollerar den sparade hashen
 en gång utan att öppna den lokala filen. En träff
@@ -2162,6 +2239,10 @@ Det responsiva rutnätet rullar kontinuerligt och begär bara synliga miniatyrbi
 utan separata detaljbilder. Den uttryckliga åtgärden \ui{Förladda galleri}
 hämtar både miniatyrbilder och lightbox-versioner.
 Ett~klick väljer ett~foto och~visar metadata i~den justerbara högra panelen.
+Håll pekaren över en~galleriikon i~Qt-trädet för att se cacheläge,
+om~galleriet behålls i~cachen och~status för Watcher.
+Qt kan förkorta långa titlar i~rubriken. Hela titeln finns i~metadata och~visas
+när pekaren hålls över rubriken.
 Krysset uppe till höger stänger panelen och ger plats åt galleriet utan att
 ändra markeringen eller läsa om albumet. Klicka på samma foto igen för att
 öppna informationen. Ett försenat metadatasvar kan inte öppna en stängd panel.
@@ -2169,7 +2250,9 @@ Dubbelklick eller Enter öppnar lightboxen. Pilar navigerar rutnätet;
 mellanslag markerar eller avmarkerar. Control-klick (Command-klick på~macOS)
 växlar enskilda markeringar; Shift-klick eller Shift-pil väljer ett~förankrat
 intervall inom gränsen på~64~foton. Control-pil (Command-pil på~macOS) flyttar
-fokus utan att~rensa markeringen. Bara valda foton får~en lätt rundad kontur
+fokus utan att~rensa markeringen. När ett omarkerat foto öppnas markeras det.
+Bläddring i~lightboxen behåller rutnätets markering.
+Bara valda foton får~en lätt rundad kontur
 runt den faktiska förhandsvisningen och dess gemensamma kant, utan tomt
 textutrymme under bilden. Valda format har ett kompakt avstånd på 6~pixlar
 mellan kanterna både horisontellt och vertikalt; återstående bredd ligger efter
@@ -2177,8 +2260,9 @@ sista kolumnen. Standard behåller stabil radhöjd för naturliga förhandsvisni
 Filnamn visas i~en kompakt kontrasterande tooltip. Panel och~kontextinformation
 delar behörighetskontrollerade metadata, formatering och~en kort begränsad
 sessionscache.
-Vänster och höger går runt hela albumet. Stäng lightboxen
-eller tryck Escape för att återställa trädet och rutnätet även vid bildfel.
+Vänster och höger går runt hela albumet. Escape stänger först en öppen
+platspanel eller bildmeny och lämnar sedan helskärmsläget med fotot kvar.
+I~vanligt lightboxläge återställer Escape trädet och rutnätet även vid bildfel.
 Miniatyrerna beskär upptäckta svarta fält och visar hela den återstående scenen
 i dess bildförhållande. Sju synliga formknappar i albumets verktygsfält
 byter direkt till Standard, 16:9, 21:9, 4:3, 1:1, 4:5 eller 9:16 utan någon
@@ -2624,6 +2708,11 @@ förnyelse. WinApp förnyar åtkomsttoken med 15~minuters giltighet via
 Nyckelringen i macOS eller Windows Credential Manager. Verifierad HTTPS
 och direkt \texttt{http://localhost} stöds. Äldre servrar använder en
 tillfällig koppling i upp till 15~minuter.
+WinApp använder Nyckelringen i macOS utan att be om dess lösenord. Om den
+sparade uppgiften inte kan läsas före förnyelsen kan \ui{Anslut webbplats}
+öppna webbläsaren för ett tillfälligt godkännande och behålla den sparade
+kopplingen.
+Om anslutningen misslyckas visar fotodialogen i vilket steg felet uppstod.
 Administratören kan återkalla
 åtkomst bland anslutna appar. Koder som ännu inte bytts ut upphör inom
 120~sekunder. Se \filepath{docs/APP_LINKING_PHASE_0.md}.
@@ -2810,6 +2899,16 @@ med \texttt{F1}, supportdiagnostiken med \texttt{Ctrl+Shift+D} och About.
 Navigeringsflikarna finns kvar. En panel som äger inmatningen spärrar
 menykommandon och~dessa kortkommandon tills den stängs.
 
+Under \ui{Inställningar > Gränssnitt > GUI-backend} är Tkinter / ttk
+standardvalet. Standardinstallationen för Windows innehåller redan
+\ui{PySide6 / Qt 6 (mycket experimentell)}. Källkodskörning använder
+de valfria Qt-beroendena.
+Använd \ui{Starta om WinApp} för att tillämpa valet. Pågående jobb måste
+avslutas eller ha en verifierad fortsättning. Båda gränssnitten använder samma
+profil. Om Qt inte kan starta öppnas Tkinter. Du kan också välja Tkinter
+för framtida starter. I macOS använder Qt Lightbox EDR när bilden och skärmen
+stöder det, och visar annars SDR.
+
 Inställningar, hjälp, anslutningsfrågor och meddelanden visas i huvudfönstret.
 Informationsmeddelanden visas i en icke-blockerande, avvisbar remsa med
 rullbar text. Den köar högst 32 meddelanden och visar antalet äldsta som
@@ -2842,7 +2941,10 @@ de kan användas.
 \ui{Support diagnostics…} öppnar en lokal förhandsvisning med \ui{Refresh},
 \ui{Copy} och~\ui{Save}. Rapporten innehåller tillåtna inställningar och
 körningsfakta, den aktuella diagnostikbilden och högst de senaste 64~KiB av
-den befintliga apploggen. Saknade eller oläsbara loggavsnitt, trunkerad svans
+den befintliga apploggen. Qt-meddelanden skrivs till samma roterande logg.
+Förladdningsresultatet räknar nekade foton efter den första cacheregel som
+inte uppfylldes.
+Saknade eller oläsbara loggavsnitt, trunkerad svans
 och en borttagen ofullständig första rad markeras. Rapporten
 använder inte nätverket och filtrerar igenkännbara
 autentiseringsuppgifter, URL-frågeparametrar/fragment, lokala sökvägar,
@@ -2992,6 +3094,10 @@ Python-/källkodskörningar erbjuder det verifierade installationsprogrammet fö
 manuell start. Krav på Windows-omstart visas uttryckligen; avbruten UAC öppnar
 den gamla installationen igen. Äldre klienter som fastnat i väntan på arbetare
 behöver manuell installation efter att den gamla appen stängts helt.
+Om Windows definitivt vägrar starta installationsprogrammet startar hjälparen
+den befintliga appen igen endast om fingeravtrycket för hela den installerade
+runtime-miljön är oförändrat. En startad installation som inte kan observeras förblir spärrad;
+detta är ingen återställning.
 
 
 \subsection{Flygregistrering och rapporter}
@@ -3066,6 +3172,8 @@ gamla värden ersätts med streck. Genvägen \ui{PDF} öppnar sparade flygningar
 \ui{Sparade flygningar och PDF} visar start, flygplan eller sparat galleri,
 mätpunkter, lokala PDF-filer, status och fel. \ui{Visa bara flygningar} är
 av från början. Filtret behåller sessioner med flygdata eller PDF-filer.
+Qt visar det aktuella intervallet och har sidknappar för nyare och äldre flygningar.
+Sparade PDF-utgåvor visar skapelsetid och sidantal när uppgifterna är tillgängliga.
 Dubbelklick eller Retur öppnar en PDF. \ui{Mapp} öppnar filerna.
 Uppdatering och applogg finns i menyn. \ui{Avsluta flygning och skapa PDF}
 skapar fyra språkversioner utan bekräftelse, slutför accepterat arbete och
@@ -3128,6 +3236,10 @@ enbart för fotovisning döljer den inte. Länkat uppladdningsläge erbjuder
 återanslutning till galleriet. Aktiv inspelning, väntande arbete och avslut
 behåller sina åtgärder för avslut, granskning eller förlopp; en pågående
 manuell import behåller sina egna kontroller.
+Qt~erbjuder samma Börja- eller Återanslut-åtgärd i Watcher och Import när
+insamlingen är inaktiv. Dialogen Börja använder sparade anslutningsvärden och
+sparar bara URL och API-nyckel; Avbryt och andra osparade Settings-värden lämnas
+oförändrade.
 SimBriefs ladda/ta bort-knapp,
 inställningsikon och status visas bara vid upptäckt flygning; dold vy behåller
 den laddade planen. Annars använder Watcher, Import och förloppet
@@ -10526,15 +10638,23 @@ WinApps partitionskoordinator identifierar hela testinventariet en gång.
 Varje barnprocess läser bara sina tilldelade lokala moduler och måste rapportera
 varje vald identitet. Modul-/klass-fixtures, fullständigt bevis för disjunkt
 identitetstäckning och befintliga process-/koordinatortidsgränser är fortsatt krav.
-Åtta seriella grupper behåller fem exklusiva mätgrupper och tre deterministiska
-restgrupper där klasser hålls samman. Varje process får uttryckliga importvägar
-för källkod och tester.
+Nio seriella grupper håller sex grupper exklusiva: visaren, fyra uppmätta
+klasser och~den parade inbyggda visuella sviten. Återstående klasser fördelas
+över tre deterministiska grupper. Varje process får uttryckliga importvägar för
+källkod och tester.
 
-Det värdbaserade portabla WinApp-jobbet installerar det befintliga
-Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet
-för aktivitetsfältsmärket körs i stället för att hoppas över. Lokala körningar
-utan Pillow kan fortfarande hoppa över detta valfria visuella test; värdjobbet
-utan grafiskt gränssnitt installerar inte pystray.
+När inbyggda visuella tester väljs sparar macOS först den vanliga revisionen för
+exakt käll-SHA och kör därefter den delegerade visuella sviten på en separat,
+ny värd. Den centrala revisionen kontrollerar ren källkod, Python-körmiljö och
+hela mängden delegerade identiteter innan artefakten används. Inga vanliga
+sockettester körs på den visuella värden före skärmbilderna; jobbet ändrar inte
+macOS-integritetsbehörigheter och stänger inte systemdialoger. Utan visuellt
+urval förblir den befintliga rådgivande macOS-körningen oförändrad.
+
+Det värdbaserade portabla WinApp-jobbet installerar de~låsta beroendena
+från \filepath{winapp/requirements-core.txt} i~revisionens Python-tolk.
+Pillow krävs för~pixeltestet av~aktivitetsfältsmärket i~det jobbet. De~separata
+Qt-jobben använder alla beroenden för~start från källkoden.
 
 Regressionstesterna för~titelbilden utökar de~redan registrerade sviterna
 för~Admin-panelens delegering och~webbläsarens livscykel samt den~befintliga

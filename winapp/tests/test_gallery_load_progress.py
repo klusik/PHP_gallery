@@ -81,11 +81,11 @@ TEST_ROOT_SIZE = (840, 620)
 # Rationale: 520 px exposes wrapping without changing production layout policy.
 TEST_NARROW_ROOT_SIZE = (520, 620)
 
-# Purpose: Observe at least two frames of the native indeterminate animation.
+# Purpose: Observe a real change in the native indeterminate animation.
 # Type: float. Units: seconds. Scope: one actual Tk progress widget assertion.
 # Consumers: test_metadata_counts_stay_indeterminate_then_thumbnails_are_determinate.
-# Rationale: 120 ms exceeds two 50 ms production animation intervals while
-# keeping the functional GUI check brief.
+# Rationale: 120 ms spans two 50 ms production timer intervals while keeping
+# the functional GUI check brief.
 TEST_BAR_ANIMATION_WAIT_SECONDS = 0.12
 
 # Purpose: Yield Tk while observing native bar animation frames.
@@ -151,6 +151,27 @@ TEST_TRANSIENT_DEFER_SECONDS = 5
 # Rationale: 2.2 seconds crosses two production one-second UI ticks with modest
 # scheduling margin while staying below the five-second automatic retry.
 TEST_TRANSIENT_COUNTDOWN_WAIT_SECONDS = 2.2
+
+
+def observe_bar_motion(root: 'tk.Tk', bar: 'tk.Widget') -> bool:
+    """Observe a changed value from the real native indeterminate timer.
+
+    Args:
+        root (tk.Tk): Native root that owns the progress animation.
+        bar (tk.Widget): The mapped progressbar with its native value option.
+    Returns:
+        bool: True if a pumped event turn changes the value within the budget.
+    """
+    initial = float(bar.cget('value'))
+    deadline = time.monotonic() + TEST_BAR_ANIMATION_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        root.update()
+        # The indeterminate value can return to its starting phase. Checking
+        # each native turn distinguishes that from an animation that never ran.
+        if float(bar.cget('value')) != initial:
+            return True
+        time.sleep(TEST_BAR_ANIMATION_POLL_SECONDS)
+    return False
 
 
 @unittest.skipIf(tk is None, 'Tkinter is unavailable on this runtime.')
@@ -248,12 +269,10 @@ class GalleryLoadProgressTests(unittest.TestCase):
             self.assertIn(f'{count:,}', self.progress.label.cget('text'))
             self._capture(stage)
 
-        before_animation = float(self.progress.bar['value'])
-        deadline = time.monotonic() + TEST_BAR_ANIMATION_WAIT_SECONDS
-        while time.monotonic() < deadline:
-            self.root.update()
-            time.sleep(TEST_BAR_ANIMATION_POLL_SECONDS)
-        self.assertNotEqual(before_animation, float(self.progress.bar['value']))
+        self.assertTrue(
+            observe_bar_motion(self.root, self.progress.bar),
+            'The metadata progress bar did not change during native animation.',
+        )
 
         self.progress.thumbnails(2, 5)
         self.root.update_idletasks()
@@ -466,7 +485,11 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
         if ImageGrab is None:
             return
         frame = viewer.frame
-        self.root.update_idletasks()
+        # The hosted runner's terminal can cover a mapped Tk frame. Keep this
+        # fixture root above it so the desktop grab samples the owned raster.
+        self.root.attributes('-topmost', True)
+        self.root.lift()
+        self.root.update()
         bounds = (
             frame.winfo_rootx(), frame.winfo_rooty(),
             frame.winfo_rootx() + frame.winfo_width(),
@@ -707,13 +730,8 @@ class NativeGalleryLoadProgressTests(unittest.TestCase):
             'A stale progress event must not replace the current count.',
         )
 
-        first_value = float(viewer._load_progress.bar['value'])
-        deadline = time.monotonic() + TEST_BAR_ANIMATION_WAIT_SECONDS
-        while time.monotonic() < deadline:
-            self.root.update()
-            time.sleep(TEST_BAR_ANIMATION_POLL_SECONDS)
-        self.assertNotEqual(
-            first_value, float(viewer._load_progress.bar['value']),
+        self.assertTrue(
+            observe_bar_motion(self.root, viewer._load_progress.bar),
             'The bar must animate while the metadata read remains held.',
         )
 

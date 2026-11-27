@@ -28,23 +28,21 @@ from uploader.localization import gettext
 from uploader.ui_shell import EmbeddedWindow, messagebox, simpledialog
 from typing import Callable, NamedTuple
 from .app_linking import (
-    GALLERIES_SCOPE, IDENTITY_SCOPE, READ_SCOPE, READ_UPLOAD_SCOPE, UPLOAD_SCOPE,
-    LINKING_GALLERY_ID_MAX, LINKING_GALLERY_QUERY_MAX_CHARS,
+    GALLERIES_SCOPE,
+    LINKING_GALLERY_QUERY_MAX_CHARS,
     LINKING_RECOVERY_MAX_FILE_BYTES,
-    ADMIN_PRELOAD_CAPABILITY,
-    GALLERY_TREE_CAPABILITY,
-    THUMBNAIL_BATCH_CAPABILITY, SLIDING_ACCESS_CAPABILITY,
     LINKING_KEEPALIVE_SECONDS,
-    ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX,
-    MEDIA_SCOPE_SUFFIX, PRESENTATION_SCOPE_SUFFIX, ROLLING_SCOPE_SUFFIX,
+    ROLLING_SCOPE_SUFFIX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
-    LinkedIdentity, LinkingAttempt, LinkingError, LinkingGrantRejected,
+    LinkedIdentity, LinkingAttempt, LinkingError, LinkingReconnectRequired,
     LinkingHttpsError, LinkingRefreshRejected,
     LinkingResponseError, LinkingRevisionConflict,
     LinkingScheduledPublication, LinkingSession,
     LinkingUnavailable,
     PushedAuthorization,
-    discover_linking_capabilities, linking_issuer,
+    discover_linking_capabilities, linking_issuer, linking_prompt_issuer,
+    requested_linking_scope,
+    scope_base,
 )
 from .linked_upload import (
     LinkedUploadTarget, linked_target_binding, verify_linked_upload_target,
@@ -53,25 +51,30 @@ from .linked_create import (
     BoundCreateReceipt, CreateDispatch, CreateIntent, CreateJournalSnapshot,
     GalleryCreateJournal,
 )
-from .credential_store import (
-    KeychainCredentialStore, NativeCredentialStore, WindowsCredentialStore,
+from .credential_store import CredentialStoreUnavailable, NativeCredentialStore
+from .desktop_connection import (
+    DesktopLinkedSite as _LinkedSite, desktop_upload_vault, find_live_link,
+    gallery_editor_url, live_link_sites, remember_desktop_transient_link,
+    restore_desktop_transient_link, saved_desktop_gallery_binding,
+    persist_browser_gallery_grant, persist_browser_scope_upgrade,
+    revoke_saved_gallery_grant,
+    verify_live_gallery_activity,
 )
 from .flight_report_translations import tr
 from .offline_linking import (
     OfflineBinding, discard_uncertain_refresh, enable_rolling_renewal,
-    load_offline_binding, offline_binding_path,
+    load_offline_binding,
     remove_offline_binding, remove_saved_offline_link, revoke_saved_refresh,
-    rotate_saved_offline_access,
+    restore_saved_offline_session, saved_offline_hint_path,
     save_offline_binding,
     store_approved_refresh,
 )
-from .session_resume import (
-    TransientGrant, delete_transient, load_transient, save_transient,
-)
+from .session_resume import delete_transient
 from .state_store import (
     RECENT_GALLERY_ADDRESS_LIMIT,
     load_recent_gallery_addresses, save_recent_gallery_addresses,
 )
+from .ui_layout import LINKING_ADDRESS_VISIBLE_ROWS
 from .ui_theme import Button, GlassCard, icon_button, place_dialog
 
 
@@ -144,12 +147,6 @@ LINKING_ADDRESS_STATUS_WRAP = 320
 # Consumers: LinkingManager._record_diagnostic. Rationale: 512 characters fit
 # all fixed metadata fields without retaining arbitrary response contents.
 LINKING_DIAGNOSTIC_MAX_CHARS = 512
-
-# Purpose: Keep address groups visible with space for the dialog actions.
-# Type: int. Units: rows. Scope: one gallery links dialog.
-# Consumers: _LinkAddressChoices. Rationale: Six fits the compact dialog
-# and the scrollbar provides access to the rest of the history.
-LINKING_ADDRESS_VISIBLE_ROWS = 6
 
 # Purpose: Keep the gallery picker and its compact actions in view.
 # Type: int. Units: Tk pixels. Scope: minimum gallery picker width.
@@ -406,9 +403,12 @@ class _LinkingScrollFrame(ttk.Frame):
             None: Installs the canvas and its width-matched content frame.
         """
         super().__init__(parent, style='Card.TFrame')
+        # EmbeddedWindow is a themed frame. The frame's style owns its color;
+        # looking up a classic Tk widget option aborts construction after the header.
+        card_background = ttk.Style(self).lookup('Card.TFrame', 'background')
         self.canvas = tk.Canvas(
             self, highlightthickness=0, borderwidth=0,
-            background=parent.cget('background'),
+            background=card_background,
         )
         self.scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
         self.content = ttk.Frame(self.canvas, padding=16, style='Card.TFrame')
@@ -483,14 +483,6 @@ class _LinkingScrollFrame(ttk.Frame):
             self.canvas.yview_moveto(max(0.0, (offset + top) / height))
         elif bottom > viewport:
             self.canvas.yview_moveto(min(1.0, (offset + bottom - viewport) / height))
-
-
-class _LinkedSite(NamedTuple):
-    """Keep one verified live link and its exact approving account in memory."""
-
-    issuer: str
-    session: LinkingSession
-    user_id: int
 
 
 class _PhotosUploadUpgrade(NamedTuple):
@@ -779,16 +771,7 @@ class LinkingManager:
         Returns:
             NativeCredentialStore | None: Available platform vault, if any.
         """
-        try:
-            if sys.platform == 'darwin':
-                store = KeychainCredentialStore(self._offline_path.parent)
-            elif sys.platform == 'win32':
-                store = WindowsCredentialStore()
-            else:
-                return None
-            return store if store.is_available() else None
-        except (RuntimeError, OSError):
-            return None
+        return desktop_upload_vault(self._offline_path.parent)
 
     def _saved_offline_binding(self, issuer: str) -> OfflineBinding | None:
         """Find the exact rolling or compatible legacy Windows restart hint.
@@ -802,19 +785,7 @@ class LinkingManager:
         Raises:
             RuntimeError: The selected hint is malformed or unsafe to read.
         """
-        path = offline_binding_path(self._offline_path, issuer)
-        binding = load_offline_binding(path, issuer)
-        if binding is not None:
-            if not binding.scope.endswith(ROLLING_SCOPE_SUFFIX):
-                raise LinkingError('Saved gallery binding is invalid.')
-            return binding
-        if sys.platform == 'win32' and issuer.startswith('https://'):
-            # The old global hint can legitimately belong to another issuer.
-            try:
-                return load_offline_binding(self._offline_path, issuer)
-            except RuntimeError:
-                return None
-        return None
+        return saved_desktop_gallery_binding(self._offline_path, issuer)
 
     def _offline_binding_path(self, binding: OfflineBinding) -> Path:
         """Resolve the storage generation for an exact saved link.
@@ -825,9 +796,7 @@ class LinkingManager:
         Returns:
             Path: Dedicated rolling hint or the original Windows hint.
         """
-        if binding.scope.endswith(ROLLING_SCOPE_SUFFIX):
-            return offline_binding_path(self._offline_path, binding.issuer)
-        return self._offline_path
+        return saved_offline_hint_path(self._offline_path, binding.issuer, binding.scope)
 
     def resume_saved_link(
         self, issuer: str, *, approve_if_absent: bool = False,
@@ -837,10 +806,12 @@ class LinkingManager:
         Args:
             issuer (str): Exact issuer in the saved recent-address list.
             approve_if_absent (bool): Start browser approval when a saved
-                approval is absent, expired or definitively refused.
+                approval is absent, expired, inaccessible before rotation or
+                definitively refused.
 
         Returns:
-            bool: True when a saved grant starts verification; false otherwise.
+            bool: True when this action handles the link or conveys failure;
+                false when the caller should start ordinary browser approval.
         """
         canonical = linking_issuer(issuer)
         if not canonical or (self._worker is not None and self._worker.is_alive()):
@@ -855,7 +826,14 @@ class LinkingManager:
         if binding is not None:
             store = self._native_offline_store()
             if store is None:
-                self._status.set(gettext('The securely saved gallery connection is unavailable.'))
+                if approve_if_absent:
+                    if self._session is None:
+                        self._current_issuer = canonical
+                    self._start(canonical, direct=True, use_native_storage=False)
+                else:
+                    self._status.set(
+                        gettext('The securely saved gallery connection is unavailable.'),
+                    )
                 return True
             if self._session is None:
                 self._current_issuer = canonical
@@ -882,57 +860,14 @@ class LinkingManager:
             """
             session: LinkingSession | None = None
             try:
-                grant = load_transient(canonical)
-                if grant is None:
+                restored = restore_desktop_transient_link(canonical, cancel)
+                if restored is None:
                     self._events.put((
                         owner, 'resume_absent',
                         (canonical, approve_if_absent),
                     ))
                     return
-                if ('galleries:list' not in grant.scope.split()
-                        or 'offline_access' in grant.scope.split()):
-                    self._events.put((
-                        owner, 'resume_absent',
-                        (canonical, approve_if_absent),
-                    ))
-                    return
-                remaining = grant.expires_at - time.time()
-                if remaining <= 0:
-                    delete_transient(canonical)
-                    self._events.put((
-                        owner, 'resume_expired',
-                        (canonical, approve_if_absent),
-                    ))
-                    return
-                try:
-                    capabilities = discover_linking_capabilities(
-                        canonical, cancel,
-                    )
-                except Exception:
-                    if cancel.is_set():
-                        raise
-                    capabilities = frozenset()
-                session = LinkingSession(
-                    canonical, grant.token, time.monotonic() + remaining,
-                    grant.scope,
-                    gallery_tree_supported=(
-                        GALLERY_TREE_CAPABILITY in capabilities
-                    ),
-                    thumbnail_batch_supported=(
-                        THUMBNAIL_BATCH_CAPABILITY in capabilities
-                    ),
-                    sliding_access_supported=(SLIDING_ACCESS_CAPABILITY in capabilities),
-                )
-                identity = session.identity()
-                if identity.user_id != grant.account_id:
-                    delete_transient(canonical)
-                    self._events.put((
-                        owner, 'resume_expired',
-                        (canonical, approve_if_absent),
-                    ))
-                    return
-                if cancel.is_set() or not session.can_list_galleries():
-                    raise LinkingError('Saved gallery access is unavailable.')
+                session, identity = restored
                 connected_session = session
                 self._events.put((
                     owner, 'resumed',
@@ -940,15 +875,16 @@ class LinkingManager:
                 ))
                 session = None
                 self._queue_initial_gallery_page(owner, connected_session, cancel)
-            except LinkingGrantRejected:
-                try:
-                    delete_transient(canonical)
+            except LinkingReconnectRequired:
+                self._events.put((
+                    owner, 'resume_expired',
+                    (canonical, approve_if_absent),
+                ))
+            except CredentialStoreUnavailable:
+                if not cancel.is_set():
                     self._events.put((
-                        owner, 'resume_expired',
-                        (canonical, approve_if_absent),
+                        owner, 'saved_storage_unavailable', (canonical, approve_if_absent),
                     ))
-                except Exception:  # noqa: BLE001
-                    self._events.put((owner, 'resume_error', None))
             except Exception:  # noqa: BLE001
                 self._events.put((owner, 'resume_error', None))
             finally:
@@ -1049,25 +985,7 @@ class LinkingManager:
             if confirm.instate(['disabled']):
                 return
             value = address.get().strip()
-            issuer = linking_issuer(value)
-            if not issuer and value.lower().startswith('http://'):
-                issuer = linking_issuer('https://' + value[len('http://'):])
-                if issuer:
-                    address.set(issuer)
-            elif not issuer and value and not value.startswith('//'):
-                authority = value.split('/', 1)[0]
-                looks_like_host = (
-                    '.' in authority or ':' in authority
-                    or authority.startswith('[')
-                    or authority.lower() == 'localhost'
-                )
-                # Require a recognizable authority so `photos/2026` is not
-                # silently reinterpreted as a host and installation mount.
-                if (looks_like_host and '://' not in value
-                        and not any(character.isspace() for character in value)):
-                    issuer = linking_issuer('https://' + value)
-                    if issuer:
-                        address.set(issuer)
+            issuer = linking_prompt_issuer(value)
             if not issuer:
                 hint.configure(
                     textvariable='', text=self._text('linking_website_address_invalid'),
@@ -1075,6 +993,8 @@ class LinkingManager:
                 )
                 entry.focus_set()
                 return
+            if not linking_issuer(value):
+                address.set(issuer)
             if manage:
                 self._dismiss_address_prompt()
                 self.open(self._root, issuer, manage=True)
@@ -1794,17 +1714,9 @@ class LinkingManager:
         if identity is None:
             return False
         issuer, _account_id = identity
-        canonical_issuer = linking_issuer(issuer + '/index.php')
-        gallery_id = gallery.gallery_id
-        if (canonical_issuer != issuer
-                or not session.matches_issuer(canonical_issuer)
-                or type(gallery_id) is not int
-                or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX):
+        url = gallery_editor_url(session, issuer, gallery.gallery_id)
+        if url is None:
             return False
-        url = (
-            f'{canonical_issuer}/index.php?page=admin_edit_gallery'
-            f'&id={gallery_id}&open_panel=1'
-        )
         try:
             return bool(webbrowser.open(url))
         except Exception:  # noqa: BLE001
@@ -2209,10 +2121,11 @@ class LinkingManager:
             tuple[_LinkedSite, ...]: The selected live site followed by other
                 live sites, each bound to its issuer, session and Admin ID.
         """
-        parked = tuple(site for site in self._parked_links if site.session.available())
-        if self._session is None or not self._session.available():
-            return parked
-        return (_LinkedSite(self._session_issuer, self._session, self._session_user_id), *parked)
+        selected = (
+            _LinkedSite(self._session_issuer, self._session, self._session_user_id)
+            if self._session is not None else None
+        )
+        return live_link_sites(selected, self._parked_links)
 
     def _live_link(self, issuer: str) -> _LinkedSite | None:
         """Find a still-live approval for the exact chosen installation.
@@ -2223,7 +2136,7 @@ class LinkingManager:
         Returns:
             _LinkedSite | None: Matching live session with its Admin ID, or None.
         """
-        return next((site for site in self._live_links() if site.issuer == issuer), None)
+        return find_live_link(self._live_links(), issuer)
 
     def _park_current_link(self) -> None:
         """Keep the selected live approval available while leaving its view.
@@ -2654,7 +2567,7 @@ class LinkingManager:
 
     def _start(
         self, issuer: str, *, direct: bool = False, replace_photos: bool = False,
-        restart: bool = False,
+        restart: bool = False, use_native_storage: bool = True,
     ) -> None:
         """Start one browser request while retaining any other live site.
 
@@ -2666,6 +2579,8 @@ class LinkingManager:
                 current site without closing its existing approved session.
             restart (bool): Allow fresh approval to replace a saved credential
                 for the exact verified issuer, Admin and scope.
+            use_native_storage (bool): Allow direct consent to retain a grant in
+                the native vault. False uses only the live browser approval.
 
         Returns:
             None: Starts the worker or shows a generic local failure.
@@ -2726,9 +2641,12 @@ class LinkingManager:
                 None: Queues bounded results and closes the attempt.
             """
             session = None
+            rolling_enabled = False
             failure = 'request_failed'
             try:
-                store = self._native_offline_store() if direct else offline_store
+                store = offline_store
+                if direct and use_native_storage:
+                    store = self._native_offline_store()
                 if direct and store is not None:
                     handoff = attempt.push_request(
                         prefer_upload=prefer_upload, prefer_rolling=True,
@@ -2770,17 +2688,8 @@ class LinkingManager:
                     Returns:
                         None: Keeps the live grant available if caching fails.
                     """
-                    if (offline or sys.platform != 'darwin'
-                            or not approved_session.can_list_galleries()):
-                        return
-                    try:
-                        snapshot = approved_session.transient_snapshot()
-                        save_transient(TransientGrant(
-                            snapshot.issuer, identity.user_id, snapshot.scope,
-                            snapshot.expires_at, snapshot.token,
-                        ))
-                    except Exception:  # noqa: BLE001
-                        pass
+                    if not offline and use_native_storage and (not direct or store is not None):
+                        remember_desktop_transient_link(approved_session, identity.user_id)
 
                 if upload_target is not None and (
                     offline or upload_scope is None
@@ -2841,10 +2750,23 @@ class LinkingManager:
                     if cancel.is_set() or remaining <= 0 or not session.available():
                         raise LinkingError('Offline connection is unavailable.')
                     if previous is not None:
+                        if not session.can_upload() and previous.can_upload():
+                            raise LinkingError(
+                                'A read-only grant cannot replace the saved upload grant.',
+                            )
                         self._save_photos_upgrade(
                             store, binding, previous_scope, refresh, remaining,
                         )
                         previous.disable_renewal()
+                        self._events.put((owner, 'offline_saved', (binding, store)))
+                    elif (not session.can_upload()
+                          and approved_scope.endswith(ROLLING_SCOPE_SUFFIX)
+                          and scope_base(approved_scope) == GALLERIES_SCOPE):
+                        binding = persist_browser_gallery_grant(
+                            self._offline_path.parent, store, issuer, identity,
+                            session, refresh, remaining, cancel,
+                        )
+                        rolling_enabled = True
                         self._events.put((owner, 'offline_saved', (binding, store)))
                     else:
                         with store.binding_transaction(issuer, identity.user_id):
@@ -2861,7 +2783,8 @@ class LinkingManager:
                                 store, issuer, identity.user_id, approved_scope,
                                 refresh, remaining,
                             )
-                    enable_rolling_renewal(session, store, path, binding)
+                    if not rolling_enabled:
+                        enable_rolling_renewal(session, store, path, binding)
                 if cancel.is_set():
                     return
                 connected_session = session
@@ -2918,73 +2841,14 @@ class LinkingManager:
             None: The new credential and any requested upload mode were accepted.
 
         Raises:
-            RuntimeError: Persistence or mode publication failed. Existing
+            LinkingError: Persistence or mode publication failed. Existing
                 credential and hint are restored if local storage permits.
+            RuntimeError: Native storage or binding-hint publication failed.
         """
-        issuer, account = binding.issuer, binding.account_id
-        path = self._offline_binding_path(binding)
-        preceding = (
-            OfflineBinding(issuer, account, previous_scope)
-            if previous_scope is not None and previous_scope.endswith(' offline_access')
-            else None
+        persist_browser_scope_upgrade(
+            self._offline_path, store, binding, previous_scope,
+            refresh, remaining, commit,
         )
-        prior_path = self._offline_binding_path(preceding) if preceding is not None else path
-        # Earlier Windows grants kept their hint at the shared legacy path.
-        migrating = prior_path != path
-
-        def restore(original: bytes | None) -> None:
-            """Restore the preceding local generation under the binding lock.
-
-            Args:
-                original (bytes | None): Prior bound vault record, if present.
-
-            Returns:
-                None: Restores the prior record and hint or removes the new ones.
-            """
-            try:
-                if original is not None:
-                    store.write(issuer, account, original)
-                else:
-                    store.delete(issuer, account)
-            finally:
-                if migrating and preceding is not None:
-                    if load_offline_binding(prior_path, issuer) is None:
-                        save_offline_binding(prior_path, preceding)
-                    remove_offline_binding(path, binding)
-                elif preceding is not None:
-                    save_offline_binding(path, preceding, replaces=binding)
-                else:
-                    remove_offline_binding(path, binding)
-
-        with store.binding_transaction(issuer, account):
-            original = store.read(issuer, account)
-            if ((original is None) != (preceding is None)
-                    or (migrating and load_offline_binding(prior_path, issuer) != preceding)):
-                raise LinkingError('Saved gallery credential changed.')
-            save_offline_binding(path, binding, replaces=None if migrating else preceding)
-            try:
-                store_approved_refresh(store, issuer, account, binding.scope, refresh, remaining)
-                published = store.read(issuer, account)
-                if published is None:
-                    raise LinkingError('Saved gallery credential could not be verified.')
-                if migrating and preceding is not None:
-                    remove_offline_binding(prior_path, preceding)
-            except Exception:
-                restore(original)
-                raise
-        if commit is None:
-            return
-        try:
-            # Windows mode admission takes the same user-wide metadata lock.
-            if not commit():
-                raise LinkingError('Linked upload mode could not be verified.')
-        except Exception:
-            with store.binding_transaction(issuer, account):
-                if (load_offline_binding(path, issuer) == binding
-                        and store.read(issuer, account) == published
-                        and (not migrating or not prior_path.exists())):
-                    restore(original)
-            raise
 
     def _activate_photos_upload_upgrade(self, upgrade: _PhotosUploadUpgrade) -> None:
         """Activate the new grant only after admitting the same upload gallery.
@@ -3031,34 +2895,22 @@ class LinkingManager:
         Raises:
             LinkingError: A chosen capability or secure storage is unavailable.
         """
-        scope = (READ_UPLOAD_SCOPE if self._read_var.get() and self._upload_var.get() else
-                 READ_SCOPE if self._read_var.get() else
-                 UPLOAD_SCOPE if self._upload_var.get() else
-                 GALLERIES_SCOPE if self._browse_var.get() else IDENTITY_SCOPE)
-        if self._create_var.get():
-            scope += ' galleries:create'
-        if self._visibility_var.get():
-            if not LINKING_VISIBILITY_READY:
-                raise LinkingError('Visibility changes are unavailable.')
-            if not self._read_var.get() or not self._browse_var.get():
-                raise LinkingError('Visibility requires gallery read access.')
-            scope += ' gallery:visibility'
         media_var = getattr(self, '_media_var', None)
-        if media_var is not None and media_var.get():
-            if (not LINKING_NATIVE_MEDIA_READY or 'media:read' not in self._capabilities
-                    or scope == IDENTITY_SCOPE or self._offline_var.get()):
-                raise LinkingError('Gallery media is unavailable.')
-            if 'media:admin' in self._capabilities:
-                scope += (ADMIN_PRESENTATION_SCOPE_SUFFIX
-                          if 'presentation:read' in self._capabilities else ADMIN_MEDIA_SCOPE_SUFFIX)
-            else:
-                scope += (PRESENTATION_SCOPE_SUFFIX
-                          if 'presentation:read' in self._capabilities else MEDIA_SCOPE_SUFFIX)
-        if self._offline_var.get():
-            if self._offline_store is None or self._offline_binding is not None:
-                raise LinkingError('Secure offline storage is unavailable.')
-            scope += ' offline_access'
-        return scope
+        return requested_linking_scope(
+            list_galleries=self._browse_var.get(),
+            upload=self._upload_var.get(),
+            read_details=self._read_var.get(),
+            create_galleries=self._create_var.get(),
+            change_visibility=self._visibility_var.get(),
+            read_media=bool(media_var is not None and media_var.get()),
+            remember_securely=self._offline_var.get(),
+            capabilities=frozenset(self._capabilities),
+            visibility_ready=LINKING_VISIBILITY_READY,
+            native_media_ready=LINKING_NATIVE_MEDIA_READY,
+            offline_storage_ready=(
+                self._offline_store is not None and self._offline_binding is None
+            ),
+        )
 
     def _display_gallery_page(self) -> None:
         """Render the cached server page if a gallery picker is open.
@@ -3379,6 +3231,17 @@ class LinkingManager:
                 self._clear_handoff()
             elif kind == 'resume_error':
                 self._status.set(gettext('Could not verify the saved link. Try again.'))
+            elif kind == 'saved_storage_unavailable' and isinstance(payload, tuple):
+                issuer, approve = payload
+                if approve:
+                    if self._worker is not None and self._worker.is_alive():
+                        self._events.put((owner, kind, payload))
+                        break
+                    # Native read failed before starting a refresh. Keep the
+                    # saved grant and allow a separate temporary approval.
+                    self._start(issuer, direct=True, use_native_storage=False)
+                else:
+                    self._status.set(gettext('Could not verify the saved link. Try again.'))
             elif (kind in ('resume_absent', 'resume_expired', 'offline_expired')
                     and isinstance(payload, tuple)):
                 issuer, approve = payload
@@ -3417,13 +3280,9 @@ class LinkingManager:
                         or self._recovery_publish is None):
                     self._gallery_status.set(gettext('The upload observation is no longer current.'))
                 else:
-                    message = (
-                        'Matching bytes were observed. This does not confirm the '
-                        'original upload or its registration. Review the gallery; '
-                        'the upload remains unresolved.'
-                        if result == 'present' else
-                        'The observation is unknown and does not prove absence. '
-                        'Review the gallery; the upload remains unresolved.'
+                    message = self._text(
+                        'linking_recovery_observed' if result == 'present'
+                        else 'linking_recovery_unknown',
                     )
                     if not self._recovery_publish(
                         target, file_hash, lambda: self._gallery_status.set(message),
@@ -3805,9 +3664,8 @@ class LinkingManager:
                 try:
                     if watch_target is not None and site.session is watch_target.session:
                         watch_target.inventory([])
-                    elif site.session.identity().user_id != site.user_id:
-                        site.session.close()
-                        raise LinkingError('Gallery account changed.')
+                    else:
+                        verify_live_gallery_activity(site)
                 except (RuntimeError, OSError):
                     self._events.put((site.session, 'keepalive_error', site))
 
@@ -3914,7 +3772,8 @@ class LinkingManager:
         Args:
             silent (bool): Keep startup restoration from raising the main window.
             approve_if_expired (bool): Continue an explicit Link action with
-                browser approval after definite rejection and local removal.
+                browser approval after definite rejection or a failed native read
+                before rotation.
 
         Returns:
             None: Starts a fenced background reconnect when available.
@@ -3942,33 +3801,11 @@ class LinkingManager:
             """
             session = None
             try:
-                # A startup with no network must leave the refresh fence alone.
-                required = ('rolling_access' if binding.scope.endswith(
-                    ROLLING_SCOPE_SUFFIX,
-                ) else 'offline_access')
-                capabilities = discover_linking_capabilities(binding.issuer, cancel)
-                if required not in capabilities:
+                restored = restore_saved_offline_session(store, path, binding, cancel)
+                if restored is None:
                     self._events.put((owner, 'offline_unavailable', None))
                     return
-                access = rotate_saved_offline_access(store, path, binding, cancel)
-                session = LinkingSession(
-                    access.issuer, access.token, access.expires_at, access.scope,
-                    admin_preload_supported=(
-                        ADMIN_PRELOAD_CAPABILITY in capabilities
-                    ),
-                    gallery_tree_supported=(
-                        GALLERY_TREE_CAPABILITY in capabilities
-                    ),
-                    thumbnail_batch_supported=(
-                        THUMBNAIL_BATCH_CAPABILITY in capabilities
-                    ),
-                    sliding_access_supported=(SLIDING_ACCESS_CAPABILITY in capabilities),
-                )
-                identity = session.identity()
-                if (identity.user_id != binding.account_id
-                        or identity.username != access.username or cancel.is_set()):
-                    raise LinkingError('Offline identity is unavailable.')
-                enable_rolling_renewal(session, store, path, binding)
+                session, identity = restored
                 connected_session = session
                 self._events.put((
                     owner, 'resumed' if silent else 'connected',
@@ -3980,6 +3817,11 @@ class LinkingManager:
                 self._events.put((
                     owner, 'offline_expired', (binding.issuer, approve_if_expired),
                 ))
+            except CredentialStoreUnavailable:
+                if not cancel.is_set():
+                    self._events.put((
+                        owner, 'saved_storage_unavailable', (binding.issuer, approve_if_expired),
+                    ))
             except Exception:  # noqa: BLE001
                 self._events.put((
                     owner, 'offline_error', (binding.issuer, approve_if_expired),
@@ -5115,25 +4957,18 @@ class LinkingManager:
                 if sys.platform == 'darwin':
                     delete_transient(site.issuer)
                 binding = self._saved_offline_binding(site.issuer)
-                record = None
+                revoked = None
                 if binding is not None and binding.account_id == site.user_id:
                     store = self._native_offline_store()
                     if store is None:
                         raise LinkingError('Secure storage is unavailable.')
-                    record = remove_saved_offline_link(
-                        store, self._offline_binding_path(binding), binding,
-                        capture_refresh=True,
+                    revoked = revoke_saved_gallery_grant(
+                        self._offline_path.parent, site.issuer, site.user_id,
+                        binding, store,
                     )
             except Exception:  # noqa: BLE001
                 self._events.put((owner, 'unlink_cleanup_error', None))
                 return
-            revoked = None
-            if record is not None and binding is not None:
-                try:
-                    revoke_saved_refresh(binding, record)
-                    revoked = True
-                except (RuntimeError, OSError):
-                    revoked = False
             self._events.put((owner, 'unlink_vault_cleared', (site, revoked)))
 
         self._worker = threading.Thread(

@@ -109,7 +109,7 @@ import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261102-gallery-search-v2';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261102-repeat-modes-v1';
-import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
+import { setupQuickPhotoTags } from './gallery-modules/quick-photo-tags.js?v=20261127-quick-tag-viewport-guard-v6';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,

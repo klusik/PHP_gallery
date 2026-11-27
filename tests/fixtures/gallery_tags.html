@@ -899,7 +899,7 @@ async function runQuickPhotoTagInteractions() {
     viewer.dataset.currentSourceGalleryId = '32';
     viewer.dataset.currentQuickTagEnabled = '1';
     viewer.dataset.currentQuickPhotoTags = '[]';
-    const {setupQuickPhotoTags} = await import('/public/assets/gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5');
+    const {setupQuickPhotoTags} = await import('/public/assets/gallery-modules/quick-photo-tags.js?v=20261127-quick-tag-viewport-guard-v6');
     setupQuickPhotoTags(document);
     const cards = fixture.querySelectorAll('[data-quick-photo-tag-card]');
     const popover = fixture.querySelector('[data-quick-photo-tag-popover]');

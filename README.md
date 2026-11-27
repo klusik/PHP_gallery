@@ -43,8 +43,14 @@ also include the full package for manual upload.
 
 WinApp can watch a folder and upload new photographs to a selected gallery.
 It also lets you browse galleries and import files from Windows.
+The standard setup includes both desktop backends and their runtime.
+Tkinter is the default. Switch to PySide6 in Settings and restart WinApp.
 [Download WinApp](https://github.com/klusik/PHP_gallery/releases/latest) ·
 [WinApp guide](winapp/README.md)
+
+For development with CPython 3.14, install the complete source environment
+with `python -m pip install -r winapp/requirements.txt`. The WinApp guide
+covers [Tk-only setup, the Windows build and startup commands](winapp/README.md#dependency-installation).
 
 ## Manuals
 

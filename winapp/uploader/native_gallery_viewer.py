@@ -71,19 +71,36 @@ from .gallery_lightbox import (
     PhotoLightbox,
     detect_black_matte_crop,
 )
+from .gallery_audio import (
+    MEDIA_AUDIO_POLL_MS, MEDIA_AUDIO_REAP_SECONDS, MEDIA_MCI_MODE_CAPACITY,
+    MciSender, load_winmm, send_mci,
+)
 from .canvas_gallery_grid import CanvasGalleryGrid, CanvasTileProxy, TooltipValue
 from .ui_theme import (
     Button, GALLERY_TILE_BORDER_INSET, RaisedDialogSurface, _attach_tooltip,
     ensure_component_theme, gallery_grid_theme, icon_button,
 )
 from .tk_scroll_input import vertical_scroll_delta
-from .gallery_view_preferences import normalize_card_format
+from .gallery_view_preferences import gallery_card_dimensions, normalize_card_format
 from .config import (
     THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE,
     resolve_canvas_gallery_renderer_enabled,
 )
 from .gallery_view_order import GalleryViewOrder
 from .gallery_load_progress import GalleryLoadProgress
+from .gallery_image_policy import (
+    MEDIA_HTTP_BATCH_INITIAL_SIZE,
+    MEDIA_HTTP_BATCH_LARGE_BYTES,
+    MEDIA_HTTP_BATCH_SLOW_SECONDS,
+    MEDIA_IMAGE_MAX_PIXELS,
+    MEDIA_IMAGE_MAX_SIZE,
+    MEDIA_SLIDESHOW_DEFAULT_SECONDS,
+    MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT,
+    MEDIA_THUMBNAIL_CACHE_MAX_BYTES,
+    MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS,
+    MEDIA_THUMBNAIL_SIZE,
+    MEDIA_VIEWPORT_COALESCE_MS,
+)
 
 try:
     from PIL import Image, ImageTk
@@ -92,35 +109,6 @@ except ImportError:
     ImageTk = None
 
 
-# Purpose: Retain useful photo detail while bounding normalized image memory.
-# Type: tuple[int, int]. Units: pixels. Scope: one selected detail image.
-# Consumers: _prepare_image. Rationale: 2048 by 1536 supports zoomed inspection.
-MEDIA_IMAGE_MAX_SIZE = (2048, 1536)
-
-# Purpose: Bound thumbnail width and height on the responsive gallery grid.
-# Type: tuple[int, int]. Units: pixels. Scope: one gallery photo thumbnail.
-# Consumers: _NativeGalleryViewer._load_thumbnails.
-# Rationale: 144 px bounds both natural-aspect dimensions and retained pixels.
-MEDIA_THUMBNAIL_SIZE = (144, 144)
-
-# Purpose: Start optional HTTP batching with the reviewed conservative group.
-# Type: int. Units: images. Scope: first and downshifted network group.
-# Consumers: _NativeGalleryViewer._load_next_thumbnail. Rationale: Eight
-# limits first-turn occupancy before a host proves the framed path healthy.
-MEDIA_HTTP_BATCH_INITIAL_SIZE = 8
-
-# Purpose: Downshift a slow group before admitting subsequent network work.
-# Type: float. Units: seconds. Scope: one completed thumbnail group.
-# Consumers: _NativeGalleryViewer._run_http_thumbnail_batch. Rationale: Two
-# seconds bounds a speculative turn without asserting host latency acceptance.
-MEDIA_HTTP_BATCH_SLOW_SECONDS = 2.0
-
-# Purpose: Downshift groups approaching the framed response byte budget.
-# Type: int. Units: bytes. Scope: one completed thumbnail response.
-# Consumers: _NativeGalleryViewer._run_http_thumbnail_batch. Rationale: Six
-# MiB leaves headroom beneath the independently enforced eight MiB wire cap.
-MEDIA_HTTP_BATCH_LARGE_BYTES = 6 * 1024 * 1024
-
 # Purpose: Reduce large server fallback JPEGs before thumbnail RGB allocation.
 # Type: tuple[int, int]. Units: decoded pixels. Scope: one thumbnail worker.
 # Consumers: _NativeGalleryViewer._prepare_thumbnail.
@@ -128,41 +116,11 @@ MEDIA_HTTP_BATCH_LARGE_BYTES = 6 * 1024 * 1024
 # for matte sampling; final 144 px and original source safety limits remain.
 MEDIA_THUMBNAIL_DECODE_SIZE = (288, 288)
 
-# Purpose: Coalesce wheel, scrollbar and geometry events into one viewport pass.
-# Type: int. Units: milliseconds. Scope: one live gallery viewer.
-# Consumers: _NativeGalleryViewer._on_grid_viewport.
-# Rationale: 24 ms coalesces bursts while canvas position changes immediately;
-# this initial scheduling policy does not establish a frame-rate guarantee.
-MEDIA_VIEWPORT_COALESCE_MS = 24
-
 # Purpose: Retain neighboring rows around the exact visible thumbnail viewport.
 # Type: int. Units: grid rows on each side. Scope: one live gallery viewer.
 # Consumers: _NativeGalleryViewer._apply_grid_viewport.
 # Rationale: One row avoids edge churn while keeping Tk image retention bounded.
 MEDIA_THUMBNAIL_OVERSCAN_ROWS = 1
-
-# Purpose: Bound session-shared thumbnail identity-index bookkeeping.
-# Type: int. Units: decoded images. Scope: one shared live-session cache.
-# Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 4096 supports large albums while keeping each session's index
-# bounded independently of raster dimensions.
-MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 4096
-
-# Purpose: Bound decoded thumbnail memory across album selections.
-# Type: int. Units: bytes. Scope: one shared live-session cache.
-# Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 256 MiB retains useful decoded previews across album visits under
-# one strict session cap; rasters allocate only on authorized cache admission.
-# Visible entries lead eviction; speculative overscan cannot displace history.
-MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
-
-# Purpose: Bound thumbnail proof age and validator-free decoded reuse.
-# Type: float. Units: seconds. Scope: one entry in a live session cache.
-# Consumers: _NativeGalleryViewer._cached_thumbnail,
-# _NativeGalleryViewer._queue_thumbnail_proof_refresh.
-# Rationale: One minute matches server freshness; renew expired strong proofs
-# through metadata rather than extending authority from cached pixel age.
-MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS = 60.0
 
 # Purpose: Bound revision checks and failed thumbnail-proof refresh retries.
 # Type: int. Units: milliseconds. Scope: one embedded viewer.
@@ -298,13 +256,6 @@ MEDIA_GRID_ROW_MINIMUM_HEIGHT = (
 # Rationale: 290 px fits a readable track label on desktop and shrinks to view.
 MEDIA_MUSIC_PANEL_WIDTH = 290
 
-# Purpose: Bound decoded image rasters before allocating an RGB bitmap.
-# Type: int. Units: pixels. Scope: one original or thumbnail response.
-# Consumers: _prepare_image, _prepare_thumbnail and _prepare_detail.
-# Rationale: 36 megapixels bounds RGB memory. Details may first reduce JPEG/MPO
-# decoder dimensions with draft; other rasters must already fit this bound.
-MEDIA_IMAGE_MAX_PIXELS = 36_000_000
-
 # Purpose: Keep detail data warm for seamless nearby keyboard navigation.
 # Type: float. Units: seconds. Scope: one open gallery viewer.
 # Consumers: _NativeGalleryViewer._cached_detail.
@@ -349,11 +300,6 @@ MEDIA_FULLSCREEN_WINDOWS_COMMAND_MODIFIERS = 0x0004 | 0x0010 | 0x20000
 # Shift, CapsLock and other lock indicators remain usable.
 MEDIA_FULLSCREEN_COMMAND_MODIFIERS = 0x0004 | 0x0008 | 0x0040
 
-# Purpose: Provide the established medium slideshow pace without server settings.
-# Type: int. Units: seconds. Scope: one manually started slideshow.
-# Consumers: _slideshow_delay_ms. Rationale: five seconds is the prior default.
-MEDIA_SLIDESHOW_DEFAULT_SECONDS = 5
-
 # Purpose: Poll only active worker requests at a responsive interval.
 # Type: int. Units: milliseconds. Scope: one active viewer worker.
 # Consumers: _NativeGalleryViewer._schedule_queue_poll.
@@ -392,36 +338,6 @@ MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS = 1
 # Consumers: _NativeGalleryViewer._slideshow_delay_ms.
 # Rationale: These are the server's fixed presets, not arbitrary timer input.
 MEDIA_SLIDESHOW_INTERVALS = (3, 5, 10)
-
-# Purpose: Observe native player completion for gap-free playlist handoff.
-# Type: int. Units: milliseconds. Scope: one active local track.
-# Consumers: _NativeGalleryViewer._poll_audio.
-# Rationale: 100 ms keeps handoffs responsive without polling an idle viewer.
-MEDIA_AUDIO_POLL_MS = 100
-
-# Purpose: Bound the Windows MCI playback-mode response buffer.
-# Type: int. Units: wide characters. Scope: one native status command.
-# Consumers: _NativeGalleryViewer._poll_audio.
-# Rationale: 32 characters accommodate the documented MCI mode names.
-MEDIA_MCI_MODE_CAPACITY = 32
-
-# Purpose: Reap the stopped macOS audio player within a bounded wait.
-# Type: float. Units: seconds. Scope: one owned afplay process.
-# Consumers: _NativeGalleryViewer._release_audio_output.
-# Rationale: 0.2 seconds lets an already killed child exit promptly.
-MEDIA_AUDIO_REAP_SECONDS = 0.2
-
-# Purpose: Resolve the Windows system directory before loading multimedia APIs.
-# Type: int. Units: wide characters. Scope: GetSystemDirectoryW result buffer.
-# Consumers: _NativeGalleryViewer._load_winmm.
-# Rationale: 32768 accommodates the documented maximum Windows path.
-WINDOWS_SYSTEM_DIRECTORY_BUFFER = 32768
-
-# Purpose: Restrict native library lookup to the operating system directory.
-# Type: int. Units: LoadLibraryEx flag bits. Scope: kernel32 and winmm loading.
-# Consumers: _NativeGalleryViewer._load_winmm.
-# Rationale: This flag prevents DLL search through the app or working folders.
-LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 
 @dataclass(frozen=True)
 class _ThumbnailResult:
@@ -734,7 +650,6 @@ _WorkerPayload: TypeAlias = (
     | None
 )
 _WorkerEvent: TypeAlias = tuple[int, str, _WorkerPayload]
-_MciSender: TypeAlias = Callable[[str, ctypes.c_wchar_p | None, int, int | None], int]
 _SafePhotosPhase: TypeAlias = Literal[
     "page-fetch", "media-fetch", "media-decode", "page-apply", "media-apply",
 ]
@@ -1009,7 +924,7 @@ class _NativeGalleryViewer:
         self._audio_cancelled: threading.Event | None = None
         self._audio_poll_id: str | None = None
         self._winmm: object | None = None
-        self._mci: _MciSender | None = None
+        self._mci: MciSender | None = None
         self._photo_images: list[object | None] = []
         # Keep natural pixels only beside currently admitted Tk images. The
         # existing visible/overscan band owns admission and releases both copies;
@@ -2060,19 +1975,7 @@ class _NativeGalleryViewer:
         Returns:
             tuple[int, int]: Image width and height in pixels.
         """
-        if getattr(self, '_card_format', 'default') == 'default':
-            return MEDIA_THUMBNAIL_SIZE
-        numerator, denominator = self._card_format.split(':', 1)
-        ratio = int(numerator) / int(denominator)
-        if ratio >= 1:
-            return (
-                MEDIA_THUMBNAIL_SIZE[0],
-                max(1, round(MEDIA_THUMBNAIL_SIZE[0] / ratio)),
-            )
-        return (
-            max(1, round(MEDIA_THUMBNAIL_SIZE[1] * ratio)),
-            MEDIA_THUMBNAIL_SIZE[1],
-        )
+        return gallery_card_dimensions(getattr(self, '_card_format', 'default'))
 
     def set_card_format(self, card_format: str) -> None:
         """Apply an allowlisted display aspect without fetching thumbnails.
@@ -6548,62 +6451,30 @@ class _NativeGalleryViewer:
         self._stop_audio()
         self._audio_feedback('linking_media_audio_error')
 
-    def _load_winmm(self) -> _MciSender:
+    def _load_winmm(self) -> MciSender:
         """Load winmm from the OS-reported System32 directory only.
 
         Returns:
-            _MciSender: Typed Unicode MCI command function.
+            MciSender: Typed Unicode MCI command function.
 
         Raises:
             OSError: The system directory or native library cannot be resolved.
         """
-        if sys.platform != 'win32' or not hasattr(ctypes, 'WinDLL'):
-            raise OSError('Windows multimedia is unavailable')
-        kernel32 = ctypes.WinDLL(
-            'kernel32.dll',
-            use_last_error=True,
-            winmode=LOAD_LIBRARY_SEARCH_SYSTEM32,
-        )
-        get_system_directory = kernel32.GetSystemDirectoryW
-        get_system_directory.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
-        get_system_directory.restype = ctypes.c_uint
-        buffer = ctypes.create_unicode_buffer(WINDOWS_SYSTEM_DIRECTORY_BUFFER)
-        length = get_system_directory(buffer, len(buffer))
-        if length == 0 or length >= len(buffer):
-            raise OSError('Could not resolve Windows System32')
-        library_path = os.path.join(buffer.value, 'winmm.dll')
-        if not os.path.isabs(library_path):
-            raise OSError('Windows multimedia path is not absolute')
-        library = ctypes.WinDLL(
-            library_path,
-            use_last_error=True,
-            winmode=LOAD_LIBRARY_SEARCH_SYSTEM32,
-        )
-        mci = library.mciSendStringW
-        mci.argtypes = [
-            ctypes.c_wchar_p,
-            ctypes.c_wchar_p,
-            ctypes.c_uint,
-            ctypes.c_void_p,
-        ]
-        mci.restype = ctypes.c_uint
-        self._winmm = library
+        self._winmm, mci = load_winmm()
         self._mci = mci
         return mci
 
-    def _mci_command(self, mci: _MciSender, command: str) -> None:
+    def _mci_command(self, mci: MciSender, command: str) -> None:
         """Send one bounded command to the current Windows MCI device.
 
         Args:
-            mci (_MciSender): Windows winmm MCI command function.
+            mci (MciSender): Windows winmm MCI command function.
             command (str): Locally constructed command and owned alias.
 
         Returns:
             None: Raises OSError if winmm rejects the command.
         """
-        result = mci(command, None, 0, None)
-        if result:
-            raise OSError(f'MCI command failed: {result}')
+        send_mci(mci, command)
 
     def _release_audio_output(self) -> None:
         """Close only this viewer's native player and unlink its current file.

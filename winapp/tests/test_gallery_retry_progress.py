@@ -193,16 +193,28 @@ class GalleryRetryProgressTests(unittest.TestCase):
                 )
                 self._capture_viewer(viewer, f'{failure_name}-retry-wait')
 
-                self._wait_until(
-                    lambda: viewer._load_progress.phase == 'hidden'
-                    and viewer._photos
-                    and tuple(photo.image_id for photo in viewer._photos) == image_ids
-                    and all(
-                        viewer._photo_images[index] is not None
-                        for index in viewer._visible_thumbnail_indices
-                    ),
-                    f'{failure_name} did not recover the first visible viewport.',
-                )
+                try:
+                    self._wait_until(
+                        lambda: viewer._load_progress.phase == 'hidden'
+                        and viewer._photos
+                        and tuple(photo.image_id for photo in viewer._photos) == image_ids
+                        and all(
+                            viewer._photo_images[index] is not None
+                            for index in viewer._visible_thumbnail_indices
+                        ),
+                        f'{failure_name} did not recover the first visible viewport.',
+                    )
+                except AssertionError as error:
+                    visible = tuple(sorted(viewer._visible_thumbnail_indices))
+                    loaded = tuple(index for index in visible if viewer._photo_images[index] is not None)
+                    raise AssertionError(
+                        f'{error} Connections={connection_spy.call_count}; '
+                        f'first={first_connection.request_count}; retry={retry_connection.request_count}; '
+                        f'progress={viewer._load_progress.phase}; worker_alive={worker.is_alive()}; '
+                        f'resume_scheduled={viewer._thumbnail_resume_after_id is not None}; '
+                        f'completion_waiting={viewer._http_batch_completion is not None}; '
+                        f'visible={visible}; loaded={loaded}.',
+                    ) from error
                 self.assertEqual(2, connection_spy.call_count)
                 self.assertEqual(1, first_connection.request_count)
                 self.assertEqual(1, retry_connection.request_count)

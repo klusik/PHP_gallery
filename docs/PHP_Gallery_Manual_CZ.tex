@@ -402,8 +402,10 @@ a~nasazování pomocí FTP byly odstraněny. Viz
 
 Písmo a~licence WinApp patří do~volitelného pole
 \codeword{companion_resource_files}. Katalogy gettext jsou v~poli
-\codeword{companion_locale_files}. Starší čteče zpracují pole, která znají.
-Aktuální pravidla balíčku ověřují přesné cesty v~obou seznamech. Soubory CMS
+\codeword{companion_locale_files}. Soubory závislostí, scéna Qt Quick,
+licenční informace a~vstupy společného onedir buildu patří do~pole
+\codeword{companion_backend_files}. Starší čteče zpracují pole, která znají.
+Aktuální pravidla balíčku ověřují přesné cesty v~každém seznamu. Soubory CMS
 k~nahrazení určuje inventář aktualizace. Přímá aktualizace používá úplný
 novější balíček a~všechny chybějící
 migrace bez~instalace každé meziverze. To~nepotvrzuje libovolné historické stavy
@@ -1770,6 +1772,69 @@ Zvolíte-li \ui{Později}, nový jazyk se~použije při příštím spuštění.
 Do~té doby zůstává v~\ui{Nastavení} volba \ui{Restartovat WinApp}.
 Jazyk webu a~jazykové verze letových zpráv v~PDF mají vlastní nastavení.
 
+V~\ui{Nastavení} v~části \ui{Rozhraní} určíte backend pro~příští spuštění.
+Výchozí je~Tkinter/ttk. Rozhraní PySide6/Qt~6 je~vysoce experimentální.
+Kompletní závislosti pro~běh ze~zdrojů nainstalují balíčky Qt i~společné jádro.
+Běžný instalátor Windows obsahuje oba backendy a~ponechává jako výchozí Tkinter.
+Přechod ze stávající instalace zajistí běžná aktualizace.
+Lety výslovně uzavřené ve~starších verzích zůstanou v~místní historii.
+Přepnutí rozhraní ponechá jejich fronty fotek uložené a~neaktivní.
+Obě rozhraní mají vlevo navigaci ikonami a~v~horní liště stav připojení.
+Ovládání letu i~uložené lety jsou v~panelu \ui{Watcher}.
+Průběh záznamu a~uložené zprávy se~otevírají samostatně. V~panelu \ui{AI}
+najdete nastavení workeru a~volitelné závislosti v~obou rozhraních.
+V~Qt Fotkách nabízí nabídka galerie povolené údaje, přednačtení
+a~ponechání dat v~místní cache. Nabídka fotky zobrazí údaje a~po schválení
+správcem umožní změnit viditelnost a~potvrdit smazání vybraných fotek.
+Potvrzení smazání se~otevře u~fotky, ze~které jste vyvolali nabídku.
+V~Qt označuje rotující šipka právě načítané náhledy. Čekající náhledy mají
+statický symbol. Panel průběhu Watcheru seskupuje dostupné akce v~samostatné
+kartě se~stínem.
+Lightbox u~snímků SDR přepíná mezi rozpoznaným ořezem a~původním záběrem.
+Nativní zobrazení HDR zachovává celý snímek.
+Po~schválení obnovitelného přístupu k~uploadu v~prohlížeči uloží WinApp
+přihlašovací údaj do~Správce přihlašovacích údajů Windows a~po~restartu může
+ověřit tutéž galerii.
+Z~nabídky galerie můžete spustit Watcher s~dočasným klíčem pro~tuto galerii.
+Výběr propojené galerie otevřete z~nabídky nástrojů nebo zkratkou
+\codeword{Ctrl+Shift+G}.
+Při~bezpečném restartu WinApp tento klíč uzavře a~ověří nový dočasný
+přístup před~pokračováním stejné relace.
+Kontrola importu uvádí přijaté bajty, přeskočené formáty, odmítnuté položky ZIP
+a~dostupnost místních dekodérů. V~podrobnostech importu můžete zkontrolovat
+jednotlivé soubory a~vybrat, kde se~vytvoří náhledy.
+Ověřený přerušený import lze v~Qt otevřít ke kontrole. Nepotvrzené uploady
+zůstanou pozastavené. Po~přerušeném vytváření PDF můžete z~ukončeného letu
+vytvořit novou místní verzi zprávy.
+Při~aktivním Watcheru odešle \ui{Vytvořit a nahrát} novou verzi PDF
+z~ukončeného letu do~právě sledované galerie.
+Schválená prezentace galerie určuje interval ručně spuštěné slideshow v~Qt.
+Ve~Windows a~macOS lze ze~schváleného seznamu přehrávat MP3 a~WAV.
+V~nastavení Qt zobrazíte běžnou i~ponechanou cache fotek a~můžete upravit
+sdílený limit miniatur.
+Připojení s~API klíčem ověříte volbou \ui{Uložit a otestovat}.
+Odvolání uloženého klíče vyžaduje potvrzení a~dokončení jeho ověřené fronty
+Watcheru. Místní klíč se~odstraní po~potvrzení serverem.
+Aktualizátor Qt ověří odpovídající instalátor a~s~instalací počká na~ukončení
+rozpracované operace nebo bezpečně uloží podporovanou aktivní relaci Watcheru.
+Podporuje prohlížení galerie a~historie a~vytváření místních PDF
+pro~uložené lety. Obě rozhraní sdílejí uložený strom a~výběr galerie.
+S~ověřeným uloženým API klíčem
+lze na~Windows spustit ruční import, Watcher, záznam přes~SimConnect
+a~nastavený AI worker. Dokončení vyprázdní původní frontu a~odešle nastavené
+zprávy. Odpovídající uložená fronta Watcheru se~otevře k~ruční kontrole.
+Uloženou relaci můžete místně uzavřít a~k~letu připojit plán SimBrief.
+Restart WinApp po~ověření pokračuje ve~stejné aktivní relaci.
+Tovární reset obnoví výchozí nastavení Watcheru. Vybraná uložená PDF lze
+nahrát do~galerie běžícího Watcheru.
+Na~Windows můžete ve~fotografiích také propojit účet pro~nahrávání a~vybrat
+galerii. S~příslušným oprávněním tam také vytvoříte galerii nebo upravíte metadata.
+Po~restartu se
+ověřený nedokončený import otevře k~prohlédnutí a~ručnímu opakování.
+Při~selhání startu Qt
+nebo rozpracované úloze se~otevře Tkinter. Volba \codeword{--gui-backend tkinter} platí pro~jedno
+spuštění. Čekající změnu můžete zrušit v~\ui{Nastavení}.
+
 \subsection{Trvalá fronta capture a~obnova}
 
 Galerii připojte jednou, spusťte capture a~na konci jednou zvolte
@@ -1973,6 +2038,7 @@ výpadku napájení zatím nejsou ověřeny.
 V~hlavním okně klikněte na \ui{Připojit web}. Potvrďte adresu z~uloženého
 API připojení nebo zadejte adresu svého webu PHP Gallery včetně případné
 instalační složky. Konkrétní galerii vyberete po~připojení.
+U~webu s~aktivním připojením zvolte \ui{Přepnout web}.
 Doménu a~cestu instalace lze zadat i~bez protokolu. Při potvrzení WinApp
 doplní \texttt{https://} a~před ověřením galerie zobrazí upravenou adresu.
 Na stejném počítači funguje i~HTTP adresa na \texttt{localhost}.
@@ -2022,6 +2088,12 @@ ve Watcher i~Importu. Tři tečky ukážou další možnosti. Křížek
 účtu a~galerii znovu vyberte. Rozšířená oprávnění najdete v~Nastavení pod
 \ui{Manage link…}. Upload přes API používá vlastní \ui{Gallery URL}
 a~klíč omezený na galerii.
+Správa nabízí pouze oprávnění podporovaná galerií a~aktuální platformou.
+Aktivní oprávnění se zobrazí pouze pro čtení, dokud se neodpojí.
+Bezpečné zapamatování vyžaduje samostatný souhlas v~prohlížeči a~podporovaný
+nativní trezor. Samotné schválení nahrávání nevybere cíl; ten je nutné zvlášť
+zvolit a~ověřit. Oprávnění na serveru lze zkontrolovat nebo odvolat přes
+\ui{Manage gallery links}.
 
 Samostatně zvolte \ui{Read gallery details} a~schvalte oprávnění ke čtení;
 poté lze u~vybrané galerie použít \ui{Read selected details}. Zobrazí ID,
@@ -2051,6 +2123,8 @@ chování Windows reparse a~při výpadku napájení zatím není kvalifikováno
 Originální ZIPy i~rozbalené pracovní adresáře zůstávají kvůli ruční kontrole
 uchovány bez ohledu na~stáří či potvrzení uploadu; automatické čištění podle
 stáří je vypnuté, protože viditelná ID úloh nedokazují úplnou historii.
+Oba backendy nabízejí obnovu propojeného uploadu ve~výběru galerie po~opětovném
+připojení k~původnímu cíli nahrávání.
 Pro právě jeden nejistý propojený upload volba \ui{Check uncertain upload}
 vyžádá velikost souboru v~bajtech do 64~MiB a~bez otevření místního souboru
 jednou ověří uložený hash. Shoda znamená
@@ -2095,6 +2169,10 @@ Responzivní mřížka plynule posouvá přehled a~žádá jen viditelné náhle
 bez samostatného načítání velkých fotografií. Výslovná volba
 \ui{Přednačíst galerii} stáhne náhledy i~varianty pro lightbox.
 Kliknutím fotku vyberete a~zobrazíte její metadata v~nastavitelném pravém panelu.
+Najetím na~ikonu galerie ve~stromu Qt zobrazíte stav mezipaměti, ponechání
+v~mezipaměti a~sledování Watcherem.
+Qt může dlouhý název v~záhlaví zkrátit. Celý název uvidíte v~metadatech
+nebo po najetí na~záhlaví.
 Křížek vpravo nahoře panel zavře a~vrátí místo galerii bez změny výběru
 či opětovného načítání alba. Další kliknutí na stejnou fotku informace znovu
 otevře. Pozdní odpověď metadat již zavřený panel neotevře.
@@ -2102,6 +2180,8 @@ Dvojklik nebo Enter otevře lightbox. Šipky procházejí mřížku; mezerník v
 a~odvybírá. Control-click (Command-click na~macOS) přepíná jednotlivé výběry;
 Shift-click nebo Shift-šipka vybere rozsah od~kotvy v~rámci limitu 64~fotek.
 Control-šipka (Command-šipka na~macOS) přesune zaměření bez zrušení výběru.
+Otevření fotky ji vybere, pokud ještě nebyla součástí výběru. Listování
+v~lightboxu zachová výběr v~mřížce.
 Jen vybrané fotky mají mírně zaoblený obrys přiléhající ke skutečnému náhledu
 a~jeho společnému lemu, bez prázdného pásu pro popisek pod obrázkem. Zvolené
 poměry mají mezi obrysy kompaktní mezeru 6~pixelů vodorovně i~svisle;
@@ -2110,8 +2190,10 @@ stabilní výšku řádku pro přirozené náhledy. Název souboru ukáže kompa
 kontrastní tooltip. Panel a~kontextové informace sdílejí autorizovaná metadata,
 formátování a~krátkou omezenou cache aktuálního propojení.
 Šipkami vlevo a~vpravo procházíte celé album ve smyčce.
-Zavření lightboxu nebo klávesa Escape obnoví strom a~mřížku
-i~po chybě obrázku. Náhledy oříznou rozpoznané černé pruhy a~zobrazí celou scénu
+Escape nejprve zavře otevřený panel s~polohou nebo nabídku snímku a~poté
+opustí celou obrazovku se stále zobrazeným snímkem. V~běžném lightboxu
+Escape obnoví strom a~mřížku i~po chybě obrázku. Náhledy oříznou rozpoznané
+černé pruhy a~zobrazí celou scénu
 v~jejím poměru stran. Sedm viditelných tvarových tlačítek v~liště alba ihned
 přepne výchozí zobrazení nebo poměr 16:9, 21:9, 4:3, 1:1, 4:5 či 9:16, bez
 ukládacího tlačítka. Obdélníky znázorňují poměry a~aktivní volbu označuje
@@ -2530,6 +2612,10 @@ obnovuje 15minutový přístupový token pomocí Klíčenky macOS nebo Správce
 přihlašovacích údajů Windows. Funguje přes ověřené HTTPS i~přímé
 \texttt{http://localhost}. Starší servery používají dočasné propojení nejvýše
 na 15~minut.
+WinApp při přístupu ke Klíčence macOS nevyžaduje její heslo. Pokud před obnovou
+nelze přečíst uložený údaj, volba \ui{Připojit web} umožní dočasné schválení
+v~prohlížeči a~uložené propojení zachová.
+Při chybě připojení dialog Photos ukáže, který krok selhal.
 Správce může přístup odvolat v~seznamu připojených
 aplikací. Nevyměněné kódy vyprší do 120~sekund. Viz
 \filepath{docs/APP_LINKING_PHASE_0.md}.
@@ -2705,6 +2791,16 @@ Watcheru a~připojení, obnovu fronty, kontrolu aktualizací a~diagnostiku.
 dostupné. Panel, který právě vlastní vstup, do zavření potlačí příkazy nabídky
 a~tyto zkratky.
 
+Výchozí volbou v~\ui{Nastavení > Rozhraní > Backend rozhraní} je Tkinter / ttk.
+Běžný instalátor Windows už obsahuje
+\ui{PySide6 / Qt 6 (vysoce experimentální)}. Pro~běh ze~zdrojů použijte
+volitelné Qt závislosti.
+Volba se projeví po~\ui{Restartovat WinApp}. Rozpracovaná úloha musí skončit
+nebo mít ověřený záznam pro~pokračování. Obě rozhraní sdílejí stejný profil.
+Při~selhání startu Qt se otevře Tkinter. Můžete ho vybrat i~pro~další spuštění.
+Na~macOS používá Qt Lightbox EDR u~podporovaného snímku a~displeje,
+v~ostatních případech zobrazí SDR.
+
 Nastavení, nápověda, připojovací výzvy a~oznámení se zobrazují v~hlavním okně.
 Informační oznámení používají neblokující zavírací lištu s~posouvatelným textem.
 Fronta pojme 32~oznámení a~lišta zobrazí počet vynechaných nejstarších; oznámení
@@ -2736,7 +2832,10 @@ overlay a~pevné zápatí s~volbami \ui{Pokračovat} a~\ui{Přerušit} podle sta
 \ui{Support diagnostics…} otevře místní náhled s~akcemi \ui{Refresh},
 \ui{Copy} a~\ui{Save}. Report obsahuje povolená nastavení a~údaje o~běhu,
 aktuální diagnostický snímek a~nejvýše posledních 64~KiB existujícího aplikačního
-logu. Chybějící či nečitelná část logu, zkrácení i~vynechaný částečný první
+logu. Zprávy z~Qt se zapisují do~stejného rotujícího logu.
+Výsledek přednačtení uvádí počty odmítnutých fotek podle první nesplněné
+podmínky pro uložení do~mezipaměti.
+Chybějící či nečitelná část logu, zkrácení i~vynechaný částečný první
 řádek jsou označeny.
 Report nepoužívá síť; filtruje známé přihlašovací údaje, parametry a~fragmenty
 URL, místní cesty, identifikační štítky, e-mailové adresy a~rozpoznaná
@@ -2878,6 +2977,10 @@ není k~dispozici. Python či zdrojové spuštění nabídne ověřený instalá
 Požadovaný restart Windows zůstává výslovný; zrušení UAC znovu otevře původní
 instalaci. Starší klient zaseknutý čekáním na workery vyžaduje ruční spuštění
 instalátoru po úplném ukončení staré aplikace.
+Pokud Windows odmítne spustit instalátor, pomocník znovu otevře stávající
+aplikaci pouze při nezměněném otisku všech souborů instalovaného runtime. Instalátor,
+který se spustil, ale nelze jej sledovat, zůstává bezpečně pozastaven; nejde
+o rollback.
 
 
 \subsection{Záznam letů a zprávy}
@@ -2951,6 +3054,8 @@ zobrazí pomlčky. Sousední zkratka \ui{PDF} otevře uložené lety.
 \ui{Uložené lety a~PDF} ukazují začátek, letadlo nebo zaznamenanou galerii,
 počet vzorků, místní PDF, stav a~uchované chyby. \ui{Zobrazit jen lety}
 je~výchozí vypnuté. Po~zapnutí zůstávají relace s~letovými vzorky nebo PDF.
+Qt zobrazuje aktuální rozsah historie a~umožňuje přejít na~novější nebo starší stránku.
+Uložené verze PDF ukazují čas vytvoření a~počet stran, pokud jsou k~dispozici.
 PDF otevřete dvojklikem nebo klávesou Enter. \ui{Složka} otevře soubory.
 Obnovení a~log aplikace jsou v~nabídce pod třemi tečkami.
 \ui{Dokončit let a~vytvořit PDF}
@@ -3014,6 +3119,9 @@ propojení pro prohlížení Fotek je~neskryje. Režim propojeného uploadu nab�
 opětovné připojení galerie. Aktivní záznam, čekající úlohy a~dokončování mají
 přednostní akci Dokončit, Zkontrolovat nebo Průběh; běžící ruční import
 zachová vlastní ovládání.
+Qt~nabízí stejné nečinné akce Zahájit nebo Znovu propojit ve~Watcheru a~Importu.
+Dialog Zahájit vychází z~uložených údajů připojení a~ukládá pouze URL a~API klíč;
+Zrušit ani jiné neuložené hodnoty Nastavení se~tím nezmění.
 Tlačítko načtení/odebrání SimBriefu, jeho nastavení a~stav jsou viditelné pouze
 při detekovaném letu; skrytí zachová načtený plán. Mimo let používají Watcher,
 Import i~průběh \ui{Opustit hru} včetně odpovídajícího potvrzení a~stavu.
@@ -10222,14 +10330,23 @@ Koordinátor částí WinApp jednou zjistí úplný seznam testů. Každý díl�
 načte pouze přidělené místní moduly a~musí vykázat každou vybranou identitu.
 Zůstávají zachovány fixtures modulů a~tříd, úplný důkaz nepřekrývajícího se
 pokrytí i~dosavadní časové limity procesů a~koordinátoru.
-Osm sériových skupin zachovává pět výhradních měřených skupin a~tři
-deterministické shardy zbývajících tříd. Každý proces má výslovně připravené
+Devět sériových skupin zachovává šest výhradních skupin: prohlížeč, čtyři
+měřené třídy a~párovou nativní vizuální sadu. Zbývající třídy se~rozdělí do~tří
+deterministických shardů. Každý proces má výslovně připravené
 importy zdrojů a~testů.
 
-Hostovaný přenosný job WinApp instaluje existující požadavek Pillow
-do~interpretu Pythonu vybraného pro~audit, takže test pixelů odznaku na~liště
-běží a~nepřeskočí se. Lokální běh bez Pillow může tento volitelný vizuální test
-přeskočit; hostovaný job bez grafického rozhraní neinstaluje pystray.
+Při výběru nativních vizuálních testů nejprve macOS uloží běžný audit přesného
+SHA zdrojů a~poté spustí delegovanou vizuální sadu na~odděleném čerstvém runneru.
+Centrální audit před použitím artefaktu ověří čistý zdroj, běhové prostředí
+Pythonu a~úplnou množinu delegovaných identit. Před snímáním na~vizuálním hostu
+neběží běžné testy používající sockety; úloha nikdy nemění oprávnění macOS
+ani nezavírá systémové výzvy. Bez výběru vizuálních testů zůstává stávající
+informativní běžný běh macOS beze změny.
+
+Hostovaný přenosný job WinApp instaluje uzamčené závislosti podle
+\filepath{winapp/requirements-core.txt} do~interpretu pro~audit. Test pixelů
+odznaku na~liště v~tomto jobu vyžaduje Pillow. Samostatné Qt joby používají
+úplný seznam závislostí pro~spuštění ze~zdrojů.
 
 Regresní pokrytí titulní fotografie rozšiřuje již registrované sady delegování
 postranního panelu Admin a~životního cyklu prohlížeče spolu se~stávající

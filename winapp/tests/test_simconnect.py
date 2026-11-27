@@ -46,6 +46,59 @@ from uploader import game_presence as PRESENCE
 from uploader.diagnostics import redact_text
 
 
+# Purpose: Keep synthetic dispatch expiry independent of host scheduling.
+# Type: float. Units: seconds. Scope: one exact SimConnect transport fixture.
+# Consumers: SimConnectTransportTests.acquire.
+# Rationale: Keep the existing short 80 ms budget without imposing runner latency.
+TEST_SIMCONNECT_TIMEOUT_SECONDS = 0.08
+# Purpose: Keep distinct camera and aircraft turns in the shared-deadline case.
+# Type: float. Units: seconds. Scope: synthetic no-packet deadline regression.
+# Consumers: SimConnectTransportTests.test_camera_and_aircraft_timeouts_share_one_total_deadline.
+# Rationale: 0.2 preserves the established combined timeout under test.
+TEST_SIMCONNECT_SHARED_BUDGET_SECONDS = 0.2
+# Purpose: Give simulated time a nonzero reference for deadline arithmetic.
+# Type: float. Units: seconds. Scope: one fake monotonic clock.
+# Consumers: DispatchClock. Rationale: 100 is a normal initialized clock value.
+TEST_SIMCONNECT_CLOCK_START_SECONDS = 100.0
+# Purpose: Measure the deterministic bound without floating-point rounding noise.
+# Type: float. Units: seconds. Scope: no-packet dispatch deadline assertion.
+# Consumers: DispatchClock and SimConnectTransportTests.
+# Rationale: 1 microsecond guarantees polling advances on a rounding tie and
+# 10 microseconds absorbs that rounding while staying within one polling step.
+TEST_SIMCONNECT_MINIMUM_ADVANCE_SECONDS = 0.000001
+TEST_SIMCONNECT_ROUNDING_SECONDS = 0.00001
+
+
+class DispatchClock:
+    """Advance the synthetic DLL's monotonic deadline only during explicit waits."""
+
+    def __init__(self) -> None:
+        """Start from a nonzero monotonic reference.
+
+        Returns:
+            None: Prepares a fresh clock for one synthetic simulator acquisition.
+        """
+        self.now = TEST_SIMCONNECT_CLOCK_START_SECONDS
+
+    def monotonic(self) -> float:
+        """Return the current synthetic dispatch time.
+
+        Returns:
+            float: Elapsed seconds from the fixture's monotonic reference.
+        """
+        return self.now
+
+    def sleep(self, duration: float) -> None:
+        """Advance the fixture without waiting on the hosted runner.
+
+        Args:
+            duration (float): Sleep requested by the real dispatch loop in seconds.
+        Returns:
+            None: Advances at least one representable deadline step.
+        """
+        self.now += max(duration, TEST_SIMCONNECT_MINIMUM_ADVANCE_SECONDS)
+
+
 class NativeFunction:
     """Native callable double that accepts ctypes signature configuration."""
 
@@ -158,24 +211,38 @@ class SimulatorPresenceTests(unittest.TestCase):
                 waits use the declared interval, and teardown clears it.
         """
         observer = PRESENCE.GamePresence(lambda: "", WINAPP_DIR)
-        observer.cancelled = mock.Mock()
-        observer.cancelled.is_set.side_effect = [False, False, False, True]
         observed = []
-        observer.cancelled.wait.side_effect = lambda _delay: observed.append(
-            observer.available
-        )
+        expected = [True, False, True]
+
+        def retain_observation(_delay: float | None) -> None:
+            """Record the completed poll and end the fixture at its final state.
+
+            Args:
+                _delay (float | None): Scheduled wake interval in seconds.
+            Returns:
+                None: The final fixture signals cancellation to the observer.
+            """
+            observed.append(observer.available)
+            if len(observed) == len(expected):
+                observer.cancelled.set()
+
         with (
-            mock.patch.object(observer, "probe", side_effect=[True, False, True]),
+            mock.patch.object(observer._wake, 'wait', side_effect=retain_observation) as wake,
+            mock.patch.object(observer, "probe", side_effect=expected),
             mock.patch.object(PRESENCE, "current_user_game_processes", return_value=set()),
         ):
             observer.run()
-        self.assertEqual([True, False, True], observed)
+        self.assertEqual(expected, observed)
         self.assertFalse(observer.available)
-        observer.cancelled.wait.assert_has_calls([
-            mock.call(PRESENCE.PRESENCE_POLL_SECONDS)
-        ] * len(observed))
+        self.assertEqual(
+            wake.call_args_list,
+            [mock.call(PRESENCE.PRESENCE_POLL_SECONDS)] * len(expected),
+        )
+        observer.cancelled.clear()
+        observer._wake.clear()
         observer.stop()
-        observer.cancelled.set.assert_called_once_with()
+        self.assertTrue(observer.cancelled.is_set())
+        self.assertTrue(observer._wake.is_set())
 
 
 class FakeSimConnectDLL:
@@ -398,12 +465,29 @@ class WireSimConnectDLL(FakeSimConnectDLL):
 class SimConnectTransportTests(unittest.TestCase):
     """Protect both generations, fallbacks, bounded waits and packet correlation."""
 
-    def acquire(self, dll, client=None):
-        """Use an in-memory DLL, while retaining the actual ctypes dispatch loop."""
+    def acquire(
+        self, dll: FakeSimConnectDLL, client: SIM.SimConnectLocationClient | None = None,
+        clock: DispatchClock | None = None,
+    ) -> tuple[SIM.SimCameraLocation | None, str, SIM.SimConnectLocationClient]:
+        """Exercise the real ctypes dispatch and its deterministic total budget.
+
+        Args:
+            dll (FakeSimConnectDLL): In-memory camera/aircraft API and packet source.
+            client (SIM.SimConnectLocationClient | None): Optional existing repeat-call owner.
+            clock (DispatchClock | None): Optional clock to inspect after dispatch.
+        Returns:
+            tuple[SIM.SimCameraLocation | None, str, SIM.SimConnectLocationClient]:
+                Provider result or unavailable, safe message, and original client.
+        """
         if client is None:
-            client = SIM.SimConnectLocationClient(timeout_seconds=0.08)
+            client = SIM.SimConnectLocationClient(timeout_seconds=TEST_SIMCONNECT_TIMEOUT_SECONDS)
         dll_path = WINAPP_DIR / "SimConnect.dll"
-        with mock.patch.object(SIM.os, "name", "nt"), mock.patch.object(client, "resolve_dll_path", return_value=(dll_path, [dll_path])), mock.patch.object(SIM.ctypes, "WinDLL", return_value=dll, create=True):
+        with (
+            mock.patch.object(SIM.os, "name", "nt"),
+            mock.patch.object(SIM, "time", clock if clock is not None else DispatchClock()),
+            mock.patch.object(client, "resolve_dll_path", return_value=(dll_path, [dll_path])),
+            mock.patch.object(SIM.ctypes, "WinDLL", return_value=dll, create=True),
+        ):
             location, message = client.current_location()
         return location, message, client
 
@@ -509,17 +593,37 @@ class SimConnectTransportTests(unittest.TestCase):
         self.assertNotIn("C:\\Users\\pilot", redacted)
 
     def test_wire_diagnostic_history_is_bounded_and_resets_between_acquisitions(self) -> None:
-        """Bound foreign packet history and clear it before a subsequent acquisition."""
+        """Bound foreign packet history and clear it before the next acquisition.
+
+        Returns:
+            None: Asserts exact packet counts and retained history with a
+                deterministic dispatch clock instead of host scheduler timing.
+        """
         replies = [(WireSimConnectDLL.aircraft_wire(request=99), 64) for _ in range(20)]
         replies.append((WireSimConnectDLL.aircraft_wire(), 64))
         client = SIM.SimConnectLocationClient(timeout_seconds=0.5)
-        location, message, _ = self.acquire(WireSimConnectDLL(replies=replies), client)
-        self.assertIsNotNone(location, message)
-        report = client.diagnostics_snapshot()
-        self.assertEqual(21, report["aircraft_data_packets"])
-        self.assertEqual(8, len(report["aircraft_packets"]))
-        self.assertEqual(12, len(report["dispatch_sequence"]))
-        location, message, _ = self.acquire(WireSimConnectDLL(), client)
+        simulated_time = 0.0
+
+        def advance(seconds: float) -> None:
+            """Advance only this transport fixture's owned monotonic time.
+
+            Args:
+                seconds (float): Exact sleep interval requested by the transport.
+            Returns:
+                None: Preserves elapsed dispatch time without host sleep jitter.
+            """
+            nonlocal simulated_time
+            simulated_time += seconds
+
+        clock = types.SimpleNamespace(monotonic=lambda: simulated_time, sleep=advance)
+        with mock.patch.object(SIM, "time", clock):
+            location, message, _ = self.acquire(WireSimConnectDLL(replies=replies), client)
+            self.assertIsNotNone(location, message)
+            report = client.diagnostics_snapshot()
+            self.assertEqual(21, report["aircraft_data_packets"])
+            self.assertEqual(8, len(report["aircraft_packets"]))
+            self.assertEqual(12, len(report["dispatch_sequence"]))
+            location, message, _ = self.acquire(WireSimConnectDLL(), client)
         self.assertIsNotNone(location, message)
         report = client.diagnostics_snapshot()
         self.assertEqual(1, report["aircraft_data_packets"])
@@ -729,31 +833,21 @@ class SimConnectTransportTests(unittest.TestCase):
         self.assertEqual("aircraft_position_fallback", location.source)
         self.assertIn("callback", client.diagnostics_snapshot()["camera_reason"].lower())
 
-    def test_camera_and_aircraft_timeouts_share_one_total_deadline(self):
-        """Bound both unavailable providers by one budget without relying on wall-clock timing."""
-        class Clock:
-            """Advance only for requested sleeps, making bounded waits deterministic."""
+    def test_camera_and_aircraft_timeouts_share_one_total_deadline(self) -> None:
+        """Bound both unavailable providers by one budget without wall-clock timing.
 
-            def __init__(self):
-                """Start simulated monotonic time away from zero."""
-                self.now = 100.0
-
-            def monotonic(self):
-                """Return the deterministic current time used by dispatch deadlines."""
-                return self.now
-
-            def sleep(self, duration):
-                """Advance simulated time while ensuring polling eventually reaches its deadline."""
-                self.now += max(float(duration), 0.000001)
-
-        clock = Clock()
-        client = SIM.SimConnectLocationClient(timeout_seconds=0.2)
+        Returns:
+            None: Verifies both provider phases fit the same configured deadline.
+        """
+        clock = DispatchClock()
+        started = clock.now
+        # The combined budget intentionally leaves distinct camera and aircraft turns.
+        client = SIM.SimConnectLocationClient(timeout_seconds=TEST_SIMCONNECT_SHARED_BUDGET_SECONDS)
         dll = FakeSimConnectDLL(camera="timeout", aircraft="timeout")
-        with mock.patch.object(SIM.time, "monotonic", side_effect=clock.monotonic), mock.patch.object(SIM.time, "sleep", side_effect=clock.sleep):
-            location, message, _ = self.acquire(dll, client)
+        location, message, _ = self.acquire(dll, client, clock)
         self.assertIsNone(location)
         self.assertTrue(any(name == "aircraft_get" for name, _ in dll.calls))
-        self.assertLessEqual(clock.now - 100.0, client.timeout_seconds + 0.00001)
+        self.assertLessEqual(clock.now - started, client.timeout_seconds + TEST_SIMCONNECT_ROUNDING_SECONDS)
         report = client.diagnostics_snapshot()
         self.assertIn("timeout", report["camera_reason"].lower())
         self.assertIn("timeout", report["aircraft_reason"].lower())

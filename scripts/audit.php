@@ -54,6 +54,7 @@ use function PhpGallery\Audit\audit_hosted_full_suite_ownership;
 use function PhpGallery\Audit\audit_required_suite_pass;
 use function PhpGallery\Audit\audit_delegated_checkout_integrity;
 use function PhpGallery\Audit\audit_evaluate_winapp_report;
+use function PhpGallery\Audit\audit_validate_winapp_report;
 use function PhpGallery\Audit\output_is_skip;
 use function PhpGallery\Audit\parse_python_unittest_summary;
 use function PhpGallery\Audit\overall_status;
@@ -164,6 +165,23 @@ const AUDIT_WINAPP_FROZEN_INSTALLER_TIMEOUT_SECONDS = 1800;
 const AUDIT_WINAPP_FROZEN_GIT_TIMEOUT_SECONDS = 30;
 
 /**
+ * Bound real update installs, helper restarts and uninstall on a Windows runner.
+ * Type: int. Units: seconds. Scope: one complete isolated upgrade journey.
+ * Consumers: audit_run_winapp_update_qualification.
+ * Rationale: 1200 leaves room for the released asset download, multiple
+ * silent setups and bounded process shutdowns within the hosted job.
+ */
+const AUDIT_WINAPP_UPDATE_QUALIFICATION_TIMEOUT_SECONDS = 1200;
+
+/**
+ * Bound native packaging comparison on a disposable hosted Windows runner.
+ * Type: int. Units: seconds. Scope: three exact installer layouts in sequence.
+ * Consumers: audit_run_winapp_packaging_metrics. Rationale: 1200 accommodates
+ * authenticated download, three real installs and repeated native startup.
+ */
+const AUDIT_WINAPP_PACKAGING_METRICS_TIMEOUT_SECONDS = 1200;
+
+/**
  * Retain the original complete WinApp unittest discovery deadline.
  * @var int
  * Units: seconds. Scope: one complete WinApp regression child.
@@ -181,7 +199,7 @@ const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
  * Consumers: audit_run_winapp_partitioned().
  * Rationale: preserve the existing 480-second whole-run ceiling and 90-second
  *     child caps while splitting the canonical remainder into three class-
- *     preserving shards beside five isolated measured groups. Incomplete
+ *     preserving shards beside six isolated groups. Incomplete
  *     aggregate coverage remains a failure.
  */
 const AUDIT_WINAPP_PARTITIONED_TIMEOUT_SECONDS = 480;
@@ -224,6 +242,8 @@ if ($options['help']) {
       php scripts/audit.php [--profile basic|quick|thumbnail-batch|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
       php scripts/audit.php --suite <suite-id>
       php scripts/audit.php --suite=winapp-partitioned
+      php scripts/audit.php --suite=winapp-partitioned-no-visual
+      php scripts/audit.php --suite=winapp-visual-parity
       php scripts/audit.php --suite=gallery-request
       php scripts/audit.php --suite=thumbnail-batch-viewer
       php scripts/audit.php --suite=issue-362-c1-tree-http
@@ -256,7 +276,9 @@ if ($options['help']) {
       candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
       source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
       portable  Shared full Node and WinApp owners.
-      winapp-partitioned  Complete WinApp inventory in eight serial class-preserving processes.
+      winapp-partitioned  Complete WinApp inventory in ten serial class-preserving processes.
+      winapp-partitioned-no-visual  Hosted Qt ordinary inventory in nine processes.
+      winapp-visual-parity  Exact visual class delegated by the split inventory report.
       thumbnail-batch-viewer  Owned exact-SHA Windows Tk thumbnail benchmark.
       issue-362-c1-tree-http Current-SHA disposable gallery tree diagnostics.
       issue-362-c1-photos-workspace Current-SHA Windows PhotosWorkspace diagnostics.
@@ -338,6 +360,8 @@ $knownSuites = [
     'node-full',
     'winapp',
     'winapp-partitioned',
+    'winapp-partitioned-no-visual',
+    'winapp-visual-parity',
     'winapp-native',
     'mutation-contracts',
     'version-audit',
@@ -1814,17 +1838,28 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
 }
 
 /**
- * Run complete WinApp discovery in eight serial, structured child processes.
+ * Run complete WinApp discovery in structured child processes.
+ *
+ * Standard mode uses ten processes. The issue 445 split mode uses nine
+ * nonvisual processes and records the exact visual IDs for the companion suite.
  *
  * @param list<string>|null $python Python executable and option prefix, or null when unavailable.
- * @return array{id:'winapp-partitioned',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Full-suite outcomes with exact partition and real process evidence.
+ * @param bool $delegateVisual Assign the canonical visual class to its own hosted suite.
+ * @return array{id:'winapp-partitioned'|'winapp-partitioned-no-visual',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float,delegated_test_ids?:list<string>,canonical_test_ids?:list<string>}|null,delegated_test_ids:list<string>,canonical_test_ids:list<string>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Full-suite outcomes with exact partition and real process evidence.
  */
-function audit_run_winapp_partitioned(?array $python): array
+function audit_run_winapp_partitioned(
+    ?array $python,
+    bool $delegateVisual = false,
+): array
 {
     global $root, $runDirectory, $persistReports;
     $started = microtime(true);
-    $id = 'winapp-partitioned';
-    $label = 'WinApp complete regression (eight serial class partitions)';
+    $id = $delegateVisual
+        ? 'winapp-partitioned-no-visual'
+        : 'winapp-partitioned';
+    $label = $delegateVisual
+        ? 'WinApp ordinary regression (nine partitions; visual class delegated)'
+        : 'WinApp complete regression (ten serial class partitions)';
     if (!is_dir($root . '/winapp/tests')) {
         return task_result(
             $id,
@@ -1850,12 +1885,17 @@ function audit_run_winapp_partitioned(?array $python): array
         );
     }
 
-    $reportPath = $runDirectory . '/winapp-partitioned-report.json';
+    $reportPath = $runDirectory . '/' . $id . '-report.json';
     $command = array_merge($python, [
         '-m', 'scripts.audit_winapp_partitioned', $reportPath,
-        (string) \PhpGallery\Audit\AUDIT_WINAPP_PARTITION_COUNT,
+        (string) ($delegateVisual
+            ? \PhpGallery\Audit\AUDIT_WINAPP_NONVISUAL_PARTITION_COUNT
+            : \PhpGallery\Audit\AUDIT_WINAPP_PARTITION_COUNT),
         (string) AUDIT_WINAPP_TIMEOUT_SECONDS,
     ]);
+    if ($delegateVisual) {
+        $command[] = '--delegate-visual';
+    }
     $reportExistedBeforeRun = file_exists($reportPath);
     $process = run_process(
         $command,
@@ -1877,6 +1917,7 @@ function audit_run_winapp_partitioned(?array $python): array
         ],
         false,
         true,
+        $delegateVisual,
     );
     $adapterReportPath = $persistReports && $reportProduced
         ? relative_path($reportPath, $root)
@@ -1885,7 +1926,10 @@ function audit_run_winapp_partitioned(?array $python): array
         @unlink($reportPath);
     }
     $counts = $evaluated['counts'];
-    $summary = $counts['total'] . ' tests across eight serial class partitions: '
+    $partitionLabel = $delegateVisual
+        ? 'nine nonvisual serial class partitions'
+        : 'ten serial class partitions';
+    $summary = $counts['total'] . ' tests across ' . $partitionLabel . ': '
         . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / '
         . $counts['errors'] . ' error / ' . $counts['skipped'] . ' skip.';
     if (is_array($evaluated['partition_proof'])) {
@@ -1917,6 +1961,8 @@ function audit_run_winapp_partitioned(?array $python): array
             'fixture_skips' => $evaluated['fixture_skips'],
             'partition_processes' => $evaluated['partition_processes'],
             'partition_proof' => $evaluated['partition_proof'],
+            'delegated_test_ids' => $evaluated['partition_proof']['delegated_test_ids'] ?? [],
+            'canonical_test_ids' => $evaluated['partition_proof']['canonical_test_ids'] ?? [],
             'gaps' => $evaluated['gaps'],
             'process' => $evaluated['process'],
             'result_reason' => $evaluated['reason'],
@@ -1925,20 +1971,265 @@ function audit_run_winapp_partitioned(?array $python): array
     );
 }
 
+
 /**
- * Run the selected opt-in Tk performance protocol through the audit runner.
+ * Run each exact visual test ID delegated by the ordinary partition suite in
+ * its own bounded child process in the hosted Qt matrix.
+ *
+ * @param list<string>|null $python Python executable and option prefix, or null when unavailable.
+ * @return array{id:'winapp-visual-parity',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,delegated_test_ids:list<string>,partition_report:string,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Bound visual-class outcomes tied to the retained ordinary split report.
+ */
+function audit_run_winapp_visual_parity(?array $python): array
+{
+    global $root, $runDirectory, $persistReports, $sourceIdentity;
+    $started = microtime(true);
+    $id = 'winapp-visual-parity';
+    $label = 'WinApp delegated paired visual regression';
+    if (!is_dir($root . '/winapp/tests')) {
+        return task_result(
+            $id, $label, STATUS_SKIP, 0.0, [],
+            'winapp/tests is not present in this source tree.',
+        );
+    }
+    if ($python === null) {
+        return task_result(
+            $id, $label, STATUS_BLOCKED, 0.0, [],
+            'Python executable was not found.', null,
+            ['problems' => ['Set PHP_GALLERY_PYTHON or install Python 3.']],
+        );
+    }
+
+    $auditValue = trim((string) getenv('PHP_GALLERY_WINAPP_ORDINARY_AUDIT'));
+    $ordinaryAuditPath = $auditValue === '' ? false : realpath($root . '/' . $auditValue);
+    $auditRoot = realpath($root . '/cache/test-audit');
+    if ($ordinaryAuditPath === false || $auditRoot === false
+        || !str_starts_with($ordinaryAuditPath, $auditRoot . DIRECTORY_SEPARATOR)
+        || !is_file($ordinaryAuditPath)) {
+        return task_result(
+            $id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'A retained split-inventory report is required to select visual IDs.',
+            null,
+            ['problems' => ['The visual audit was not bound to prior delegated IDs.']],
+        );
+    }
+
+    $ordinaryContents = file_get_contents($ordinaryAuditPath);
+    $ordinaryAudit = is_string($ordinaryContents)
+        ? json_decode($ordinaryContents, true) : null;
+    $ordinaryTasks = $ordinaryAudit['tasks'] ?? null;
+    $ordinaryTask = is_array($ordinaryTasks) ? ($ordinaryTasks[0] ?? null) : null;
+    $ordinarySource = $ordinaryAudit['source'] ?? null;
+    $reportValue = $ordinaryTask['details']['report_file'] ?? null;
+    $partitionPath = is_string($reportValue) ? realpath($root . '/' . $reportValue) : false;
+    if (!is_array($ordinaryAudit) || !is_array($ordinaryTask)
+        || count($ordinaryTasks) !== 1
+        || ($ordinaryTask['id'] ?? null) !== 'winapp-partitioned-no-visual'
+        || !is_array($ordinarySource) || ($ordinarySource['head_sha'] ?? null) === null
+        || $ordinarySource['head_sha'] !== ($sourceIdentity['head_sha'] ?? null)
+        || ($ordinarySource['worktree_dirty'] ?? null) !== false
+        || ($sourceIdentity['worktree_dirty'] ?? null) !== false
+        || $partitionPath === false
+        || !str_starts_with($partitionPath, $auditRoot . DIRECTORY_SEPARATOR)
+        || !is_file($partitionPath)) {
+        return task_result(
+            $id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'The ordinary WinApp audit must bind the delegated IDs to this exact clean checkout.',
+            null, ['problems' => ['The ordinary audit source or retained report changed.']],
+        );
+    }
+
+    $partitionContents = file_get_contents($partitionPath);
+    $partitionDecoded = is_string($partitionContents)
+        ? json_decode($partitionContents, true)
+        : null;
+    $partitionValidation = is_array($partitionDecoded)
+        ? audit_validate_winapp_report($partitionDecoded, false, true, true)
+        : audit_validate_winapp_report([], false, true, true);
+    if (!$partitionValidation['valid']
+        || !is_array($partitionValidation['partition_proof'] ?? null)) {
+        return task_result(
+            $id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'The prior split-inventory report is missing or invalid.', null,
+            ['problems' => ['The visual audit cannot trust delegated identities.']],
+        );
+    }
+    $delegatedIds = $partitionValidation['partition_proof']['delegated_test_ids'] ?? [];
+    if (!is_array($delegatedIds) || $delegatedIds === []) {
+        return task_result(
+            $id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
+            'The split report has no delegated visual test identities.', null,
+            ['problems' => ['The visual audit cannot run an inferred or empty selection.']],
+        );
+    }
+
+    $partitionRuntime = $partitionValidation['runtime'];
+    $childReports = [];
+    $childProcesses = [];
+    $testResults = [];
+    $fixtureErrors = [];
+    $fixtureSkips = [];
+    $problems = [];
+    $counts = array_fill_keys([
+        'total', 'passed', 'failed', 'errors', 'skipped',
+        'expected_failures', 'unexpected_successes', 'subtest_failures',
+        'subtest_errors', 'subtest_skips', 'fixture_errors', 'fixture_skips',
+    ], 0);
+    $overallStatus = STATUS_PASS;
+    $allSuccessful = true;
+    $logs = [$label];
+    foreach ($delegatedIds as $index => $testId) {
+        $childName = sprintf('visual-child-%02d', $index + 1);
+        $idsPath = $runDirectory . '/winapp-visual-parity-' . $childName . '-ids.json';
+        $reportPath = $runDirectory . '/winapp-visual-parity-' . $childName . '-report.json';
+        if (file_put_contents($idsPath, json_encode([$testId])) === false) {
+            $overallStatus = STATUS_BLOCKED;
+            $allSuccessful = false;
+            $problems[] = $childName . ': exact selected test ID could not be retained.';
+            break;
+        }
+        $command = array_merge($python, [
+            '-m', 'scripts.audit_winapp_report', $reportPath,
+            '--test-ids-file=' . $idsPath,
+        ]);
+        $process = run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS);
+        $logs[] = $childName . ' ' . $testId . "\n" . audit_process_output($process);
+        $reportContents = is_file($reportPath)
+            ? file_get_contents($reportPath)
+            : false;
+        $evaluated = audit_evaluate_winapp_report(
+            is_string($reportContents) ? $reportContents : null,
+            [
+                'exit_code' => is_int($process['exit_code'] ?? null)
+                    ? $process['exit_code'] : null,
+                'timed_out' => (bool) ($process['timed_out'] ?? false),
+                'duration_seconds' => (float) ($process['duration'] ?? 0.0),
+            ],
+            false,
+            false,
+            false,
+            [$testId],
+        );
+        $runtime = $evaluated['runtime'];
+        $sameRuntime = is_array($runtime) && is_array($partitionRuntime)
+            && $runtime['python_version'] === $partitionRuntime['python_version']
+            && $runtime['python_implementation'] === $partitionRuntime['python_implementation']
+            && $runtime['platform'] === $partitionRuntime['platform']
+            && $runtime['executable'] === $partitionRuntime['executable'];
+        if ($evaluated['valid'] && !$sameRuntime) {
+            $evaluated['valid'] = false;
+            $evaluated['reason'] = 'visual-runtime-differs-from-partition-runtime';
+            $evaluated['status'] = STATUS_FAIL;
+            $evaluated['problems'][] =
+                'Visual and ordinary tests used different Python runtimes or platforms.';
+        }
+        foreach ($counts as $key => $value) {
+            $counts[$key] += $evaluated['counts'][$key];
+        }
+        foreach ($evaluated['tests'] as $test) {
+            $testResults[] = $test;
+        }
+        foreach ($evaluated['fixture_errors'] as $fixture) {
+            $fixture['id'] = $childName . ': ' . $fixture['id'];
+            $fixtureErrors[] = $fixture;
+        }
+        foreach ($evaluated['fixture_skips'] as $fixture) {
+            $fixture['id'] = $childName . ': ' . $fixture['id'];
+            $fixtureSkips[] = $fixture;
+        }
+        $childStatus = $evaluated['status'];
+        if ($childStatus !== STATUS_PASS) {
+            $allSuccessful = false;
+            $overallStatus = $childStatus === STATUS_FAIL
+                ? STATUS_FAIL
+                : ($overallStatus === STATUS_PASS ? $childStatus : $overallStatus);
+            foreach ($evaluated['problems'] as $problem) {
+                $problems[] = $childName . ': ' . $problem;
+            }
+        }
+        $childReports[] = [
+            'test_id' => $testId,
+            'report_file' => $persistReports && is_file($reportPath)
+                ? relative_path($reportPath, $root) : null,
+            'valid' => $evaluated['valid'],
+            'successful' => $evaluated['successful'],
+            'status' => $childStatus,
+        ];
+        $childProcesses[] = [
+            'test_id' => $testId,
+            'exit_code' => is_int($process['exit_code'] ?? null)
+                ? $process['exit_code'] : null,
+            'timed_out' => (bool) ($process['timed_out'] ?? false),
+            'duration_seconds' => (float) ($process['duration'] ?? 0.0),
+            'report_present' => is_file($reportPath),
+            'report_valid' => $evaluated['valid'],
+            'report_successful' => $evaluated['successful'],
+            'observed_test_ids' => array_column($evaluated['tests'], 'id'),
+        ];
+        if (!$persistReports) {
+            @unlink($idsPath);
+            @unlink($reportPath);
+        }
+    }
+    $observedIds = array_column($testResults, 'id');
+    if ($observedIds !== $delegatedIds) {
+        $allSuccessful = false;
+        $overallStatus = STATUS_FAIL;
+        $problems[] = 'Visual child reports do not match the exact delegated identity order.';
+    }
+    if ($counts['fixture_errors'] > 0) {
+        $allSuccessful = false;
+        $overallStatus = STATUS_FAIL;
+    }
+    $logPath = audit_write_log($id, $logs);
+    $summary = $allSuccessful
+        ? count($delegatedIds) . ' exact delegated visual IDs in separate 90-second children: '
+            . $counts['passed'] . ' pass / ' . $counts['skipped'] . ' skip.'
+        : 'One or more bounded delegated visual test children failed or lacked exact evidence.';
+    return task_result(
+        $id, $label, $overallStatus, microtime(true) - $started,
+        $counts, $summary, $logPath,
+        [
+            'report_files' => array_column($childReports, 'report_file'),
+            'report_schema_valid' => $allSuccessful,
+            'successful' => $allSuccessful,
+            'runtime' => $partitionRuntime,
+            'tests' => $testResults,
+            'fixture_errors' => $fixtureErrors,
+            'fixture_skips' => $fixtureSkips,
+            'delegated_test_ids' => $delegatedIds,
+            'observed_test_ids' => $observedIds,
+            'child_reports' => $childReports,
+            'child_processes' => $childProcesses,
+            'partition_report' => relative_path($partitionPath, $root),
+            'problems' => $problems,
+        ],
+    );
+}
+
+/**
+ * Run the selected opt-in desktop performance protocol through the audit runner.
  *
  * @param list<string>|null $python Resolved Python command, or null if unavailable.
  * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,report_file?:string,report_status?:'PASS'|'FAIL'|'BLOCKED'}} Normalized exact-input benchmark result with its retained report path.
  */
 function audit_run_watcher_tk_performance(?array $python): array
 {
-    global $root, $runDirectory;
+    global $root, $runDirectory, $sourceIdentity;
     $id = 'watcher-tk-performance';
-    $phaseTwo = getenv('PHP_GALLERY_TK_PERF_PROTOCOL') === 'issue_434_tk_protocol.json';
-    $label = $phaseTwo
-        ? 'Issue 434 Tk performance benchmark'
-        : 'Issue 361 Tk performance benchmark';
+    $protocol = getenv('PHP_GALLERY_TK_PERF_PROTOCOL');
+    $phaseTwo = $protocol === 'issue_434_tk_protocol.json';
+    $guiComparison = $protocol === 'issue_445_gui';
+    $qtInteraction = match ($protocol) {
+        'issue_445_qt_shell' => 'qt-shell-representative',
+        'issue_445_qt_photos_interactions' => 'qt-photos-interactions',
+        default => null,
+    };
+    $label = match (true) {
+        $guiComparison => 'Issue 445 paired Photos backend benchmark',
+        $qtInteraction !== null => 'Issue 445 native Qt interaction and soak benchmark',
+        $phaseTwo => 'Issue 434 Tk performance benchmark',
+        default => 'Issue 361 Tk performance benchmark',
+    };
     if ($python === null) {
         return task_result(
             $id,
@@ -1966,11 +2257,15 @@ function audit_run_watcher_tk_performance(?array $python): array
         );
     }
     $candidate = trim((string) getenv('PHP_GALLERY_TK_PERF_CANDIDATE'));
-    $expectedCandidate = trim((string) getenv('GITHUB_SHA'));
+    $preparedCandidate = ($guiComparison || $qtInteraction !== null)
+        ? getenv('PHP_GALLERY_ISSUE_445_CANDIDATE')
+        : false;
+    $expectedCandidate = trim((string) ($preparedCandidate ?: getenv('GITHUB_SHA')));
     if (
         preg_match('/^[a-f0-9]{40}$/D', $candidate) !== 1
         || preg_match('/^[a-f0-9]{40}$/D', $expectedCandidate) !== 1
         || $candidate !== $expectedCandidate
+        || $candidate !== ($sourceIdentity['head_sha'] ?? null)
     ) {
         return task_result(
             $id,
@@ -1978,9 +2273,9 @@ function audit_run_watcher_tk_performance(?array $python): array
             STATUS_BLOCKED,
             0.0,
             [],
-            'Candidate SHA is missing or does not match this GitHub run.',
+            'Candidate SHA is missing or does not match the exact hosted checkout.',
             null,
-            ['problems' => ['PHP_GALLERY_TK_PERF_CANDIDATE must equal GITHUB_SHA.']],
+            ['problems' => ['The event or prepared candidate must equal the checked out SHA.']],
         );
     }
     $baseline = trim((string) getenv('PHP_GALLERY_TK_PERF_BASELINE'));
@@ -1997,14 +2292,27 @@ function audit_run_watcher_tk_performance(?array $python): array
         );
     }
 
-    $outputDirectory = $runDirectory . ($phaseTwo ? '/issue-434' : '/issue-361');
-    $driver = $phaseTwo ? 'issue_434_tk_benchmark.py' : 'issue_361_tk_benchmark.py';
+    $outputDirectory = $runDirectory . match (true) {
+        $guiComparison => '/issue-445',
+        $qtInteraction === 'qt-shell-representative' => '/issue-445-qt-shell',
+        $qtInteraction === 'qt-photos-interactions' => '/issue-445-qt-photos-interactions',
+        $phaseTwo => '/issue-434',
+        default => '/issue-361',
+    };
+    $driver = match (true) {
+        $guiComparison => 'issue_445_gui_benchmark.py',
+        $qtInteraction === 'qt-shell-representative' => 'issue_445_qt_shell_benchmark.py',
+        $qtInteraction === 'qt-photos-interactions' => 'issue_445_qt_photos_interactions.py',
+        $phaseTwo => 'issue_434_tk_benchmark.py',
+        default => 'issue_361_tk_benchmark.py',
+    };
     $reportPath = $outputDirectory . '/report.json';
+    $arguments = $qtInteraction !== null
+        ? ['--output', $reportPath, '--source-sha', $candidate]
+        : ['--output', $outputDirectory];
     $process = run_process(array_merge($python, [
         $root . '/tools/perf/' . $driver,
-        '--output',
-        $outputDirectory,
-    ]), $root, AUDIT_ISSUE_361_TK_PERFORMANCE_TIMEOUT_SECONDS);
+    ], $arguments), $root, AUDIT_ISSUE_361_TK_PERFORMANCE_TIMEOUT_SECONDS);
     $report = is_file($reportPath)
         ? json_decode((string) file_get_contents($reportPath), true)
         : null;
@@ -2018,9 +2326,12 @@ function audit_run_watcher_tk_performance(?array $python): array
     $validReport = is_array($report)
         && ($report['schema_version'] ?? null) === 1
         && in_array($report['status'] ?? null, ['PASS', 'FAIL', 'BLOCKED'], true)
-        && ($report['stage'] ?? null) === $stage
-        && ($report['candidate_sha'] ?? null) === $candidate
-        && ($report['baseline_sha'] ?? null) === $baseline;
+        && ($qtInteraction !== null
+            ? ($report['stage'] ?? null) === $qtInteraction
+                && ($report['source_sha'] ?? null) === $candidate
+            : ($report['stage'] ?? null) === $stage
+                && ($report['candidate_sha'] ?? null) === $candidate
+                && ($report['baseline_sha'] ?? null) === $baseline);
     if (!$validReport) {
         $message = !is_file($reportPath)
             ? 'Benchmark did not produce report.json.'
@@ -2047,7 +2358,7 @@ function audit_run_watcher_tk_performance(?array $python): array
     if (process_status($process) !== STATUS_PASS && $status === STATUS_PASS) {
         $status = STATUS_FAIL;
     }
-    $reason = trim((string) ($report['summary'] ?? $report['reason'] ?? ''));
+    $reason = trim((string) ($report['summary'] ?? $report['reason'] ?? $report['failure'] ?? ''));
     if ($reason === '') {
         $reason = $reportStatus === 'PASS'
             ? 'Benchmark report validated.'
@@ -2071,6 +2382,225 @@ function audit_run_watcher_tk_performance(?array $python): array
 }
 
 /**
+ * Verify real installed updates with the two checked frozen setup artifacts.
+ *
+ * @param non-empty-list<string> $python Resolved hosted Python command.
+ * @param string $candidate Exact current source SHA admitted by the parent audit.
+ * @param string $inputRoot Directory containing separate earlier and target artifacts.
+ * @param string $earlierVersion Earlier version applied only to the isolated build.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,artifact_directory?:string}} Installed journey result and sanitized evidence directory.
+ */
+function audit_run_winapp_update_qualification(
+    array $python,
+    string $candidate,
+    string $inputRoot,
+    string $earlierVersion,
+): array {
+    global $root, $runDirectory;
+    $id = 'winapp-frozen-installer';
+    $label = 'Real Windows WinApp upgrade qualification';
+    $targetVersion = trim((string) file_get_contents($root . '/winapp/VERSION'));
+    $setups = [];
+    foreach (['earlier' => $earlierVersion, 'target' => $targetVersion] as $variant => $version) {
+        if (preg_match('/^\d+\.\d+\.\d+$/D', $version) !== 1) {
+            break;
+        }
+        $filename = 'PHPGalleryUploader-' . $version . '-Setup.exe';
+        $matches = glob($inputRoot . '/' . $variant . '/*/winapp-frozen-installer/' . $filename);
+        if (!is_array($matches) || count($matches) !== 1) {
+            break;
+        }
+        // An isolated builder emits exactly one setup and one descriptor entry.
+        $setup = $matches[0];
+        $metadata = dirname($setup) . '/winapp-update.json';
+        $descriptor = is_file($metadata)
+            ? json_decode((string) file_get_contents($metadata), true)
+            : null;
+        $asset = is_array($descriptor) ? ($descriptor['assets'][0] ?? null) : null;
+        if (
+            !is_array($asset) || ($asset['name'] ?? null) !== $filename
+            || ($asset['version'] ?? null) !== $version
+            || ($asset['size'] ?? null) !== filesize($setup)
+            || ($asset['sha256'] ?? null) !== hash_file('sha256', $setup)
+        ) {
+            break;
+        }
+        $setups[$variant] = $setup;
+    }
+    if (!isset($setups['earlier'], $setups['target']) || !version_compare($earlierVersion, $targetVersion, '<')) {
+        $message = 'Both exact, monotonic qualification setup artifacts must match their descriptors.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+
+    $artifactDirectory = $runDirectory . '/winapp-update-qualification';
+    if (!mkdir($artifactDirectory)) {
+        $message = 'Unable to create the sanitized upgrade evidence directory.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+    $work = sys_get_temp_dir() . '/php-gallery-winapp-upgrade-' . basename($runDirectory);
+    $report = $artifactDirectory . '/report.json';
+    $process = run_process(array_merge($python, [
+        $root . '/winapp/qualify_installer_updates.py',
+        '--stable-installer', $work . '/PHPGalleryUploader-1.7.1-Setup.exe',
+        '--earlier-installer', $setups['earlier'],
+        '--earlier-version', $earlierVersion,
+        '--target-installer', $setups['target'],
+        '--target-version', $targetVersion,
+        '--source-sha', $candidate,
+        '--work', $work,
+        '--report', $report,
+    ]), $root, AUDIT_WINAPP_UPDATE_QUALIFICATION_TIMEOUT_SECONDS);
+    $output = audit_process_output($process);
+    $log = audit_write_log($id, ['Candidate SHA: ' . $candidate, $output]);
+    $evidence = is_file($report) ? json_decode((string) file_get_contents($report), true) : null;
+    $status = process_status($process);
+    if (
+        $status === STATUS_PASS
+        && (!is_array($evidence) || ($evidence['status'] ?? null) !== 'PASS'
+            || ($evidence['source_sha'] ?? null) !== $candidate
+            || ($evidence['target_setup_sha256'] ?? null) !== hash_file('sha256', $setups['target']))
+    ) {
+        $status = STATUS_FAIL;
+    }
+    $summary = $status === STATUS_PASS
+        ? 'Released 1.7.1 and the active Tk and Qt common builds updated through real helpers.'
+        : 'Installed update qualification did not establish all required journeys.';
+    return task_result($id, $label, $status, (float) $process['duration'], [], $summary, $log, [
+        'problems' => $status === STATUS_PASS ? [] : [$summary],
+        'artifact_directory' => relative_path($artifactDirectory, $root),
+    ]);
+}
+
+/**
+ * Compare the published onefile, historical dual-build and current onedir layouts.
+ *
+ * @param non-empty-list<string> $python Resolved hosted Python command.
+ * @param string $candidate Exact verified candidate checkout identity.
+ * @param string $inputRoot Root containing the current and historical artifacts.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,artifact_directory?:string}} Native layout measurements or the reason the run failed.
+ */
+function audit_run_winapp_packaging_metrics(array $python, string $candidate, string $inputRoot): array
+{
+    global $root, $runDirectory;
+    $id = 'winapp-frozen-installer';
+    $label = 'Hosted WinApp packaging layout measurements';
+    $version = trim((string) file_get_contents($root . '/winapp/VERSION'));
+    $names = [
+        'candidate' => 'PHPGalleryUploader-' . $version . '-Setup.exe',
+        // Use the prior qualified dual-build fixture only for historical measurement.
+        'prior' => 'PHPGalleryUploader-1.8.0-Qt-Setup.exe',
+    ];
+    $setups = [];
+    foreach ($names as $variant => $name) {
+        $matches = glob($inputRoot . '/' . $variant . '/*/winapp-frozen-installer/' . $name);
+        if (!is_array($matches) || count($matches) !== 1) {
+            break;
+        }
+        $setup = $matches[0];
+        $metadata = dirname($setup) . '/winapp-update.json';
+        $descriptor = is_file($metadata)
+            ? json_decode((string) file_get_contents($metadata), true)
+            : null;
+        $asset = is_array($descriptor) ? ($descriptor['assets'][0] ?? null) : null;
+        if (
+            !is_array($asset) || ($asset['name'] ?? null) !== $name
+            || ($asset['size'] ?? null) !== filesize($setup)
+            || ($asset['sha256'] ?? null) !== hash_file('sha256', $setup)
+        ) {
+            break;
+        }
+        $setups[$variant] = $setup;
+    }
+    if (!isset($setups['candidate'], $setups['prior'])) {
+        $message = 'Candidate and historical setup artifacts must match their retained descriptors.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+    $artifactDirectory = $runDirectory . '/winapp-packaging-metrics';
+    if (!mkdir($artifactDirectory)) {
+        $message = 'Unable to create the packaging evidence directory.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+    $reportPath = $artifactDirectory . '/report.json';
+    $process = run_process(array_merge($python, [
+        $root . '/winapp/qualify_packaging_metrics.py',
+        '--setup', $setups['candidate'],
+        '--prior-setup', $setups['prior'],
+        '--output', $reportPath,
+        '--source-sha', $candidate,
+    ]), $root, AUDIT_WINAPP_PACKAGING_METRICS_TIMEOUT_SECONDS);
+    $log = audit_write_log($id, ['Candidate SHA: ' . $candidate, audit_process_output($process)]);
+    $report = is_file($reportPath) ? json_decode((string) file_get_contents($reportPath), true) : null;
+    $status = process_status($process, required: true);
+    if (
+        $status === STATUS_PASS
+        && (!is_array($report) || ($report['status'] ?? null) !== 'PASS'
+            || ($report['source_sha'] ?? null) !== $candidate)
+    ) {
+        $status = STATUS_FAIL;
+    }
+    $summary = $status === STATUS_PASS
+        ? 'Three authenticated WinApp layouts were installed and measured.'
+        : 'Installed layout comparison could not establish complete evidence.';
+    return task_result($id, $label, $status, (float) $process['duration'], [], $summary, $log, [
+        'problems' => $status === STATUS_PASS ? [] : [$summary],
+        'artifact_directory' => relative_path($artifactDirectory, $root),
+    ]);
+}
+
+/**
+ * Verify frontend switching and failure recovery on the exact staged setup.
+ *
+ * @param non-empty-list<string> $python Exact hosted Python command.
+ * @param string $candidate SHA of the checkout and current build artifact name.
+ * @param string $inputRoot Root of the downloaded candidate build artifact.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,artifact_directory?:string}} Native installed UI evidence.
+ */
+function audit_run_winapp_installed_frontends(array $python, string $candidate, string $inputRoot): array
+{
+    global $root, $runDirectory;
+    $id = 'winapp-frozen-installer';
+    $label = 'Windows installed desktop and Settings verification';
+    $version = trim((string) file_get_contents($root . '/winapp/VERSION'));
+    $filename = 'PHPGalleryUploader-' . $version . '-Setup.exe';
+    $matches = glob($inputRoot . '/*/winapp-frozen-installer/' . $filename);
+    $setup = is_array($matches) && count($matches) === 1 ? $matches[0] : null;
+    $descriptor = $setup === null ? null : dirname($setup) . '/winapp-update.json';
+    $metadata = $descriptor !== null && is_file($descriptor)
+        ? json_decode((string) file_get_contents($descriptor), true) : null;
+    $asset = is_array($metadata) ? ($metadata['assets'][0] ?? null) : null;
+    if (
+        $setup === null || !is_array($asset) || ($asset['name'] ?? null) !== $filename
+        || ($asset['version'] ?? null) !== $version || ($asset['size'] ?? null) !== filesize($setup)
+        || ($asset['sha256'] ?? null) !== hash_file('sha256', $setup)
+    ) {
+        $message = 'The exact staged setup and descriptor must agree before native verification.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+    $artifactDirectory = $runDirectory . '/winapp-installed-ui';
+    if (!mkdir($artifactDirectory)) {
+        $message = 'Unable to create the installed UI evidence directory.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
+    }
+    $process = run_process(array_merge($python, [
+        $root . '/winapp/qt_installer_tools.py',
+        '--verify-installed', $setup, $version, $artifactDirectory,
+    ]), $root, AUDIT_WINAPP_UPDATE_QUALIFICATION_TIMEOUT_SECONDS);
+    $log = audit_write_log($id, [
+        'Candidate SHA: ' . $candidate,
+        'Setup SHA-256: ' . $asset['sha256'],
+        audit_process_output($process),
+    ]);
+    $status = process_status($process, required: true);
+    $summary = $status === STATUS_PASS
+        ? 'The exact installed setup passed both frontends, Settings switching and Qt fault recovery.'
+        : 'Installed Settings or Qt fault recovery could not be verified.';
+    return task_result($id, $label, $status, (float) $process['duration'], [], $summary, $log, [
+        'problems' => $status === STATUS_PASS ? [] : [$summary],
+        'artifact_directory' => relative_path($artifactDirectory, $root),
+    ]);
+}
+
+/**
  * Build a real frozen WinApp executable and Inno installer in an isolated copy.
  * Use the central resolver's non-empty Git path to verify the event SHA before
  * copying tracked build inputs into the owned temporary directory.
@@ -2084,7 +2614,8 @@ function audit_run_winapp_frozen_installer(?array $python): array
     $id = 'winapp-frozen-installer';
     $label = 'Real WinApp frozen executable and installer build';
     $started = microtime(true);
-    $candidate = trim((string) getenv('GITHUB_SHA'));
+    $candidate = trim((string) (getenv('PHP_GALLERY_ISSUE_445_CANDIDATE') ?: getenv('GITHUB_SHA')));
+    $earlierVersion = trim((string) getenv('PHP_GALLERY_FROZEN_EARLIER_VERSION'));
     // PHP_INT_SIZE is the host's native pointer-width proxy for the x64 builder.
     if (PHP_OS_FAMILY !== 'Windows' || PHP_INT_SIZE !== 8) {
         return task_result(
@@ -2153,6 +2684,19 @@ function audit_run_winapp_frozen_installer(?array $python): array
                 'Refusing to build from a checkout with unverified identity.',
             ]],
         );
+    }
+
+    $updateInputs = trim((string) getenv('PHP_GALLERY_FROZEN_UPDATE_INPUTS'));
+    if ($updateInputs !== '') {
+        return audit_run_winapp_update_qualification($python, $candidate, $updateInputs, $earlierVersion);
+    }
+    $layoutInputs = trim((string) getenv('PHP_GALLERY_FROZEN_LAYOUT_INPUTS'));
+    if ($layoutInputs !== '') {
+        return audit_run_winapp_packaging_metrics($python, $candidate, $layoutInputs);
+    }
+    $uiInputs = trim((string) getenv('PHP_GALLERY_FROZEN_UI_INPUTS'));
+    if ($uiInputs !== '') {
+        return audit_run_winapp_installed_frontends($python, $candidate, $uiInputs);
     }
 
     $compiler = 'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe';
@@ -2297,12 +2841,19 @@ function audit_run_winapp_frozen_installer(?array $python): array
 
         foreach ([
             'build_installer.py',
+            'uploader.spec',
+            'frozen_windows_libraries.py',
+            'constraints.txt',
             'requirements-build.txt',
+            'requirements-core.txt',
+            'requirements-qt.txt',
             'requirements.txt',
             'VERSION',
             'installer.iss',
+            'QT-LICENSE.txt',
             'gallery_watch_upload.pyw',
             'assets/tray-icon.ico',
+            'uploader/dependency_versions.py',
             'uploader/runtime_check.py',
             'uploader/resources',
             'SimConnect.dll',
@@ -2320,12 +2871,27 @@ function audit_run_winapp_frozen_installer(?array $python): array
             );
         }
 
+        if ($earlierVersion !== '') {
+            $targetVersion = trim((string) file_get_contents($copyDirectory . '/VERSION'));
+            if (
+                preg_match('/^\d+\.\d+\.\d+$/D', $earlierVersion) !== 1
+                || !version_compare($earlierVersion, $targetVersion, '<')
+                || file_put_contents($copyDirectory . '/VERSION', $earlierVersion . "\n") === false
+            ) {
+                throw new RuntimeException('Unable to stage the earlier Qt qualification version.');
+            }
+        }
+        $buildCommand = array_merge($python, [
+            $copyDirectory . '/build_installer.py',
+            '--iscc',
+            $compiler,
+        ]);
+        $verifyDesktop = $earlierVersion === '' && getenv('PHP_GALLERY_FROZEN_BUILD_ONLY') !== '1';
+        if ($verifyDesktop) {
+            $buildCommand[] = '--verify-installed';
+        }
         $process = run_process(
-            array_merge($python, [
-                $copyDirectory . '/build_installer.py',
-                '--iscc',
-                $compiler,
-            ]),
+            $buildCommand,
             $copyDirectory,
             AUDIT_WINAPP_FROZEN_INSTALLER_TIMEOUT_SECONDS,
         );
@@ -2334,9 +2900,12 @@ function audit_run_winapp_frozen_installer(?array $python): array
         $log = audit_write_log($id, [
             'Candidate SHA: ' . $candidate,
             'Compiler: ' . $compiler,
+            'Earlier version overlay: ' . ($earlierVersion ?: '(none)'),
             'Builder output:',
             $output,
-            'Installer installation and uninstall are not tested.',
+            $verifyDesktop
+                ? 'The standard setup requires both backends and known Qt fault recovery from one executable.'
+                : 'The private setup is retained for the separate exact-artifact installation jobs.',
         ]);
         audit_record_slow_check($label, $duration);
 
@@ -2409,7 +2978,9 @@ function audit_run_winapp_frozen_installer(?array $python): array
                 }
                 $status = STATUS_PASS;
                 $artifactRelativePath = relative_path($artifactDirectory, $root);
-                $summary = 'Real frozen executable and Inno installer built; installer installation was not tested.';
+                $summary = $earlierVersion === ''
+                    ? 'Common setup installed; the same application passed Tk, Qt and repair checks.'
+                    : 'Earlier version of the common setup built for the installed update journey.';
             }
         }
     } catch (Throwable $exception) {
@@ -3352,7 +3923,9 @@ function audit_suite_console_label(string $suiteId): string
         'browser-map' => 'Chromium browser integration',
         'website' => 'Static project website',
         'winapp' => 'WinApp regression',
-        'winapp-partitioned' => 'WinApp complete regression (eight serial class partitions)',
+        'winapp-partitioned' => 'WinApp complete regression (ten serial class partitions)',
+        'winapp-partitioned-no-visual' => 'WinApp ordinary regression (nine partitions; visual class delegated)',
+        'winapp-visual-parity' => 'WinApp delegated paired visual regression',
         'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -3534,6 +4107,8 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         ),
         'winapp' => audit_run_winapp($python),
         'winapp-partitioned' => audit_run_winapp_partitioned($python),
+        'winapp-partitioned-no-visual' => audit_run_winapp_partitioned($python, true),
+        'winapp-visual-parity' => audit_run_winapp_visual_parity($python),
         'winapp-native' => audit_run_winapp($python, true),
         'mutation-contracts' => audit_run_php_command(
             'mutation-contracts',

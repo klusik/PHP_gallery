@@ -21,6 +21,7 @@ Manual files/folder/ZIP discovery with bounded archive staging.
 
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from threading import Event
 import ctypes
 from ctypes import wintypes
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -208,6 +209,45 @@ def discover_folder(folder: Path, supported_suffixes: Set[str], recursive: bool 
             continue
         result.items.append(ImportItem.create(path))
     return result
+
+
+def inspect_folder_counts(
+    folder: Path, supported_suffixes: Set[str], recursive: bool,
+    cancelled: Event,
+) -> Tuple[int, int] | None:
+    """Count folder candidates with import-equivalent filtering and no retained rows.
+
+    Args:
+        folder (Path): Folder to inspect without admitting work.
+        supported_suffixes (Set[str]): Same allowlist used by folder import.
+        recursive (bool): Whether descendants are included.
+        cancelled (Event): Generation fence checked between filesystem entries.
+    Returns:
+        Tuple[int, int] | None: Supported/unsupported counts, or None if cancelled.
+    """
+    if cancelled.is_set():
+        return None
+    if not folder.is_dir():
+        return (0, 0)
+    iterator = folder.rglob("*") if recursive else folder.glob("*")
+    supported = 0
+    unsupported = 0
+    for path in iterator:
+        if cancelled.is_set():
+            return None
+        try:
+            is_file = path.is_file()
+        except OSError:
+            is_file = False
+        if not is_file:
+            continue
+        if path.suffix.lower() in supported_suffixes:
+            supported += 1
+        else:
+            unsupported += 1
+    if cancelled.is_set():
+        return None
+    return supported, unsupported
 
 
 def _zip_entry_reason(info: zipfile.ZipInfo) -> Optional[str]:

@@ -11,9 +11,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Render a safe review dialog for an uncertain Watcher queue head."""
 
-import hashlib
 import io
-import os
 import queue
 import re
 import threading
@@ -24,8 +22,9 @@ from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING, Callable
 
-from uploader.watch_recovery import WatchRecoveryCoordinator, WatchRecoverySnapshot
-from uploader.watch_queue import observe_watch_source
+from uploader.watch_recovery import (
+    PREVIEW_MAX_BYTES, WatchRecoveryCoordinator, WatchRecoverySnapshot, read_recovery_preview,
+)
 from uploader.flight_report_translations import recovery_text
 from uploader.ui_theme import Button, GlassCard
 from uploader.overlay import OverlayPanel
@@ -45,10 +44,6 @@ except ImportError:
 # Type: tuple[int, int]. Units: pixels. Scope: recovery evidence previews.
 # Consumers: WatchRecoveryReviewDialog. Rationale: 160x120 fits compact side-by-side cards.
 PREVIEW_SIZE = (160, 120)
-# Purpose: Bound image bytes read for a background preview.
-# Type: int. Units: bytes. Scope: recovery preview source.
-# Consumers: WatchRecoveryReviewDialog.load_previews. Rationale: Avoid large-file memory spikes.
-PREVIEW_MAX_BYTES = 40 * 1024 * 1024
 # Purpose: Poll background outcomes without cross-thread calls into Tk.
 # Type: int. Units: milliseconds. Scope: recovery dialog message pump.
 # Consumers: WatchRecoveryReviewDialog. Rationale: 50 ms keeps controls responsive with low idle cost.
@@ -561,35 +556,7 @@ class WatchRecoveryReviewDialog:
             local_state = "replaced"
             local_digest = ""
             try:
-                path = Path(snapshot.source_path)
-                info = path.lstat()
-                observed = observe_watch_source(path, snapshot.captured_at)
-                if (observed.signature != snapshot.source_signature
-                        or path.is_symlink()
-                        or info.st_size > PREVIEW_MAX_BYTES
-                        or info.st_size != getattr(snapshot, "source_size", None)):
-                    raise OSError("Retained source generation changed.")
-                expected_mtime = getattr(snapshot, "source_mtime_ns", 0)
-                if expected_mtime > 0 and info.st_mtime_ns != expected_mtime:
-                    raise OSError("Retained source generation changed.")
-                with path.open("rb") as source_file:
-                    opened = os.fstat(source_file.fileno())
-                    if (opened.st_dev != info.st_dev or opened.st_ino != info.st_ino
-                            or opened.st_size != info.st_size
-                            or opened.st_mtime_ns != info.st_mtime_ns):
-                        raise OSError("Retained source generation changed.")
-                    content = source_file.read(PREVIEW_MAX_BYTES + 1)
-                    after_handle = os.fstat(source_file.fileno())
-                after = path.lstat()
-                if (len(content) > PREVIEW_MAX_BYTES or path.is_symlink()
-                        or after.st_dev != opened.st_dev or after.st_ino != opened.st_ino
-                        or after_handle.st_size != opened.st_size
-                        or after_handle.st_mtime_ns != opened.st_mtime_ns):
-                    raise OSError("Retained source changed during preview read.")
-                digest = hashlib.sha256(content).hexdigest()
-                if snapshot.sha256 and digest != snapshot.sha256:
-                    raise OSError("Retained source hash changed.")
-                local_digest = digest
+                content, local_digest = read_recovery_preview(snapshot)
                 local = self.decode_preview(content)
                 local_state = "loaded"
             except FileNotFoundError:

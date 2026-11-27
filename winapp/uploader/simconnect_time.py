@@ -21,6 +21,7 @@ import time
 from typing import Callable, Optional
 
 from uploader.windows_game_processes import msfs_running
+from uploader.localization import gettext
 from uploader.simconnect_location import (
     SimConnectLocationClient,
     _SimConnectRecv,
@@ -32,6 +33,37 @@ from uploader.simconnect_location import (
     simconnect_hresult_failed,
 )
 from uploader.diagnostics import redact_text
+
+
+def utc_status_caption(status: str) -> str:
+    """Present simulator clock state without changing its native diagnostics.
+
+    Args:
+        status (str): Stable UTC synchronization status or an empty caption.
+    Returns:
+        str: Localized clock state, optionally with the connected simulator name.
+    """
+    if status.startswith("UTC sync connected: "):
+        return gettext("UTC sync connected: {simulator}").format(
+            simulator=status.removeprefix("UTC sync connected: "),
+        )
+    if status.startswith(("UTC sync awaiting simulator:", "awaiting simulator")):
+        return gettext("Waiting for the simulator for UTC sync")
+    if status.startswith("UTC sync unsupported"):
+        return gettext("UTC sync is unavailable for this simulator")
+    if status.startswith(("UTC sync suspended:", "UTC readback deferred:")):
+        return gettext("UTC sync paused by the simulator state")
+    if status.startswith("UTC correction verified;"):
+        return gettext("UTC time synchronized")
+    if status.startswith("UTC correction unverified "):
+        return gettext("UTC correction could not be verified. Retrying…")
+    captions = {
+        "UTC sync stopped": gettext("UTC sync stopped"),
+        "awaiting fresh simulator UTC": gettext("Waiting for the simulator UTC time"),
+        "UTC aligned; monitoring every 10 s": gettext("UTC time aligned"),
+        "UTC connection cleanup failed": gettext("Could not close the UTC connection"),
+    }
+    return captions.get(status, status)
 
 # Type: float; Units: seconds; Scope: UTC worker; Consumers: poll scheduling.
 # Rationale: 10 seconds catches a new-flight mismatch without continuous writes.

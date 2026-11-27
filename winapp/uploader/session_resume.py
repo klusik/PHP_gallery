@@ -16,9 +16,10 @@ import ctypes.util
 import hashlib
 import json
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import TypeAlias
+from typing import Callable, TypeAlias
 
 from .app_linking import (
     GALLERIES_SCOPE, TOKEN_PREFIX,
@@ -33,6 +34,41 @@ TRANSIENT_RESUME_MAX_SECONDS = 900
 
 _KEYCHAIN_SERVICE = 'RudolfKlusal.PHPGallery.TransientSession.v1'
 _KEYCHAIN_MISSING = -25300
+# Purpose: Name Security.framework status and Boolean values used by the guard.
+# Type: int. Units: OSStatus or Boolean. Scope: guarded Keychain calls.
+# Consumers: _run_keychain_without_ui and its regression coverage.
+# Rationale: Keep native status classification and state transitions explicit.
+_KEYCHAIN_STATUS_SUCCESS = 0
+_KEYCHAIN_INTERACTION_DISABLED = 0
+_KEYCHAIN_INTERACTION_ENABLED = 1
+# Security.framework errSec... values identify unavailable or refused access.
+_KEYCHAIN_ERR_INVALID_KEYCHAIN = -25295  # errSecInvalidKeychain
+_KEYCHAIN_ERR_NO_SUCH_KEYCHAIN = -25294  # errSecNoSuchKeychain
+_KEYCHAIN_ERR_AUTH_FAILED = -25293  # errSecAuthFailed
+_KEYCHAIN_ERR_NOT_AVAILABLE = -25291  # errSecNotAvailable
+_KEYCHAIN_ERR_INTERACTION_NOT_ALLOWED = -25308  # errSecInteractionNotAllowed
+_KEYCHAIN_ERR_USER_CANCELED = -128  # errSecUserCanceled
+# Purpose: Require the default Keychain to be unlocked and writable.
+# Type: int. Units: SecKeychainStatus bit flags. Scope: native store admission.
+# Consumers: default_keychain_write_available. Rationale: A read-only or locked
+# default store cannot safely accept a newly approved rolling credential.
+_KEYCHAIN_UNLOCKED_STATUS = 1  # kSecUnlockStateStatus
+_KEYCHAIN_WRITE_PERMISSION_STATUS = 4  # kSecWritePermStatus
+# Purpose: Recognize native statuses that mean a Keychain item is inaccessible.
+# Type: frozenset[int]. Units: Security.framework OSStatus values. Scope: one
+# native Keychain item operation. Consumers: _run_keychain_without_ui.
+# Rationale: These statuses indicate unavailable/authentication-gated access;
+# missing items remain separately classified by _KEYCHAIN_MISSING.
+_KEYCHAIN_ACCESS_UNAVAILABLE_STATUSES = frozenset({
+    _KEYCHAIN_ERR_INVALID_KEYCHAIN, _KEYCHAIN_ERR_NO_SUCH_KEYCHAIN,
+    _KEYCHAIN_ERR_AUTH_FAILED, _KEYCHAIN_ERR_NOT_AVAILABLE,
+    _KEYCHAIN_ERR_INTERACTION_NOT_ALLOWED, _KEYCHAIN_ERR_USER_CANCELED,
+})
+# Purpose: Serialize process-wide Keychain UI policy changes around one call.
+# Type: threading.RLock. Units: one process lock. Scope: native Security calls.
+# Consumers: _run_keychain_without_ui. Rationale: The legacy Security API
+# changes shared interaction state, so calls must restore it without overlap.
+_KEYCHAIN_INTERACTION_LOCK = threading.RLock()
 # CoreFoundation's fixed kCFStringEncodingUTF8 enum.
 _CF_UTF8 = 0x08000100
 # Version of the opaque Keychain payload layout.
@@ -62,6 +98,106 @@ class _CFDictionaryCallbacks(ctypes.Structure):
     ]
 
 
+class KeychainAccessUnavailable(RuntimeError):
+    """Report native Keychain access that is unavailable without user UI."""
+
+
+def _run_keychain_without_ui(
+    security: ctypes.CDLL, operation: Callable[[], int],
+) -> int:
+    """Run one native Keychain operation with UI disabled and restored.
+
+    Args:
+        security (ctypes.CDLL): Loaded Security.framework owner.
+        operation (Callable[[], int]): One SecItem call returning an OSStatus.
+
+    Returns:
+        int: Successful operation status.
+
+    Raises:
+        KeychainAccessUnavailable: The policy API or item access is unavailable.
+        RuntimeError: Interaction state could not be safely restored.
+    """
+    with _KEYCHAIN_INTERACTION_LOCK:
+        try:
+            get_allowed = security.SecKeychainGetUserInteractionAllowed
+            set_allowed = security.SecKeychainSetUserInteractionAllowed
+        except (AttributeError, OSError):
+            raise KeychainAccessUnavailable(
+                'Keychain access is unavailable.',
+            ) from None
+        get_allowed.argtypes = [ctypes.POINTER(ctypes.c_uint8)]
+        get_allowed.restype = ctypes.c_int32
+        previous = ctypes.c_uint8()
+        if get_allowed(ctypes.byref(previous)) != _KEYCHAIN_STATUS_SUCCESS:
+            raise KeychainAccessUnavailable('Keychain access is unavailable.')
+
+        set_allowed.argtypes = [ctypes.c_uint8]
+        set_allowed.restype = ctypes.c_int32
+        changed = previous.value == _KEYCHAIN_INTERACTION_ENABLED
+        # File-based Login Keychain ACLs still use the legacy SecItem path;
+        # the newer query-level no-UI option alone does not suppress its prompt.
+        try:
+            if (changed and set_allowed(_KEYCHAIN_INTERACTION_DISABLED)
+                    != _KEYCHAIN_STATUS_SUCCESS):
+                raise KeychainAccessUnavailable(
+                    'Keychain access is unavailable.',
+                )
+            status = operation()
+        finally:
+            if (changed and set_allowed(previous.value)
+                    != _KEYCHAIN_STATUS_SUCCESS):
+                raise RuntimeError('Keychain interaction state could not be restored.')
+        if status in _KEYCHAIN_ACCESS_UNAVAILABLE_STATUSES:
+            raise KeychainAccessUnavailable('Keychain access is unavailable.')
+        return status
+
+
+def default_keychain_write_available() -> bool:
+    """Check the default Keychain is unlocked and writable without prompting.
+
+    Returns:
+        bool: True only when the default native Keychain is unlocked and writable.
+
+    Raises:
+        KeychainAccessUnavailable: The native no-UI policy could not be applied.
+        RuntimeError: Security status APIs or CoreFoundation release are absent.
+    """
+    security, foundation = _keychain()
+    keychain = ctypes.c_void_p()
+    try:
+        copy_default = security.SecKeychainCopyDefault
+        get_status = security.SecKeychainGetStatus
+    except (AttributeError, OSError):
+        raise RuntimeError('Keychain status is unavailable.') from None
+    copy_default.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    copy_default.restype = ctypes.c_int32
+    release = foundation.CFRelease
+    release.argtypes = [ctypes.c_void_p]
+    release.restype = None
+    try:
+        status = _run_keychain_without_ui(
+            security, lambda: copy_default(ctypes.byref(keychain)),
+        )
+        if status != _KEYCHAIN_STATUS_SUCCESS:
+            return False
+        if not keychain:
+            return False
+        get_status.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+        get_status.restype = ctypes.c_int32
+        flags = ctypes.c_uint32()
+        status = _run_keychain_without_ui(
+            security, lambda: get_status(keychain, ctypes.byref(flags)),
+        )
+        required = (_KEYCHAIN_UNLOCKED_STATUS
+                    | _KEYCHAIN_WRITE_PERMISSION_STATUS)
+        return (status == _KEYCHAIN_STATUS_SUCCESS
+                and flags.value & required == required)
+    finally:
+        if keychain:
+            release(keychain)
+
+
 @dataclass(frozen=True)
 class TransientGrant:
     """Bind one transient bearer to its approved gallery and original deadline.
@@ -88,15 +224,23 @@ def _keychain() -> tuple[ctypes.CDLL, ctypes.CDLL]:
         tuple[ctypes.CDLL, ctypes.CDLL]: Security and CoreFoundation libraries.
 
     Raises:
-        RuntimeError: The native frameworks are unavailable.
+        KeychainAccessUnavailable: A Darwin framework cannot be loaded.
+        RuntimeError: Called outside macOS.
     """
     if sys.platform != 'darwin':
         raise RuntimeError('macOS Keychain is unavailable.')
-    security_path = ctypes.util.find_library('Security')
-    foundation_path = ctypes.util.find_library('CoreFoundation')
-    if not security_path or not foundation_path:
-        raise RuntimeError('macOS Keychain is unavailable.')
-    return ctypes.CDLL(security_path), ctypes.CDLL(foundation_path)
+    try:
+        security_path = ctypes.util.find_library('Security')
+        foundation_path = ctypes.util.find_library('CoreFoundation')
+        if not security_path or not foundation_path:
+            raise KeychainAccessUnavailable(
+                'macOS Keychain is unavailable.',
+            )
+        return ctypes.CDLL(security_path), ctypes.CDLL(foundation_path)
+    except OSError:
+        raise KeychainAccessUnavailable(
+            'macOS Keychain is unavailable.',
+        ) from None
 
 
 def _cf_string(foundation: ctypes.CDLL, value: str) -> ctypes.c_void_p:
@@ -350,7 +494,9 @@ def write_keychain_record(service: str, account: str, record: bytes) -> None:
         update = security.SecItemUpdate
         update.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         update.restype = ctypes.c_int32
-        status = update(base, attributes)
+        status = _run_keychain_without_ui(
+            security, lambda: update(base, attributes),
+        )
         if status == _KEYCHAIN_MISSING:
             add_fields = _query_fields(security, service, account) + (
                 (_constant(security, 'kSecValueData'), record),
@@ -360,10 +506,12 @@ def write_keychain_record(service: str, account: str, record: bytes) -> None:
                 add = security.SecItemAdd
                 add.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
                 add.restype = ctypes.c_int32
-                status = add(item, None)
+                status = _run_keychain_without_ui(
+                    security, lambda: add(item, None),
+                )
             finally:
                 _release(foundation, item, item_refs)
-        if status != 0:
+        if status != _KEYCHAIN_STATUS_SUCCESS:
             raise RuntimeError('Keychain write failed.')
     finally:
         _release(foundation, attributes, attribute_refs)
@@ -427,10 +575,12 @@ def read_keychain_record(service: str, account: str) -> bytes | None:
         copy = security.SecItemCopyMatching
         copy.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
         copy.restype = ctypes.c_int32
-        status = copy(query, ctypes.byref(result))
+        status = _run_keychain_without_ui(
+            security, lambda: copy(query, ctypes.byref(result)),
+        )
         if status == _KEYCHAIN_MISSING:
             return None
-        if status != 0 or not result:
+        if status != _KEYCHAIN_STATUS_SUCCESS or not result:
             raise RuntimeError('Keychain read failed.')
         length = foundation.CFDataGetLength
         length.argtypes = [ctypes.c_void_p]
@@ -487,9 +637,9 @@ def delete_keychain_record(service: str, account: str) -> bool:
         delete = security.SecItemDelete
         delete.argtypes = [ctypes.c_void_p]
         delete.restype = ctypes.c_int32
-        status = delete(query)
-        if status not in (0, _KEYCHAIN_MISSING):
+        status = _run_keychain_without_ui(security, lambda: delete(query))
+        if status not in (_KEYCHAIN_STATUS_SUCCESS, _KEYCHAIN_MISSING):
             raise RuntimeError('Keychain deletion failed.')
-        return status == 0
+        return status == _KEYCHAIN_STATUS_SUCCESS
     finally:
         _release(foundation, query, retained)

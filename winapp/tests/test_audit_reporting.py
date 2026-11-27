@@ -28,7 +28,9 @@ from scripts.audit_winapp_report import AuditReport, report_suite
 from scripts.audit_winapp_report import discover_canonical_suite, flatten_suite, main
 from scripts.audit_winapp_report import discover_selected_suite
 from scripts import audit_winapp_report as reporting
-from scripts.audit_winapp_partitioned import merge_reports, partition_test_ids
+from scripts.audit_winapp_partitioned import (
+    merge_reports, partition_nonvisual_test_ids, partition_test_ids,
+)
 from scripts.audit_winapp_partitioned import validate_child_report
 
 
@@ -254,10 +256,10 @@ class AuditReportingTests(unittest.TestCase):
             self.assertEqual(1, len(matching))
 
     def test_partition_isolates_slow_canonical_groups(self) -> None:
-        """Isolate five measured groups and split only the class remainder.
+        """Isolate costly groups and split only the class remainder.
 
         Returns:
-            None: Eight deterministic shards preserve every class and prove
+            None: Ten deterministic shards preserve every class and prove
                 exact disjoint coverage of the canonical test IDs.
         """
         viewer_ids = [
@@ -278,29 +280,51 @@ class AuditReportingTests(unittest.TestCase):
         dense_return_ids = [
             'test_native_gallery_dense_return.NativeGalleryDenseReturnTests.test_dense_return',
         ]
+        visual_ids = [
+            'test_gui_visual_parity.VisualParityTests.test_views',
+            'test_gui_visual_parity.VisualParityTests.test_pending_recovery',
+        ]
+        embedded_shell_ids = [
+            'test_ui_shell.EmbeddedShellTests.test_centered_panel_keeps_margins_without_compositing',
+        ]
         complement_ids = [
             'test_upload.UploadTests.test_eight',
             'test_sync.SyncTests.test_nine',
             'test_upload.UploadTests.test_ten',
             'test_read.ReadTests.test_eleven',
         ]
+        weighted_ids = [
+            'test_uploader_fifo.UploaderFifoTests.test_receipts',
+            'test_localization.NativeLocalizationTests.test_messages',
+        ]
         canonical_ids = (
             viewer_ids + small_benchmark_ids + large_benchmark_ids
-            + preload_benchmark_ids + dense_return_ids + complement_ids
+            + preload_benchmark_ids + dense_return_ids + visual_ids
+            + embedded_shell_ids
+            + complement_ids
         )
 
-        shards = partition_test_ids(canonical_ids, 8)
+        shards = partition_test_ids(canonical_ids, 10)
 
         self.assertEqual(set(viewer_ids), set(shards[0]))
         self.assertEqual(set(small_benchmark_ids), set(shards[1]))
         self.assertEqual(set(large_benchmark_ids), set(shards[2]))
         self.assertEqual(set(preload_benchmark_ids), set(shards[3]))
         self.assertEqual(set(dense_return_ids), set(shards[4]))
+        self.assertEqual(set(visual_ids), set(shards[5]))
+        self.assertEqual(set(embedded_shell_ids), set(shards[6]))
         # The repeated Upload class stays whole and retains canonical order.
-        self.assertEqual([complement_ids[0], complement_ids[2]], shards[5])
-        self.assertEqual([complement_ids[1]], shards[6])
-        self.assertEqual([complement_ids[3]], shards[7])
-        self.assertEqual(shards, partition_test_ids(canonical_ids, 8))
+        self.assertEqual([complement_ids[0], complement_ids[2]], shards[7])
+        self.assertEqual([complement_ids[1]], shards[8])
+        self.assertEqual([complement_ids[3]], shards[9])
+        self.assertEqual(shards, partition_test_ids(canonical_ids, 10))
+        weighted_shards = partition_test_ids(canonical_ids + weighted_ids, 10)
+        weighted_owners: set[int] = set()
+        for identity in weighted_ids:
+            owners = [index for index, shard in enumerate(weighted_shards) if identity in shard]
+            self.assertEqual(1, len(owners))
+            weighted_owners.update(owners)
+        self.assertEqual(len(weighted_ids), len(weighted_owners))
         flattened_ids = [test_id for shard in shards for test_id in shard]
         self.assertEqual(set(canonical_ids), set(flattened_ids))
         self.assertEqual(len(canonical_ids), len(flattened_ids))
@@ -314,11 +338,55 @@ class AuditReportingTests(unittest.TestCase):
             self.assertEqual(1, len(owners))
         incomplete_groups = [
             test_id for test_id in canonical_ids
-            if not test_id.startswith('test_native_gallery_viewer.')
+            if not test_id.startswith((
+                'test_native_gallery_viewer.',
+                'test_gui_visual_parity.VisualParityTests.',
+                'test_ui_shell.EmbeddedShellTests.',
+            ))
         ]
         incomplete_groups.append('test_extra.ExtraTests.test_ten')
         with self.assertRaises(ValueError):
-            partition_test_ids(incomplete_groups, 8)
+            partition_test_ids(incomplete_groups, 10)
+
+    def test_split_inventory_delegates_only_exact_visual_class_ids(self) -> None:
+        """Keep the Windows Qt visual class out of the bounded ordinary run.
+
+        Returns:
+            None: Nine class-preserving ordinary shards and one explicit
+                delegated class form the exact disjoint canonical inventory.
+        """
+        canonical_ids = [
+            'test_native_gallery_viewer.NativeGalleryViewerTests.test_viewer',
+            'test_gallery_read_linking.ThumbnailCacheSmallBenchmarkTests.test_small',
+            'test_gallery_read_linking.ThumbnailCacheLargeBenchmarkTests.test_large',
+            'test_gallery_preload.GalleryPreloadWorkerTests.test_preload',
+            'test_native_gallery_dense_return.NativeGalleryDenseReturnTests.test_dense',
+            'test_ui_shell.EmbeddedShellTests.test_centered_panel_keeps_margins_without_compositing',
+            'test_gui_visual_parity.VisualParityTests.test_photos',
+            'test_gui_visual_parity.VisualParityTests.test_watcher',
+            'test_upload.UploadTests.test_upload',
+            'test_sync.SyncTests.test_sync',
+            'test_read.ReadTests.test_read',
+        ]
+
+        shards, delegated = partition_nonvisual_test_ids(canonical_ids)
+        ordinary_ids = [test_id for shard in shards for test_id in shard]
+
+        self.assertEqual(9, len(shards))
+        self.assertEqual(
+            [test_id for test_id in canonical_ids
+             if test_id.startswith('test_gui_visual_parity.VisualParityTests.')],
+            delegated,
+        )
+        self.assertEqual(
+            [test_id for test_id in canonical_ids if test_id not in delegated],
+            ordinary_ids,
+        )
+        self.assertEqual(len(ordinary_ids), len(set(ordinary_ids)))
+        self.assertFalse(any(
+            test_id.startswith('test_gui_visual_parity.VisualParityTests.')
+            for test_id in ordinary_ids
+        ))
 
     def test_partition_merge_rejects_missing_duplicate_and_unsuccessful_children(self) -> None:
         """Prevent incomplete, duplicated or failed child evidence from passing.

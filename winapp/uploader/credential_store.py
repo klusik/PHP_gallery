@@ -27,6 +27,7 @@ if os.name != 'nt':
 
 from .app_linking import _issuer_valid
 from .session_resume import (
+    KeychainAccessUnavailable, default_keychain_write_available,
     delete_keychain_record, read_keychain_record, write_keychain_record,
 )
 from .upload_mode import ModeRecord, decode_mode_record, encode_mode_record
@@ -902,7 +903,12 @@ class _KeychainCredentialApi:
         Returns:
             None: Native Keychain acknowledged the write.
         """
-        write_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target, record)
+        try:
+            write_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target, record)
+        except KeychainAccessUnavailable:
+            raise CredentialStoreUnavailable(
+                'Native credential storage is unavailable.',
+            ) from None
 
     def read(self, target: str) -> bytes | None:
         """Read one credential or fence by exact account name.
@@ -913,7 +919,12 @@ class _KeychainCredentialApi:
         Returns:
             bytes | None: Native Keychain record or None when absent.
         """
-        return read_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+        try:
+            return read_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+        except KeychainAccessUnavailable:
+            raise CredentialStoreUnavailable(
+                'Native credential storage is unavailable.',
+            ) from None
 
     def delete(self, target: str) -> bool:
         """Delete a credential or fence by exact account name.
@@ -924,7 +935,12 @@ class _KeychainCredentialApi:
         Returns:
             bool: True when the item existed and was removed.
         """
-        return delete_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+        try:
+            return delete_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+        except KeychainAccessUnavailable:
+            raise CredentialStoreUnavailable(
+                'Native credential storage is unavailable.',
+            ) from None
 
 
 class _KeychainCredentialMutex:
@@ -1029,6 +1045,19 @@ class KeychainCredentialStore(NativeCredentialStore):
         """
         self._profile = profile
         self._api = _KeychainCredentialApi()
+
+    def is_available(self) -> bool:
+        """Require a usable default Keychain before admitting linked storage.
+
+        Returns:
+            bool: True only when safe noninteractive reads and writes are
+                available; false while the default Keychain is locked or read-only.
+        """
+        try:
+            return (default_keychain_write_available()
+                    and super().is_available())
+        except (RuntimeError, OSError):
+            return False
 
     def _mutex(
         self, issuer: str, account_id: int, *, metadata: bool = False,

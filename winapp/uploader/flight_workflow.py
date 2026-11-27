@@ -323,6 +323,19 @@ class FinalizationWorker(threading.Thread):
             self.wants_revoke = False
             return True
 
+    def cancel_drain_for_terminal_retention(self) -> bool:
+        """Fence downstream analysis and delivery before a local terminal write.
+
+        Returns:
+            bool: True if this live operation still owned the drain phase.
+        """
+        with self._lock:
+            if (self.cancel.is_set() or self.server_request_sent or not self.is_alive()
+                    or self._progress.phase != 'draining' or self.abandonment):
+                return False
+            self.cancel.set()
+            return True
+
     def transfer_progress(self, done: int, total: int) -> None:
         """Publish actual bytes and a transfer-only remaining-time estimate.
 
@@ -419,8 +432,9 @@ class FinalizationWorker(threading.Thread):
             self.wait_for_workers(
                 self.cancel, time.monotonic() + FINALIZATION_DRAIN_SECONDS
             )
-            self.check_cancelled()
-            self.update("analyzing", advance=True)
+            with self._lock:
+                self.check_cancelled()
+                self.update("analyzing", advance=True)
             for plan in self.plans:
                 self.check_cancelled()
                 self.update("analyzing", plan.session_id)
@@ -898,3 +912,25 @@ class FinalizationWorker(threading.Thread):
             self._revocation_cleanup_pending = keep_fence
             if self._gui_work is not None and not keep_fence:
                 self._gui_work.close()
+
+
+def create_local_report_worker(
+    plan: SessionPlan, *, watched_target: WatchedReportTarget | None = None,
+    emit: Callable[[str, str], None] | None = None,
+) -> FinalizationWorker:
+    """Prepare independent PDF editions through the existing finalization owner.
+
+    Args:
+        plan (SessionPlan): Verified selected stopped flight's current plan.
+        watched_target (WatchedReportTarget | None): Separately confirmed active
+            destination when the operator explicitly requests PDF delivery.
+        emit (Callable[[str, str], None] | None): Optional thread-safe activity
+            receiver for severity and phase messages.
+    Returns:
+        FinalizationWorker: Unstarted owner of all four local report editions.
+    """
+    return FinalizationWorker(
+        [replace(plan, languages=REPORT_LANGUAGES)], '', '',
+        lambda _cancel, _deadline: None, lambda: None, False,
+        local_reports=True, watched_target=watched_target, emit=emit,
+    )

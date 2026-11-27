@@ -174,7 +174,7 @@ jobs:
       - name: Install authoritative WinApp dependencies
         shell: pwsh
         run: |
-          python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run central complete WinApp partitioned suite
@@ -478,7 +478,7 @@ jobs:
           python-version: '3.14.10'
 
       - name: Install authoritative WinApp dependencies
-        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
 
       - name: Run central WinApp suite under xvfb
         env:
@@ -628,7 +628,7 @@ jobs:
           python-version: '3.14.10'
 
       - name: Install authoritative WinApp dependencies
-        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
 
       - name: Run advisory central WinApp suite
         env:
@@ -776,7 +776,7 @@ jobs:
           python-version: '3.14.10'
 
       - name: Install authoritative WinApp dependencies for audit fixtures
-        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
 
       - name: Run central curated audit and source contracts
         env:

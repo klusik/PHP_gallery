@@ -148,6 +148,27 @@ updater_inventory_compatibility_assert(
         && array_intersect($locales, $inventory['updater_files']) === [],
     'The real package must isolate all WinApp catalogs from CMS activation.',
 );
+$backend = [
+    'winapp/QT-LICENSE.txt',
+    'winapp/constraints.txt',
+    'winapp/frozen_windows_libraries.py',
+    'winapp/licenses/qt/GPL-3.0-only.txt',
+    'winapp/licenses/qt/LGPL-3.0-only.txt',
+    'winapp/qt_installer_tools.py',
+    'winapp/requirements-core.txt',
+    'winapp/requirements-qt.txt',
+    'winapp/uploader.spec',
+    'winapp/uploader/resources/qml/Photos.qml',
+];
+updater_inventory_compatibility_assert(
+    $inventory['companion_backend_files'] === $backend
+        && array_intersect($backend, $inventory['updater_files']) === [],
+    'The real inventory must list exact pinned backend assets outside CMS activation.',
+);
+updater_inventory_compatibility_assert(
+    array_intersect($backend, release_file_policy_paths($root)) === $backend,
+    'The real distribution profile omitted pinned backend assets.',
+);
 
 $fixture =
     sys_get_temp_dir()

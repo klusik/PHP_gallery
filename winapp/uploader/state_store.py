@@ -879,14 +879,31 @@ class JobStateStore:
     Durable job and activity history stored in ``upload_state.json``.
     """
 
-    def __init__(self, path: Path, history_limit: int = 500) -> None:
-        """Create a job store for the shared upload-state document."""
+    def __init__(
+        self, path: Path, history_limit: int = 500, *, read_only: bool = False,
+    ) -> None:
+        """Create a job store for the shared upload-state document.
+
+        Args:
+            path (Path): Existing shared upload-state document.
+            history_limit (int): Requested retained activity event count.
+            read_only (bool): Do not quarantine malformed read input or admit
+                any mutation when projecting another owner's saved state.
+        Returns:
+            None: Creates a reader or the existing read/write store.
+        """
         self.path = path
         self.history_limit = max(50, min(5000, int(history_limit or 500)))
+        self.read_only = read_only
 
     def _load(self) -> Dict[str, Any]:
-        """Load the current shared state while holding the process lock."""
-        return load_upload_state(self.path, quarantine_bad=True)
+        """Load the current shared state while holding the process lock.
+
+        Returns:
+            Dict[str, Any]: Normalized upload history, including path and
+                hash receipts, failure entries, import jobs and recent events.
+        """
+        return load_upload_state(self.path, quarantine_bad=not self.read_only)
 
     def _load_for_write(self) -> Dict[str, Any]:
         """Preserve existing accepted work or refuse a destructive state write.
@@ -896,7 +913,10 @@ class JobStateStore:
 
         Raises:
             ValueError: Existing history is unreadable, redirected or malformed.
+            PermissionError: This store is a passive view of accepted work.
         """
+        if self.read_only:
+            raise PermissionError("This job store is read-only.")
         return load_upload_state_for_mutation(self.path)
 
     def save_job(self, job: ImportJob) -> None:

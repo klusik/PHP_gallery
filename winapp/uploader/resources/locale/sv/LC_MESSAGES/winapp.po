@@ -822,6 +822,9 @@ msgstr "Granskar källan, beräknar filernas hashvärden, kontrollerar formatst�
 msgid "Install local AI module"
 msgstr "Installera lokal AI-modul"
 
+msgid "Optional local AI module dependency installation finished successfully. Restart the app before running the Transformers backend for the first time."
+msgstr "Beroendena för den valfria lokala AI-modulen har installerats. Starta om appen innan du använder Transformers-backenden första gången."
+
 msgid "Installed Windows app only. This switch saves immediately."
 msgstr "Bara för den installerade Windows-appen. Inställningen sparas direkt."
 
@@ -1161,11 +1164,17 @@ msgstr "Klar för uppladdning"
 msgid "Ready when you are"
 msgstr "Redo"
 
+msgid "Reapprove saved link"
+msgstr "Godkänn sparad länk igen"
+
 msgid "Recent events"
 msgstr "Senaste händelser"
 
 msgid "Reconnect and verify the created gallery first."
 msgstr "Anslut igen och verifiera först det skapade galleriet."
+
+msgid "Resume Watcher"
+msgstr "Återuppta Watcher"
 
 msgid "Reconnect saved link"
 msgstr "Återanslut sparad länk"
@@ -1265,6 +1274,9 @@ msgstr "Fortsätt det ursprungliga skapandet"
 
 msgid "Resume the paused import"
 msgstr "Fortsätt den pausade importen"
+
+msgid "Retry"
+msgstr "Försök igen"
 
 msgid "Retry failed"
 msgstr "Försök igen med misslyckade objekt"
@@ -1890,6 +1902,9 @@ msgstr "Mappbevakningen pågår fortfarande"
 msgid "WATCHER PREFERENCES"
 msgstr "INSTÄLLNINGAR FÖR MAPPBEVAKNING"
 
+msgid "Watcher preparation started."
+msgstr "Förberedelsen av mappbevakningen har startat."
+
 msgid "Watcher remains open"
 msgstr "Mappbevakningen är fortfarande öppen"
 
@@ -2231,3 +2246,220 @@ msgstr "Den fristående installationen kan inte installera Python-paket. Använd
 
 msgid "Bundled dependencies"
 msgstr "Paket som ingår i appen"
+
+msgid "AI"
+msgstr "AI"
+
+msgid "Active backend: {backend}"
+msgstr "Aktiv backend: {backend}"
+
+msgid "Cancel pending change"
+msgstr "Avbryt väntande ändring"
+
+msgid "Checking for updates…"
+msgstr "Söker efter uppdateringar…"
+
+msgid "Could not check for updates."
+msgstr "Det gick inte att söka efter uppdateringar."
+
+msgid "Could not save the GUI backend."
+msgstr "Det gick inte att spara GUI-backend."
+
+msgid "Diagnostics copied."
+msgstr "Diagnostiken har kopierats."
+
+msgid "Disconnect"
+msgstr "Koppla från"
+
+msgid "GUI backend"
+msgstr "GUI-backend"
+
+msgid "GUI backend settings…"
+msgstr "Inställningar för GUI-backend…"
+
+msgid "Gallery"
+msgstr "Galleri"
+
+msgid "Gallery connection is unavailable."
+msgstr "Gallerianslutningen är inte tillgänglig."
+
+msgid "Interface"
+msgstr "Gränssnitt"
+
+msgid "Link a gallery or open local photos."
+msgstr "Anslut ett galleri eller öppna lokala foton."
+
+msgid "Loading photos…"
+msgstr "Läser in foton…"
+
+msgid "Loading photo…"
+msgstr "Läser in foto…"
+
+msgid "No galleries found."
+msgstr "Inga gallerier hittades."
+
+msgid "No photos found."
+msgstr "Inga foton hittades."
+
+msgid "No saved PDFs for this flight."
+msgstr "Det finns inga sparade PDF-filer för den här flygningen."
+
+msgid "No saved records."
+msgstr "Inga sparade poster."
+
+msgid "Open local photos"
+msgstr "Öppna lokala foton"
+
+msgid "Open saved PDF"
+msgstr "Öppna sparad PDF"
+
+msgid "Photo card format"
+msgstr "Fotokortets format"
+
+msgid "Photo could not be loaded."
+msgstr "Fotot gick inte att läsa in."
+
+msgid "Photos loading progress"
+msgstr "Förlopp för fotoinläsning"
+
+msgid "PySide6 / Qt 6 (highly experimental)"
+msgstr "PySide6 / Qt 6 (mycket experimentell)"
+
+msgid "Qt dependencies could not load. WinApp opened with Tkinter. Install the optional Qt requirements for this Python and retry in Settings."
+msgstr "Qt-beroendena kunde inte läsas in. WinApp öppnades med Tkinter. Installera de valfria Qt-paketen för detta Python och försök igen i Inställningar."
+
+msgid "Qt did not become ready. WinApp opened with Tkinter. Review the WinApp log and retry or cancel the change in Settings."
+msgstr "Qt blev inte redo. WinApp öppnades med Tkinter. Granska WinApp-loggen och försök igen eller avbryt ändringen i Inställningar."
+
+msgid "Qt is available in the source launcher with the optional Qt requirements."
+msgstr "Qt är tillgängligt vid start från källkod med de valfria Qt-paketen."
+
+msgid "Refresh"
+msgstr "Uppdatera"
+
+msgid "Reports"
+msgstr "Rapporter"
+
+msgid "Restart required for {backend}."
+msgstr "Omstart krävs för {backend}."
+
+msgid "Saved history could not be read."
+msgstr "Den sparade historiken gick inte att läsa."
+
+msgid "Saved reports could not be read."
+msgstr "De sparade rapporterna gick inte att läsa."
+
+msgid "Select a saved flight."
+msgstr "Välj en sparad flygning."
+
+msgid "Some photos could not be loaded. Use Refresh to retry."
+msgstr "Vissa foton kunde inte läsas in. Välj Uppdatera för att försöka igen."
+
+msgid "Link for uploads"
+msgstr "Länka för uppladdning"
+
+msgid "Select upload gallery"
+msgstr "Välj galleri för uppladdning"
+
+msgid "Edit gallery"
+msgstr "Redigera galleri"
+
+msgid "Root gallery"
+msgstr "Rotgalleri"
+
+msgid "Parent gallery"
+msgstr "Överordnat galleri"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Description"
+msgstr "Beskrivning"
+
+msgid "NSFW"
+msgstr "Känsligt innehåll"
+
+msgid "Visibility"
+msgstr "Synlighet"
+
+msgid "Public"
+msgstr "Offentlig"
+
+msgid "Private"
+msgstr "Privat"
+
+msgid "Unpublished"
+msgstr "Opublicerad"
+
+msgid "Gallery created."
+msgstr "Galleriet skapades."
+
+msgid "Gallery changes saved."
+msgstr "Galleriändringarna sparades."
+
+msgid "Configuration saved."
+msgstr "Konfigurationen sparades."
+
+msgid "Download update"
+msgstr "Hämta uppdatering"
+
+msgid "Install update"
+msgstr "Installera uppdatering"
+
+
+msgid "The GUI backend was saved. Restart WinApp now to apply it?"
+msgstr "GUI-backend har sparats. Vill du starta om WinApp nu för att tillämpa det?"
+
+msgid "Tkinter / ttk (stable, default)"
+msgstr "Tkinter / ttk (stabil, standard)"
+
+msgid "Update available: {version}"
+msgstr "Uppdatering tillgänglig: {version}"
+
+msgid "WinApp is up to date."
+msgstr "WinApp är uppdaterad."
+
+msgid "WinApp opened with Tkinter to finish the update continuation."
+msgstr "WinApp öppnades med Tkinter för att slutföra återupptagningen efter uppdateringen."
+
+msgid "WinApp opened with Tkinter to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
+msgstr "WinApp öppnades med Tkinter för att behålla pågående arbete. Kontrollera Watcher, Aktivitet och Flygning innan du byter till Qt."
+
+msgid "Finish the current work in Tkinter before switching to Qt."
+msgstr "Slutför pågående arbete i Tkinter innan du byter till Qt."
+
+msgid "Use a GUI backend for this launch only."
+msgstr "Använd en GUI-backend endast för den här starten."
+
+msgid "API key entered but not saved."
+msgstr "API-nyckeln har angetts men ännu inte sparats."
+
+msgid "Gallery connection could not be changed."
+msgstr "Det gick inte att ändra gallerianslutningen."
+
+msgid "Disconnect gallery"
+msgstr "Koppla från galleriet"
+
+msgid "A linked gallery connection is selected."
+msgstr "En länkad gallerianslutning har valts."
+
+msgid "Start Watcher"
+msgstr "Starta Watcher"
+
+msgid "The saved API-key connection is selected."
+msgstr "Anslutningen med den sparade API-nyckeln har valts."
+
+msgid "Local photos"
+msgstr "Lokala foton"
+
+msgid "Enable the AI worker in Settings and verify the saved gallery connection."
+msgstr "Aktivera AI-arbetaren i Inställningar och verifiera den sparade gallerianslutningen."
+
+msgid "Select a gallery connection to start an import."
+msgstr "Välj en gallerianslutning för att starta en import."
+
+msgid "No watched folder selected."
+msgstr "Ingen mapp har valts för bevakning."
+
+msgid "Continue"
+msgstr "Fortsätt"

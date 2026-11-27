@@ -15,9 +15,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from math import cos, radians, sin
 import ctypes
-import io
 
 import _tkinter
 import sys
@@ -25,8 +23,17 @@ import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
 
+from .ui_icons import (
+    FOLDER_COVER_INSETS, _ICON_ALIASES, _ICON_GLYPHS, render_smooth_icon, render_toggle_switch,
+)
+from .ui_palette import (
+    PALETTE as _PALETTE, UI_BODY_POINTS as _UI_BODY_POINTS,
+    UI_BRAND_POINTS, UI_EYEBROW_POINTS, UI_FONT_PREFERENCES as _UI_FONT_PREFERENCES,
+    UI_PHOTO_FORMAT_LABEL_POINTS, UI_SWITCH_LABEL_GAP, UI_SWITCH_SIZE,
+)
+
 try:
-    from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageTk
+    from PIL import Image, ImageDraw, ImageFilter, ImageTk
 except ImportError:
     Image = None
 
@@ -87,24 +94,11 @@ _PHOTOS_ICON_PADDING = (4, 4)
 # Rationale: 12 pt stays legible within the compact toolbar.
 _PHOTOS_ICON_FONT_SIZE = 12
 
-# Purpose: Keep ratio captions readable beneath their visible shape icons.
-# Type: int. Units: points. Scope: the seven photo-format toolbar choices.
-# Consumers: configure_theme format button styles. Rationale: 8 pt captions
-# fit with 18 px artwork in a compact row without competing with album titles.
-_PHOTO_FORMAT_LABEL_POINTS = 8
-
 # Purpose: Keep the drawn Photos toolbar symbol compact inside its button.
 # Type: int; Units: logical pixels; Scope: Photos icon button artwork.
 # Consumers: SmoothIconButton._refresh_icon.
 # Rationale: 16 px leaves the toolbar text-free while preserving the 32 px row.
 _PHOTOS_ICON_IMAGE_SIZE = 16
-
-# Purpose: Draw the folder rim outside the correctly proportioned cover image.
-# Type: tuple[int, int, int, int]. Units: logical pixels, left/top/right/bottom.
-# Scope: shared folder artwork. Consumers: folder_card_size and create_smooth_icon.
-# Rationale: 5/12/5/8 retains the compact rim and raised tab without cropping
-# the selected image ratio into the remaining space of a ratio-shaped folder.
-FOLDER_COVER_INSETS = (5, 12, 5, 8)
 
 # Purpose: Normalize Tk's reported display density to logical UI pixels.
 # Type: float; Units: dots per inch; Scope: Windows uploader image and row sizing.
@@ -245,12 +239,6 @@ _MODAL_SCRIM_ALPHA = 104
 # inner layer use 22/34 alpha to define the edge without a hard outline.
 _RAISED_SHADOW_LAYERS = ((6, 3, 22), (3, 2, 34))
 
-# Purpose: Keep native body text comfortable across ttk and classic Tk.
-# Type: int. Units: points. Scope: default labels, entries and text views.
-# Consumers: _select_ui_font_family. Rationale: 10 points retains the current
-# ttk density and makes classic Tk text match the shared body labels.
-_UI_BODY_POINTS = 10
-
 # Purpose: Make inline progress secondary to the task it describes.
 # Type: int. Units: Tk pixels. Scope: compact gallery and updater tracks.
 # Consumers: configure_theme. Rationale: 5 px differentiates the progress
@@ -300,88 +288,11 @@ _PANEL_SHADOW_BLUR = 2
 # Consumers: ttk style registration and card defaults.
 # Rationale: light text and cyan actions remain legible on slate panels;
 #     semantic colors distinguish success, attention and failures.
-_PALETTE = {
-    "background": "#192330",
-    "surface": "#202D3C",
-    "surface_alt": "#283A4C",
-    "card_surface": "#253443",
-    "card_surface_alt": "#2B3D4D",
-    "ink": "#F2F6FA",
-    "muted": "#BAC8D6",
-    "line": "#3D5264",
-    "scrim": "#101923",
-    "primary": "#08AED0",
-    "primary_hover": "#22C3E2",
-    "primary_pressed": "#008AA8",
-    "focus": "#8BE4F2",
-    "success": "#46D68C",
-    "warning": "#F2C581",
-    "danger": "#FF91A2",
-    "recording": "#FF6673",
-    "recording_dim": "#B93A45",
-}
-
-# Purpose: Map common actions to consistent single-line icon glyphs.
-# Type: dict[str, str]; Units: icon glyphs; Scope: common uploader actions.
-# Consumers: icon_button callers using a semantic icon key.
-# Rationale: Unicode line symbols render consistently without emoji assets.
-_ICON_GLYPHS = {
-    "add": "+",
-    "back": "‹",
-    "check": "✓",
-    "close": "×",
-    "help": "?",
-    "info": "i",
-    "pause": "Ⅱ",
-    "play": "▶",
-    "refresh": "↻",
-    "settings": "⚙",
-    "stop": "■",
-    "upload": "↑",
-}
-
-# Purpose: Prefer the native variable UI face while retaining usable fallbacks.
-# Type: tuple[str, ...]; Units: installed Tk family names; Scope: uploader UI.
-# Consumers: configure_theme font-family selection.
-# Rationale: Use the installed text family instead of a symbol font for UI text.
-_UI_FONT_PREFERENCES = ("Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI")
-
-# Purpose: Keep compact semantic artwork crisp after reduction.
-# Type: int; Units: supersampling factor; Scope: smooth icon generation.
-# Consumers: create_smooth_icon.
-# Rationale: Existing theme artwork uses 3x rendering for clean edges.
-_ICON_SUPERSAMPLE = _ARTWORK_SCALE
-
-# Purpose: Map known UI glyph spellings to deterministic geometric drawings.
-# Type: dict[str, str]; Units: icon key; Scope: common uploader controls.
-# Consumers: SmoothIconButton and icon composition.
-# Rationale: Drawing known shapes avoids font fallback while keeping text intact.
-_ICON_ALIASES = {
-    "+": "add", "−": "remove", "×": "close", "✓": "check",
-    "‹": "back", "›": "next", "▶": "play", "Ⅱ": "pause",
-    "↻": "refresh", "⚙": "settings", "■": "stop", "↑": "upload",
-    "☁": "cloud", "●": "local", "◐": "partial", "◌": "unknown",
-    "⏻": "power", "⋯": "more", "≡": "list", "↗": "external",
-    "⌖": "location", "⛶": "fullscreen", "□": "fit",
-    "♫": "music", "⊕": "zoom_in",
-    "◉": "recording", "◯": "recording", "◍": "recording",
-    "?": "help", "i": "info", "help": "help", "info": "info",
-    "PIN ☁": "cloud", "PIN ●": "local", "PIN ◐": "partial",
-    "PIN ◌": "unknown",
-}
-
 # Purpose: Retain generated Tk images while ttk styles may use them.
 # Type: dict[str, ThemeImage]; Units: retained image objects; Scope: process.
 # Consumers: ttk layouts using generated glossy elements.
 # Rationale: Tk image handles must stay referenced for the widget lifetime.
 _THEME_IMAGES: dict[str, ThemeImage] = {}
-
-# Purpose: Give all boolean controls the same compact sliding-switch shape.
-# Type: tuple[int, int]; Units: pixels; Scope: shared ttk switch artwork.
-# Consumers: _install_switch_elements.
-# Rationale: 38 by 22 px leaves a visible thumb and comfortable label spacing.
-_SWITCH_IMAGE_SIZE = (38, 22)
-
 
 def _select_ui_font_family(root: tk.Misc) -> str:
     """Select the installed UI face and align the native Tk named fonts.
@@ -493,292 +404,12 @@ def create_smooth_icon(
     """
     if Image is None:
         return None
-    dpi_scale = _tk_dpi_scale(master)
-    width, height = size
-    scale = max(1, round(_ICON_SUPERSAMPLE * dpi_scale))
-    canvas = Image.new("RGBA", (width * scale, height * scale), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(canvas)
-    ink = _PALETTE.get(tone, tone if tone.startswith("#") else _PALETTE["ink"])
-    stroke = max(1, scale)
-    cx, cy = width * scale // 2, height * scale // 2
-    radius = max(2 * scale, min(width, height) * scale // 3)
-    key = _ICON_ALIASES.get(icon, icon)
-
-    def line(points: tuple[tuple[int, int], ...], color: str = ink,
-             width_px: int = stroke) -> None:
-        """Draw a rounded polyline in logical final-image coordinates.
-
-        Args:
-            points (tuple[tuple[int, int], ...]): Logical image coordinates.
-            color (str): Palette color used for the stroke.
-            width_px (int): Stroke width in supersampled pixels.
-
-        Returns:
-            None: Artwork is painted into the current supersampled canvas.
-        """
-        draw.line([(x * scale, y * scale) for x, y in points],
-                  fill=color, width=width_px, joint="curve")
-
-    # These simple logical coordinates define icon silhouettes, not sizing limits.
-    if key.startswith("aspect_"):
-        ratios = {
-            "aspect_default": (4, 3), "aspect_16:9": (16, 9),
-            "aspect_21:9": (21, 9), "aspect_4:3": (4, 3),
-            "aspect_1:1": (1, 1), "aspect_4:5": (4, 5),
-            "aspect_9:16": (9, 16),
-        }
-        ratio = ratios.get(key)
-        if ratio is None:
-            return None
-        available_width, available_height = width - 4, height - 4
-        factor = min(available_width / ratio[0], available_height / ratio[1])
-        box_width, box_height = ratio[0] * factor, ratio[1] * factor
-        left = (width - box_width) / 2
-        top = (height - box_height) / 2
-        draw.rectangle(
-            (round(left * scale), round(top * scale),
-             round((left + box_width) * scale),
-             round((top + box_height) * scale)),
-            outline=ink, width=stroke,
-        )
-        if key == "aspect_default":
-            line(((round(left) + 2, round(top) + 2),
-                  (round(left) + 4, round(top) + 2)))
-        if tone == "primary":
-            line(((2, height - 1), (width - 2, height - 1)))
-    elif key == "folder":
-        color = _PALETTE["card_surface_alt"]
-        draw.rounded_rectangle((scale, scale, 42 * scale, 15 * scale),
-                               radius=5 * scale, fill=color)
-        draw.rounded_rectangle((scale, 8 * scale, (width - 2) * scale,
-                                (height - 2) * scale), radius=7 * scale,
-                               fill=color, outline=_PALETTE["line"],
-                               width=stroke)
-        if cover is not None:
-            try:
-                with Image.open(io.BytesIO(cover)) as source:
-                    # The caller sizes the cover first, then adds this frame.
-                    # The selected ratio therefore describes the actual pixels.
-                    left, top, right, bottom = FOLDER_COVER_INSETS
-                    preview = ImageOps.fit(source.convert("RGB"), (
-                        max(1, (width - left - right) * scale),
-                        max(1, (height - top - bottom) * scale),
-                    ))
-                    canvas.paste(preview, (left * scale, top * scale))
-            except (OSError, ValueError):
-                pass
-    elif key in ("cloud", "local", "partial", "unknown"):
-        semantic_color = {
-            "cloud": _PALETTE["muted"], "local": _PALETTE["success"],
-            "partial": _PALETTE["primary"], "unknown": _PALETTE["muted"],
-        }[key]
-        color = semantic_color if tone == "ink" else ink
-        if key == "cloud":
-            draw.ellipse((cx - 7 * scale, cy - 2 * scale,
-                          cx + 5 * scale, cy + 6 * scale), fill=color)
-            draw.ellipse((cx - 3 * scale, cy - 6 * scale,
-                          cx + 5 * scale, cy + 4 * scale), fill=color)
-            draw.rounded_rectangle((cx - 8 * scale, cy, cx + 8 * scale,
-                                    cy + 6 * scale), radius=3 * scale,
-                                   fill=color)
-        elif key == "local":
-            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
-                         fill=color)
-        elif key == "partial":
-            draw.pieslice((cx - radius, cy - radius, cx + radius, cy + radius),
-                          90, 270, fill=color)
-            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
-                         outline=color, width=stroke)
-        else:
-            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
-                         outline=color, width=stroke)
-    elif key == "recording":
-        color = (
-            _PALETTE["recording" if pulse else "recording_dim"]
-            if tone == "ink" else ink
-        )
-        box = (cx - radius, cy - radius, cx + radius, cy + radius)
-        if hollow:
-            draw.ellipse(box, outline=color, width=stroke)
-        else:
-            draw.ellipse(box, fill=color)
-    else:
-        color = ink
-        bounds = (cx - radius, cy - radius, cx + radius, cy + radius)
-        if key in ("add", "zoom_in"):
-            line(((width // 2, height // 2 - 5), (width // 2, height // 2 + 5)))
-            line(((width // 2 - 5, height // 2), (width // 2 + 5, height // 2)))
-        elif key in ("remove", "zoom_out"):
-            line(((width // 2 - 5, height // 2), (width // 2 + 5, height // 2)))
-        elif key == "close":
-            line(((width // 2 - 5, height // 2 - 5),
-                  (width // 2 + 5, height // 2 + 5)))
-            line(((width // 2 + 5, height // 2 - 5),
-                  (width // 2 - 5, height // 2 + 5)))
-        elif key in ("back", "next"):
-            x = width // 2
-            direction = 1 if key == "back" else -1
-            line(((x + 3 * direction, height // 2 - 6),
-                  (x - 3 * direction, height // 2),
-                  (x + 3 * direction, height // 2 + 6)))
-        elif key == "play":
-            draw.polygon(((cx - 4 * scale, cy - 6 * scale),
-                          (cx + 6 * scale, cy),
-                          (cx - 4 * scale, cy + 6 * scale)), fill=color)
-        elif key == "pause":
-            draw.rectangle((cx - 5 * scale, cy - 6 * scale,
-                            cx - scale, cy + 6 * scale), fill=color)
-            draw.rectangle((cx + scale, cy - 6 * scale,
-                            cx + 5 * scale, cy + 6 * scale), fill=color)
-        elif key == "check":
-            line(((width // 2 - 6, height // 2),
-                  (width // 2 - 2, height // 2 + 4),
-                  (width // 2 + 6, height // 2 - 5)), color)
-        elif key in ("help", "info"):
-            draw.ellipse(bounds, outline=color, width=stroke)
-            if key == "info":
-                draw.ellipse((cx - scale, cy - 5 * scale,
-                              cx + scale, cy - 3 * scale), fill=color)
-                draw.line((cx, cy - scale, cx, cy + 5 * scale), fill=color,
-                          width=stroke)
-            else:
-                draw.arc((cx - 3 * scale, cy - 5 * scale,
-                          cx + 4 * scale, cy + 2 * scale), 205, 510,
-                         fill=color, width=stroke)
-                draw.ellipse((cx - scale, cy + 4 * scale,
-                              cx + scale, cy + 6 * scale), fill=color)
-        elif key == "settings":
-            draw.ellipse(bounds, outline=color, width=stroke)
-            draw.ellipse((cx - 2 * scale, cy - 2 * scale,
-                          cx + 2 * scale, cy + 2 * scale), fill=color)
-            for angle in range(0, 360, 45):
-                a = radians(angle)
-                line(((round(width / 2 + 4 * cos(a)),
-                       round(height / 2 + 4 * sin(a))),
-                      (round(width / 2 + 7 * cos(a)),
-                       round(height / 2 + 7 * sin(a)))), color)
-        elif key == "refresh":
-            draw.arc(bounds, 35, 315, fill=color, width=stroke)
-            draw.polygon(((cx + 6 * scale, cy - 6 * scale),
-                          (cx + 7 * scale, cy),
-                          (cx + scale, cy - 2 * scale)), fill=color)
-        elif key == "loading_spinner":
-            draw.ellipse(
-                bounds, outline=_PALETTE["line"], width=stroke,
-            )
-            draw.arc(
-                bounds, angle % 360, angle % 360 + 105,
-                fill=_PALETTE["primary"], width=stroke,
-            )
-        elif key == "queue":
-            draw.rectangle((2 * scale, 2 * scale, 11 * scale, 11 * scale),
-                           outline=color, width=stroke)
-            draw.rectangle((5 * scale, 5 * scale, 14 * scale, 14 * scale),
-                           outline=color, width=stroke)
-        elif key == "clock":
-            draw.ellipse((2 * scale, 2 * scale, 14 * scale, 14 * scale),
-                         outline=color, width=stroke)
-            line(((8, 4), (8, 8), (11, 10)), color)
-        elif key == "stop":
-            draw.rectangle((cx - 4 * scale, cy - 4 * scale,
-                            cx + 4 * scale, cy + 4 * scale), fill=color)
-        elif key == "upload":
-            line(((width // 2, height // 2 + 6), (width // 2, height // 2 - 5)))
-            line(((width // 2 - 4, height // 2 - 1),
-                  (width // 2, height // 2 - 5),
-                  (width // 2 + 4, height // 2 - 1)))
-            line(((width // 2 - 6, height // 2 + 5),
-                  (width // 2 + 6, height // 2 + 5)))
-        elif key == "power":
-            draw.arc(bounds, 35, 325, fill=color, width=stroke)
-            line(((width // 2, height // 2 - 8),
-                  (width // 2, height // 2 + 1)))
-        elif key == "more":
-            for offset in (-5, 0, 5):
-                draw.ellipse((cx + offset * scale - scale,
-                              cy - scale, cx + offset * scale + scale,
-                              cy + scale), fill=color)
-        elif key == "list":
-            for offset in (-5, 0, 5):
-                draw.ellipse((cx - 7 * scale, cy + offset * scale - scale,
-                              cx - 5 * scale, cy + offset * scale + scale),
-                             fill=color)
-                draw.line((cx - 2 * scale, cy + offset * scale,
-                           cx + 7 * scale, cy + offset * scale), fill=color,
-                          width=stroke)
-        elif key == "external":
-            draw.rectangle((cx - 7 * scale, cy - 4 * scale,
-                            cx + 4 * scale, cy + 7 * scale),
-                           outline=color, width=stroke)
-            line(((width // 2 - 1, height // 2 + 3),
-                  (width // 2 + 7, height // 2 - 5),
-                  (width // 2 + 2, height // 2 - 5)))
-        elif key == "location":
-            draw.ellipse((cx - 6 * scale, cy - 7 * scale,
-                          cx + 6 * scale, cy + 5 * scale),
-                         outline=color, width=stroke)
-            draw.ellipse((cx - 2 * scale, cy - 3 * scale,
-                          cx + 2 * scale, cy + scale), fill=color)
-            draw.polygon(((cx - 4 * scale, cy + 2 * scale),
-                          (cx + 4 * scale, cy + 2 * scale),
-                          (cx, cy + 8 * scale)), fill=color)
-        elif key in ("fit", "fullscreen"):
-            line(((width // 2 - 6, height // 2 - 2),
-                  (width // 2 - 6, height // 2 - 6),
-                  (width // 2 - 2, height // 2 - 6)))
-            line(((width // 2 + 2, height // 2 - 6),
-                  (width // 2 + 6, height // 2 - 6),
-                  (width // 2 + 6, height // 2 - 2)))
-            line(((width // 2 - 6, height // 2 + 2),
-                  (width // 2 - 6, height // 2 + 6),
-                  (width // 2 - 2, height // 2 + 6)))
-            line(((width // 2 + 2, height // 2 + 6),
-                  (width // 2 + 6, height // 2 + 6),
-                  (width // 2 + 6, height // 2 + 2)))
-        elif key == "music":
-            draw.ellipse((cx - 7 * scale, cy + 2 * scale,
-                          cx - 2 * scale, cy + 6 * scale), fill=color)
-            line(((width // 2 - 2, height // 2 + 4),
-                  (width // 2 - 2, height // 2 - 6),
-                  (width // 2 + 6, height // 2 - 8),
-                  (width // 2 + 6, height // 2 + 2)))
-            draw.ellipse((cx + scale, cy, cx + 6 * scale, cy + 4 * scale),
-                         fill=color)
-        elif key == "pin" or pinned:
-            draw.ellipse((cx - 4 * scale, cy - 6 * scale,
-                          cx + 4 * scale, cy + 2 * scale), fill=color)
-            line(((width // 2, height // 2), (width // 2 - 3, height - 2)))
-        elif key == "recording" or recording:
-            dot_color = _PALETTE["recording" if pulse else "recording_dim"]
-            dotbox = (width - 9, 1, width - 2, 8)
-            draw.ellipse(tuple(v * scale for v in dotbox),
-                         outline=dot_color if hollow else None,
-                         fill=None if hollow else dot_color,
-                         width=stroke)
-        elif key == "cloud":
-            draw.ellipse(bounds, outline=color, width=stroke)
-        else:
-            # Unknown labels stay textual and are not replaced with fallback art.
-            return None
-    if pinned and key not in ("pin", "folder"):
-        px, py = width - 4, 4
-        pin_color = _PALETTE["primary"]
-        draw.ellipse(((px - 2) * scale, (py - 2) * scale,
-                      (px + 2) * scale, (py + 2) * scale), fill=pin_color)
-    if recording and key != "recording":
-        px, py = width - 4, height - 4
-        rec = _PALETTE["recording" if pulse else "recording_dim"]
-        draw.ellipse(((px - 3) * scale, (py - 3) * scale,
-                      (px + 3) * scale, (py + 3) * scale),
-                     outline=rec if hollow else None,
-                     fill=None if hollow else rec, width=stroke)
-    output_size = (
-        max(1, round(width * dpi_scale)), max(1, round(height * dpi_scale)),
+    image = render_smooth_icon(
+        icon, size, dpi_scale=_tk_dpi_scale(master),
+        pinned=pinned, recording=recording, hollow=hollow, pulse=pulse,
+        angle=angle, cover=cover, tone=tone,
     )
-    canvas = canvas.resize(output_size, Image.Resampling.LANCZOS)
-    if ImageTk is not None:
-        return ImageTk.PhotoImage(canvas, master=master)
-    return None
+    return ImageTk.PhotoImage(image, master=master) if image is not None and ImageTk is not None else None
 
 
 # Purpose: Admit only centrally declared semantic action styles.
@@ -1445,10 +1076,10 @@ def configure_theme(root: tk.Misc) -> None:
                     font=(_ui_font, 20, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
-    style.configure("Brand.TLabel", font=(_ui_font, 18, "bold"),
+    style.configure("Brand.TLabel", font=(_ui_font, UI_BRAND_POINTS, "bold"),
                     background=colors["background"],
                     foreground=colors["ink"])
-    style.configure("Eyebrow.TLabel", font=(_ui_font, 8, "bold"),
+    style.configure("Eyebrow.TLabel", font=(_ui_font, UI_EYEBROW_POINTS, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["muted"])
     style.configure("Status.TLabel", font=(_ui_font, 10, "bold"),
@@ -1460,7 +1091,7 @@ def configure_theme(root: tk.Misc) -> None:
     style.configure("App.Muted.TLabel", background=colors["background"],
                     foreground=colors["muted"])
     style.configure("App.Eyebrow.TLabel",
-                    font=(_ui_font, 8, "bold"),
+                    font=(_ui_font, UI_EYEBROW_POINTS, "bold"),
                     background=colors["background"],
                     foreground=colors["muted"])
     style.configure("Warning.TLabel",
@@ -1561,9 +1192,9 @@ def configure_theme(root: tk.Misc) -> None:
         ]},
     )])
     style.configure("Format.Photos.Icon.TButton", padding=(3, 1),
-                    font=(_ui_font, _PHOTO_FORMAT_LABEL_POINTS), anchor="center")
+                    font=(_ui_font, UI_PHOTO_FORMAT_LABEL_POINTS), anchor="center")
     style.configure("Selected.Format.Photos.Icon.TButton",
-                    padding=(3, 1), font=(_ui_font, _PHOTO_FORMAT_LABEL_POINTS),
+                    padding=(3, 1), font=(_ui_font, UI_PHOTO_FORMAT_LABEL_POINTS),
                     foreground=colors["primary"], anchor="center",
                     background=colors["surface_alt"])
     for format_style in ("Format.Photos.Icon.TButton",
@@ -1934,6 +1565,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
     inset_bottom = _blend_rgb(
         _hex_rgb("#293B4A"), _hex_rgb("#2A4050"), _FROST_TINT_BLEND
     )
+    inactive_primary = _PALETTE["primary_inactive_top"], _PALETTE["primary_inactive_bottom"]
     asset_specs = {
         "button": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                    _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
@@ -1972,7 +1604,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         "primary_focus": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                           _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                           _BUTTON_IMAGE_SIZE),
-        "primary_disabled": (("#446C79", "#345764"), _PALETTE["card_surface"],
+        "primary_disabled": (inactive_primary, _PALETTE["card_surface"],
                              _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                              _BUTTON_IMAGE_SIZE),
         "icon": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
@@ -1996,7 +1628,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         "icon_primary_focus": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                                _ICON_BORDER, _ICON_CORNER_RADIUS,
                                _ICON_IMAGE_SIZE),
-        "icon_primary_disabled": (("#446C79", "#345764"), _PALETTE["card_surface"],
+        "icon_primary_disabled": (inactive_primary, _PALETTE["card_surface"],
                                   _ICON_BORDER, _ICON_CORNER_RADIUS,
                                   _ICON_IMAGE_SIZE),
         "tab": (("#243745", "#213241"), _PALETTE["background"],
@@ -2217,42 +1849,14 @@ def _install_switch_elements(root: tk.Tk, style: ttk.Style) -> None:
         # Presentation owner: source-mode dependency repair must stay usable
         # without Pillow. Retire only if Pillow becomes mandatory at launch.
         return
-    width, height = _SWITCH_IMAGE_SIZE
-    scale = _ARTWORK_SCALE
     for selected in (False, True):
         for state in ("normal", "focus", "disabled"):
             name = f"switch_{selected}_{state}"
-            artwork = Image.new(
-                "RGB", (width * scale, height * scale),
-                _PALETTE["card_surface"],
-            )
-            draw = ImageDraw.Draw(artwork)
-            track = _PALETTE["success"] if selected else "#607182"
-            if state == "disabled":
-                track = "#40525F"
-            # Two-pixel inset leaves room for the keyboard-focus outline.
-            draw.rounded_rectangle(
-                (2 * scale, 2 * scale,
-                 (width - 2) * scale, (height - 2) * scale),
-                radius=(height // 2) * scale, fill=track,
-            )
-            thumb = height - 8
-            left = width - thumb - 4 if selected else 4
-            draw.ellipse(
-                (left * scale, 4 * scale,
-                 (left + thumb) * scale, (height - 4) * scale),
-                fill="#F1F6FA" if state != "disabled" else "#8B9AA6",
-            )
-            if state == "focus":
-                draw.rounded_rectangle(
-                    (0, 0, width * scale - 1, height * scale - 1),
-                    radius=(height // 2) * scale,
-                    outline=_PALETTE["focus"], width=scale,
-                )
-            _THEME_IMAGES[name] = ImageTk.PhotoImage(
-                artwork.resize((width, height), Image.Resampling.LANCZOS),
-                master=root,
-            )
+            artwork = render_toggle_switch(selected, state)
+            if artwork is None:
+                return
+            with artwork:
+                _THEME_IMAGES[name] = ImageTk.PhotoImage(artwork, master=root)
     style.element_create(
         "Switch.indicator", "image", _THEME_IMAGES["switch_False_normal"],
         ("disabled", "selected", _THEME_IMAGES["switch_True_disabled"]),
@@ -2260,7 +1864,7 @@ def _install_switch_elements(root: tk.Tk, style: ttk.Style) -> None:
         ("focus", "selected", _THEME_IMAGES["switch_True_focus"]),
         ("focus", _THEME_IMAGES["switch_False_focus"]),
         ("selected", _THEME_IMAGES["switch_True_normal"]),
-        width=width + 6, sticky="w",
+        width=UI_SWITCH_SIZE[0] + UI_SWITCH_LABEL_GAP, sticky="w",
     )
     for name in ("TCheckbutton", "App.TCheckbutton", "Card.TCheckbutton"):
         style.layout(name, [("Checkbutton.padding", {

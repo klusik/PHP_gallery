@@ -961,6 +961,145 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
         self.assertEqual(1, progress.skipped)
         session.media_photo.assert_not_called()
 
+    def test_denied_public_rows_report_bounded_terminal_admission_counts(self) -> None:
+        """Summarize rejected public cache admissions without photo identity.
+
+        Returns:
+            None: The terminal worker summary reports only the fixed denial
+                reason and count, while denied rows cause no media or write work.
+        """
+        session = self._session()
+        photos = tuple(
+            linking.LinkedPhoto(
+                image_id, 'Private title ' + str(image_id),
+                cache_eligible=False,
+            )
+            for image_id in (101, 102)
+        )
+        session.media_page.return_value = linking.LinkedMediaPage(
+            TEST_PRELOAD_GALLERY_ID, None, photos, None,
+        )
+        observed: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=observed.append,
+        )
+
+        with self.assertLogs(
+            'uploader.gallery_preload', level='INFO',
+        ) as captured:
+            worker.run()
+
+        terminal = next(
+            line for line in captured.output
+            if 'preload_phase=error' in line
+        )
+        self.assertIn(
+            'cache_admission=public_cache_disallowed:2', terminal,
+        )
+        self.assertTrue(any(
+            'cache_admission=public_cache_disallowed:2' in line
+            for line in observed
+        ))
+        self.assertNotIn('Private title', terminal)
+        self.assertNotIn('101', terminal)
+        self.assertNotIn('102', terminal)
+        session.media_photo.assert_not_called()
+        session.prepare_cached_photo.assert_not_called()
+        self.assertEqual(0, worker.snapshot().cached)
+        self.assertEqual(2, worker.snapshot().skipped)
+
+    def test_denied_admin_rows_report_sorted_admission_counts(self) -> None:
+        """Summarize private preload denials without starting media work.
+
+        Returns:
+            None: Missing metadata, explicit disallowance, NSFW intent refusal
+                and unsupported capability remain distinct bounded reasons.
+        """
+        cases = (
+            (
+                'metadata-and-nsfw',
+                (
+                    linking.LinkedPhoto(
+                        6101, 'Synthetic private name 6101',
+                        cache_eligible=False, preload_eligible=None,
+                    ),
+                    linking.LinkedPhoto(
+                        6102, 'Synthetic private name 6102',
+                        cache_eligible=False, preload_eligible=True,
+                        nsfw=True,
+                    ),
+                    linking.LinkedPhoto(
+                        6103, 'Synthetic private name 6103',
+                        cache_eligible=False, preload_eligible=False,
+                        nsfw=True,
+                    ),
+                    linking.LinkedPhoto(
+                        6104, 'Synthetic private name 6104',
+                        cache_eligible=False, preload_eligible=False,
+                    ),
+                    linking.LinkedPhoto(
+                        6105, 'Synthetic private name 6105',
+                        cache_eligible=False, preload_eligible=True,
+                        nsfw=None,
+                    ),
+                ),
+                True,
+                (
+                    'admin_preload_disallowed:1',
+                    'admin_preload_disallowed_nsfw_photo:1',
+                    'admin_preload_metadata_missing:1',
+                    'nsfw_preload_intent_required:1',
+                    'unverified_nsfw_preload_intent_required:1',
+                ),
+            ),
+            (
+                'unsupported-capability',
+                (
+                    linking.LinkedPhoto(
+                        6201, 'Synthetic unsupported name 6201',
+                        cache_eligible=False, preload_eligible=True,
+                    ),
+                ),
+                False,
+                ('admin_preload_unsupported:1',),
+            ),
+        )
+        for label, photos, supported, reasons in cases:
+            with self.subTest(case=label):
+                session = self._session()
+                session.can_read_admin_media.return_value = True
+                session.supports_admin_preload.return_value = supported
+                session.set_gallery_preload_intent.return_value = True
+                session.gallery_preload_intent.return_value = False
+                session.media_page.return_value = linking.LinkedMediaPage(
+                    TEST_PRELOAD_GALLERY_ID, None, photos, None,
+                )
+                observed: list[str] = []
+                worker = GalleryPreloadWorker(
+                    session, TEST_PRELOAD_GALLERY_ID, thumbnails_only=True,
+                    diagnostic_callback=observed.append,
+                )
+
+                with self.assertLogs(
+                    'uploader.gallery_preload', level='INFO',
+                ) as captured:
+                    worker.run()
+
+                terminal = next(
+                    line for line in captured.output
+                    if 'preload_phase=error' in line
+                )
+                self.assertIn('scope=thumbnails', terminal)
+                expected = 'cache_admission=' + ','.join(reasons)
+                self.assertIn(expected, terminal)
+                self.assertTrue(any(expected in line for line in observed))
+                for photo in photos:
+                    self.assertNotIn(photo.title, terminal)
+                    self.assertNotIn(str(photo.image_id), terminal)
+                session.media_photo.assert_not_called()
+                session.prepare_cached_photo.assert_not_called()
+
     def test_empty_gallery_finishes_without_inventing_local_files(self) -> None:
         """Finish an empty catalogue while keeping its zero-file coverage clear.
 

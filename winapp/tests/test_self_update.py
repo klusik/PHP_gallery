@@ -132,6 +132,36 @@ class SelfUpdateTests(unittest.TestCase):
         """Check no installer is not cms update."""
         self.assertIsNone(find_update("0.2.0", opener=Opener([[release(), release("0.2.0")]])))
 
+    def test_installer_variants_select_only_the_requested_release_asset(self) -> None:
+        """Select one standard setup and refuse the retired Qt flavor name.
+
+        Returns:
+            None: Every backend discovers the same canonical public artifact.
+        """
+        stable = release('0.3.0')
+        qt = release('0.4.0', identifier=2)
+        item = qt['assets'][0]
+        item['name'] = item['name'].replace('-Setup.exe', '-Qt-Setup.exe')
+        item['browser_download_url'] = item['browser_download_url'].replace('-Setup.exe', '-Qt-Setup.exe')
+        selected = find_update('0.2.0', opener=Opener([[stable, qt]]))
+        self.assertIsNotNone(selected)
+        self.assertEqual('PHPGalleryUploader-0.3.0-Setup.exe', selected.name)
+        self.assertIsNone(find_update('0.2.0', opener=Opener([[qt]])))
+
+    def test_duplicate_unified_versions_refused_even_with_legacy_flavor_asset(self) -> None:
+        """Keep a retired flavor asset out of the canonical version identity.
+
+        Returns:
+            None: Canonical conflicting bytes remain a refusal despite legacy rows.
+        """
+        canonical = release('0.3.0')
+        conflicting = release('0.3.0', identifier=2)
+        conflicting['assets'][0]['digest'] = 'sha256:' + '1' * 64
+        legacy = release('0.4.0', identifier=3)
+        legacy['assets'][0]['name'] = legacy['assets'][0]['name'].replace('-Setup.exe', '-Qt-Setup.exe')
+        with self.assertRaises(UpdateError):
+            find_update('0.2.0', opener=Opener([[canonical, conflicting, legacy]]))
+
     def test_duplicate_versions_refused(self) -> None:
         """Check duplicate versions refused."""
         conflicting = release("0.3.0", 2)

@@ -6,8 +6,9 @@ duplicate decisions, storage, image records, thumbnail acceptance, metadata, and
 AI job ownership.
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher,
-`run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs
-only Python plus the lightweight dependencies in `requirements.txt`.
+`run_gallery_watcher.bat`, and `--once` compatibility. The Windows setup includes
+the application runtime. Source launches use Python and the
+[corresponding requirements](#dependency-installation).
 
 ## Durable capture and FIFO uploads
 
@@ -142,6 +143,80 @@ live Watcher status. It is available during capture and Finish; it does not
 refresh or reconcile the queue.
 
 ## Interface and local feature settings
+
+**Settings > Interface > GUI backend** selects the desktop frontend for the
+next launch. Tkinter / ttk is the factory default. The standard Windows setup
+and complete source environment also provide **PySide6 / Qt 6 (highly experimental)**.
+The setting is independent of the
+upload configuration and the Tk Canvas choice. Both frontends show the active
+backend, offer restart or a later retry, and can cancel a pending selection.
+The icon rail, compact connection header and latest Activity strip use the
+same shell structure in both frontends. Flight is part of Watcher in both.
+
+The current Qt source checkpoint supports viewing local and linked Photos,
+including the saved gallery tree and selection, Lightbox with manual fullscreen
+slideshow and the approved gallery's interval, gallery music on Windows
+and macOS,
+recent Activity, Import history and local PDF
+creation for saved flights. On Windows and macOS, with a verified profile and
+a verified API-key or linked connection,
+it can preflight files, folders and ZIPs, run manual imports with live progress,
+and pause, resume, cancel or retry an import through the shared worker. Startup
+can open a verified unfinished Import for review. A matching uncertain
+dispatch remains held for operator reconciliation through the shared worker.
+The same connection can start Watcher. A saved API key can also run the
+configured AI worker. Link for uploads and select a gallery explicitly in
+Photos before using delegated upload access. **Reconnect saved link** uses
+the existing Windows Credential Manager or macOS Keychain and verifies the
+same installation, account, upload scope and gallery. **Reapprove saved link**
+opens browser consent for that exact saved scope. **Forget saved link** removes
+the matching local credential. The Photos gallery action can start Watcher with
+temporary authority for that exact gallery. Photos provides authorized photo
+and gallery details, cache preload and retention. With Admin permission, it
+can create and edit galleries, change photo visibility, and confirm deletion
+of one photo or a selected batch. Settings
+edits the shared Watcher, connection, Import and AI fields and can read or
+change the common thumbnail cache limit. Watcher
+uses the saved screenshot settings, plus SimConnect recording and UTC sync
+where the Windows simulator transport is available,
+shared Finish and report delivery, and explicit review of a matching retained
+FIFO. The operator can close a retained capture locally while keeping source
+files and history. Restart WinApp checkpoints eligible active captures and
+resumes the original queue and recorder after revalidating the connection.
+The Qt Watcher progress card has a distinct border and shadow. Its available
+actions stay grouped in the footer as the operation advances.
+A Photos-started capture confirms closure of its original temporary access
+before a restart or installer handoff and receives fresh scoped access on resume.
+The Watcher factory reset restores its separate preferences and discards its
+owned queue journals while keeping screenshots, reports and other settings.
+Flight lets the operator change recording and report
+languages, load SimBrief, attach an archived OFP to a saved flight and upload
+selected saved PDFs through the active Watcher's confirmed destination.
+The same destination can receive a newly created PDF revision in one action.
+On macOS, Lightbox can render supported HDR sources through Core Image and
+the native EDR layer. It keeps a bounded Qt SDR rendition available if the
+source, OS or current display cannot present HDR.
+The launcher opens Tkinter for incompatible work or older update continuations.
+Flights explicitly closed by older versions remain available as local history.
+The selected backend opens with the verified archived queues and their original
+photographs still available in the saved flights.
+If Qt fails before a first scene frame, the same WinApp executable
+reopens with Tkinter and shows the startup outcome. Launch with
+`--gui-backend tkinter` for a one-time stable override. The standard
+`PHPGalleryUploader-<version>-Setup.exe` installs one executable and the
+app-local Python, Tcl/Tk, Qt and SimConnect runtime. Choose the backend
+in Settings and restart. Qt notices are under `licenses` and its libraries
+can be replaced with ABI-compatible versions under `_internal`.
+
+Both backends use the same update asset, descriptor and profile. The
+standard update installs the common runtime into the registered 1.7.1
+location and keeps the profile and shortcuts. Onedir updates stage an
+isolated copy of the existing application and its runtime in the user's
+update session. The helper starts setup only after the installed process
+exits and passes the same checkpoint ticket through the normal Watcher
+continuation. To repair a damaged Qt runtime, open Tkinter and run the
+same standard update or Setup after the application has closed.
+See [GUI backend ownership and qualification](../docs/WINAPP_GUI_BACKENDS.md).
 
 Choose **Settings → Language** to set WinApp to English, Czech, German or
 Swedish. WinApp saves the choice immediately and offers to restart. Select
@@ -941,7 +1016,11 @@ The background preload worker uses the same safe diagnostic formatter for
 listing, cache checks, transfers and final verification. Its first and later
 distinct failures appear immediately in the ordinary log, the visible Log and
 copied diagnostics. Every terminal outcome records processed, stored and
-skipped counts. An album change keeps a running preload's diagnostics within
+skipped counts. `cache_admission` gives the number of photos rejected by each
+first failed rule in the final check. It distinguishes explicit cache flags,
+missing preload metadata, unavailable Admin capability, and missing intent
+for NSFW or unverified photos. A server denial records the result the server
+supplied. An album change keeps a running preload's diagnostics within
 the same approved session; another session cannot receive them.
 Rejected native-media responses include bounded cache-policy facts: which
 cache marker and cache-control contract matched, the parsed age and required
@@ -1001,6 +1080,12 @@ credentials, import checkpoints and flight artifacts remain in the original
 profile. Only after the checkpoint and helper readiness does the existing
 close owner terminate child processes and exit the uploader.
 
+If Windows definitively refuses to start setup, the helper restarts the
+existing installation only after confirming that the complete runtime
+fingerprint is unchanged. UAC cancellation follows the same guarded path. A
+setup process that started but cannot be observed remains fenced until its
+outcome can be verified.
+
 For the installed standalone EXE, a copied external helper acknowledges
 readiness
 before the application completely exits. The helper
@@ -1054,25 +1139,21 @@ After publication advances main, the next runtime change needs another bump.
 This admission runs before FULL and is rechecked before protected publication;
 release itself keeps trusting qualified develop.
 
-The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
-the bundled DejaVu font and its license, the tray icons, and an embedded
-`SimConnect.dll` inside one application EXE.
-There is no separate DLL to install or distribute. End users do not
-need Python. Installation requests administrator rights and defaults to
+Setup installs one `PHPGalleryUploader.exe` with the shared Python runtime,
+Tcl/Tk, Qt libraries and plugins, SimConnect, and other dependencies under
+`_internal`. The `licenses` directory holds redistribution notices and texts.
+Setup provides the runtime and both GUI backends. Installation requests
+administrator rights and defaults to
 `Program Files\PHP Gallery Uploader`, with a Start Menu shortcut, an optional
 desktop shortcut for all users, and a normal Windows uninstaller. Existing
 settings and jobs
 in `%APPDATA%\PHPGalleryUploader` survive upgrades and uninstalling.
 
-Directly launched Setup closes uploader processes whose executable path matches
-its selected installation directory, including the tray app and PyInstaller's
-onefile parent/child processes. Self-update exits its own process and terminates
-its multiprocessing children after helper readiness. The helper refuses
-replacement while an exact-path
-process remains. Setup checks the fresh process list for up to three seconds
-and refuses installation if shutdown cannot be verified. Copies running from
-another directory are untouched. These checks also apply to silent installation.
-File locks remain a secondary safeguard; the final launch checkbox controls
+Close WinApp, including the tray icon, before running Setup directly.
+Self-update coordinates application and worker shutdown after the helper
+signals readiness. Setup observes the exact installed executable and requires
+it to release its runtime before replacing files. The process check applies
+to interactive and silent installs. The final launch checkbox controls
 relaunch for a directly launched installer.
 
 To build on Windows, install x64 CPython 3.14.x with Tkinter and Inno Setup 6.3+
@@ -1082,17 +1163,21 @@ To build on Windows, install x64 CPython 3.14.x with Tkinter and Inno Setup 6.3+
 winapp\build.bat
 ```
 
-The script downloads the build dependencies into a temporary virtual
-environment,
-validates the x64 SimConnect DLL and required exports, uses PyInstaller
-`--onefile --windowed`, verifies the embedded DLL against the source SHA256,
-checks the EXE startup with `--help`
-using a disposable app-data directory, then calls the installed `ISCC.exe`.
+The script installs `requirements-build.txt` into a temporary virtual
+environment in one pip operation, checks the environment,
+validates the x64 SimConnect DLL and required exports, and runs the tracked
+PyInstaller `uploader.spec` once. The builder validates the app-local DLL
+against the source SHA-256 and checks the installed-runtime inventory and
+isolated helper startup before invoking `ISCC.exe`. Imported VC14x
+redistributable DLLs are collected app-local from the licensed Visual Studio
+redist directory on the build host. The build retains their provenance with
+the Qt notices.
 Internet access to the configured Python package index is needed for each build.
-Both hosted installer workflows select the latest available 3.14 patch for x64.
+Hosted installer workflows select x64 CPython 3.14. The issue #445 source,
+package and benchmark jobs use the same exact Python patch.
 The builder prints and validates its interpreter, then runs the frozen EXE's
 early `--runtime-info` diagnostic before packaging. Its fresh staging report
-identifies the actual embedded patch version, implementation and pointer width,
+identifies the bundled Python patch version, implementation and pointer width,
 before configuration/logging/GUI initialization. Missing or non-3.14/x64 CPython
 reports fail the build; the runner version alone is insufficient. This does not
 change the independent WinApp version.
@@ -1143,7 +1228,7 @@ and its metadata. Older version folders and historical files directly under
 `winapp/dist/` are left untouched; new builds publish only to their version
 folder.
 Its unique `winapp/.build-*` staging directory (virtual environment, downloads,
-caches, spec file, work files, intermediate application EXE and partial
+caches, work files, intermediate application bundle and partial
 installer)
 is removed on success, errors and normal Ctrl+C cancellation. Forced process
 termination or power loss can leave a staging directory; remove that `.build-*`
@@ -1299,7 +1384,8 @@ without defining another skin. Capture progress retains its nonmodal
 **Support diagnostics…** opens a local report preview with **Refresh**,
 **Copy**, and **Save** actions. The report includes allowlisted settings and
 runtime facts, the current diagnostic snapshot, and up to the last 64 KiB of
-the existing application log. Missing or unreadable log sections are labeled;
+the existing application log. Qt runtime messages go to that same rotating
+log with their category and severity. Missing or unreadable log sections are labeled;
 a truncated tail and any dropped partial first line are marked. The report
 builder performs no network access
 and filters credential-like values, URL query/fragment data, local paths,
@@ -1397,6 +1483,7 @@ authoritative and are not hidden by route fallback.
 Click **Connect website** in the main window. Confirm the website address
 suggested from the saved API endpoint, choose a recent address, or enter
 the PHP Gallery website address including its installation folder if present.
+For a site with a live connection, choose **Switch to website**.
 You choose an upload gallery after connecting. While approval is pending or
 if it fails, choose **Connect again** to start a new request. Approve the
 newest browser page. Any running upload keeps its original connection.
@@ -1443,13 +1530,20 @@ minutes through the existing inventory API. Other idle live links use identity.
 An expired access token can still renew with the approved credential in
 macOS Keychain or Windows Credential Manager. This works over verified HTTPS
 or direct `http://localhost`. Older servers use a temporary link lasting up
-to 15 minutes. Expiry or revocation requires new browser approval. Browser
+to 15 minutes. On macOS, WinApp uses Keychain without opening a password prompt.
+If the saved credential cannot be read before renewal, **Connect website**
+offers temporary access through browser approval and keeps the saved link.
+The Photos dialog reports whether approval, identity verification, loading
+the gallery list or saving the link failed. The support report records the
+failed step and safe response fields.
+Expiry or revocation requires new browser approval. Browser
 linking creates no gallery API keys. Open **Settings** → **Manage link…** for
 separate permissions and saved-link controls.
 
 Open the list icon labeled **Choose gallery…** beside the linked address
-and type in **Search galleries**. Suggestions favor names, then descriptions,
-then gallery tags.
+and type in **Search galleries**. In Tkinter, the picker and **Manage link…**
+both open inside the main application window. Suggestions favor names, then
+descriptions, then gallery tags.
 Names also match a nearby spelling, for example `cyberpnuk` or `cyberpuk`
 for `Cyberpunk`. Use quoted phrases, uppercase `AND` or `OR` as on the
 website. Indented rows show nesting and the selected row shows its parent
@@ -1625,7 +1719,9 @@ eligible image is available, the card shows a neutral folder. Photos keeps
 listings in memory and uses the current link grant. If the smallest thumbnail
 is missing, the server can use another existing rendition or the existing
 public display file within the same byte limit. Click a thumbnail to select it
-and show its information in an adjustable right-hand pane. Its top-right Close
+and show its information in an adjustable right-hand pane. In Qt, the pane
+stays beside the gallery grid. A long title may be shortened in the heading.
+Hover over it or read the metadata for the complete title. Its top-right Close
 control hides the pane and returns the width to the gallery without changing
 the selected photo or reloading the album. Click the same photo again to reopen
 its information. A pending metadata reply cannot reopen a dismissed pane.
@@ -1728,6 +1824,10 @@ upload configuration. There is no Save step. A small **!** reports a local
 save failure; the chosen view remains applied and its tooltip explains retry.
 Changing the format reuses retained previews without requesting their media
 again. The default preserves the existing natural-preview grid.
+In Qt, a rotating refresh arrow marks each visible thumbnail being read or
+decoded. Cards awaiting a request show the static placeholder. The visible
+rows determine the work window at the current aspect ratio, including when
+dragging the scrollbar on a wide display.
 The compact arrow immediately before the aspect-ratio controls switches
 between oldest and newest upload records first. This is a persistent local
 rule for each verified site/account/gallery, independent of its card format.
@@ -1809,7 +1909,11 @@ shows the limit and pauses speculative requests until **Retry**.
 detected black bands in windowed and fullscreen views. **Show original frame**
 brings the bands back. Both modes fit the whole resulting frame within the
 available area at its original aspect ratio. The grid reflows when the number
-of columns changes. The lightbox updates a preview during a window resize and
+of columns changes. Escape dismisses the open location panel or image menu
+first, then exits fullscreen while keeping the photo open. In the regular
+Lightbox, Escape returns to the grid. In Qt, the image context menu also offers
+photo information for an authorized linked image and the slideshow command.
+The lightbox updates a preview during a window resize and
 refines it after the resize settles. On macOS 15 or later, WinApp can display
 HDR detail and fullscreen photos when the selected image retains HDR data,
 the display supports extended dynamic range, and the Python environment has
@@ -1965,6 +2069,8 @@ Both compositions are covered by corner pixels in the native component catalog.
 **Preload gallery** reads the selected gallery's direct photos in the
 background, including thumbnails and lightbox renditions. Subgalleries are
 separate targets. Progress reports photo counts and supports cancellation.
+In Qt, hover over a gallery-tree status icon to see its cache state and any
+pin or Watcher marker, including a target in a collapsed branch.
 Existing verified local bodies are reused. A bounded server `Retry-After`
 pauses the job with a cancelable countdown; exhausted retries leave an explicit
 retry-later message. Retry continues from available cached bytes.
@@ -2215,9 +2321,10 @@ A cross-process lock and pending marker protect rotation. If the same verified
 server explicitly rejects an expired or revoked rolling credential, WinApp
 discards that saved credential. Choose **Connect website** to approve a new link
 in the browser. Startup leaves browser approval to you. An uncertain response
-or storage failure blocks reuse of the old credential.
-Click **Connect** to remove the unusable local credential and continue with
-fresh browser approval. Startup never opens approval automatically.
+or storage failure after renewal starts blocks reuse of the old credential.
+Use the saved-link recovery controls or request fresh consent for the exact
+binding. If native storage is inaccessible before renewal starts, **Connect
+website** can use a temporary browser approval while keeping the saved link.
 **Unlink** also works when the live session has expired. Local cleanup does not
 wait for remote revocation; the old server grant can be reviewed separately
 in **Manage gallery links**. Pending originals and destination history remain. Forgetting removes the local binding and credential only; it
@@ -2665,18 +2772,16 @@ DLL lookup order:
 
 1. valid optional Settings override;
 2. `SIMCONNECT_DLL` environment override;
-3. embedded `runtime/simconnect/SimConnect.dll` in PyInstaller's extraction
-   root;
+3. `runtime/simconnect/SimConnect.dll` under PyInstaller's runtime root,
+   `_internal` in the current installation;
 4. source-tree/legacy local DLL locations (including an adjacent EXE DLL if
    present), then common SDK locations.
 
 Normal installed use requires no SDK, manual DLL copying, simulator selection or
-SimConnect configuration. The installer and embedded fallback use the same
-unmodified
-x64 `winapp/SimConnect.dll`; no second generation-specific runtime is
-introduced.
+SimConnect configuration. The bundled x64 DLL is an unchanged copy of
+`winapp/SimConnect.dll` for both supported simulator generations.
 Build checks reject missing/wrong-architecture DLLs, missing required exports or
-an embedded payload whose SHA256 differs from that source DLL. This Microsoft
+a bundled payload whose SHA256 differs from that source DLL. This Microsoft
 native binary is copied unchanged from `SimConnect SDK/lib/SimConnect.dll` in
 the official
 [MSFS 2024 SDK Core 1.7.3 archive](https://sdk.flightsimulator.com/msfs2024/files/installers/1.7.3/MSFS2024_SDK_Core_Installer_1.7.3.zip).
@@ -2822,17 +2927,37 @@ different installed app or virtual environment does not supply its dependencies.
 Missing ReportLab blocks only new PDF rendering. Missing pypdf does not hide
 retained PDFs: page count is shown as unknown until that component is restored.
 
-`install.bat` installs `requirements.txt` into the Python runtime used by the
-Windows shortcut. Current normal dependencies are Pillow, pystray, ReportLab and
-pypdf. Portable
-CI installs the three image/PDF requirements; installer preflight requires
-pypdf 6 or newer and the frozen application includes its ordinary import.
+`install.bat` prepares both backends in the source interpreter and verifies the
+Tk and Qt components. From the repository root, choose the manifest for a
+CPython 3.14 environment with Tkinter installed:
 
-Manual install:
-
-```bat
-python -m pip install --user -r requirements.txt
+```bash
+# Complete source environment
+python -m pip install -r winapp/requirements.txt
+# Tk-only or headless environment
+python -m pip install -r winapp/requirements-core.txt
+# Windows builder environment
+python -m pip install -r winapp/requirements-build.txt
 ```
+
+Select either backend directly from source:
+
+```bash
+python winapp/gallery_watch_upload.pyw --gui-backend tkinter
+python winapp/gallery_watch_upload.pyw --gui-backend pyside6
+```
+
+The core manifest includes Pillow, pystray, ReportLab, pypdf, polib and the
+macOS PyObjC bindings where needed. The standard manifest includes the Qt
+Essentials and Shiboken6 wheels. `constraints.txt` selects qualified versions
+for shared packages. PyInstaller and the Qt pair keep their exact pins in the
+manifests that require them. `requirements-benchmark.txt` adds the process
+sampler only to measurement jobs. Constraints specify versions without
+locking wheel hashes or all platform combinations.
+
+Source repair applies the core or full requirements for the saved backend to
+the active interpreter. The frozen EXE uses its bundled runtime for either
+backend and gets repaired by the standard setup.
 
 If Pillow is unavailable:
 
@@ -2840,8 +2965,8 @@ If Pillow is unavailable:
 - manual imports still work with server-created thumbnails;
 - local preview/thumbnail capability is reported accurately.
 
-The macOS source build runs in its normal Tk window. The Windows tray uses
-pystray when available.
+The macOS source build defaults to Tk. The Windows tray uses pystray when
+available.
 
 ## UI rendering
 

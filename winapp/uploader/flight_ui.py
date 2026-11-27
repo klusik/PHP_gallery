@@ -26,6 +26,7 @@ from tkinter import ttk
 from uploader import ui_file_picker as filedialog
 from uploader.ui_shell import EmbeddedWindow, active_panel, messagebox
 from uploader.diagnostics import format_watch_recovery_diagnostic
+from uploader.capture_session import prepare_capture_recording
 
 from uploader.flight_jobs import (
     REPORT_LANGUAGES,
@@ -49,7 +50,7 @@ from uploader.flight_recorder import FlightRecorder
 from uploader.game_presence import GamePresence
 from uploader.flight_report_translations import tr
 from uploader.localization import DEFAULT_LANGUAGE, current_language, gettext
-from uploader.flight_workflow import FinalizationWorker, WatchedReportTarget
+from uploader.flight_workflow import FinalizationWorker, WatchedReportTarget, create_local_report_worker
 from uploader.models import ImportJob, JsonValue
 from uploader.mode_coordinator import GuiModeOwner, ModeConfigPort
 from uploader.state_store import JobStateStore
@@ -1694,18 +1695,15 @@ class FlightUI:
                 parent=self.dialog_owner(),
             )
             return
-        languages = REPORT_LANGUAGES
         try:
-            plan = replace(SessionPlan.load(row.directory), languages=languages)
+            plan = SessionPlan.load(row.directory)
             self.attach_loaded_dispatch(row.directory)
             # Photo Finish is durable intent, not a five-minute retry budget.
             # Its worker can remain in rate-limit/offline wait while local
             # capture reconciliation continues under the original cutoff.
             self._progress_generation += 1
-            self.operation = FinalizationWorker(
-                [plan], "", "", lambda _cancel, _deadline: None,
-                lambda: None, False, local_reports=True,
-                watched_target=target,
+            self.operation = create_local_report_worker(
+                plan, watched_target=target,
                 emit=lambda level, message: self.host.events.put((level, message)),
             )
             self.operation.flight_generation = self._progress_generation
@@ -2663,29 +2661,16 @@ class FlightUI:
             target.issuer + " #" + str(target.gallery_id)
             if target is not None else self.normalize(self.host.config.gallery_url)
         )
-        self.recorder = FlightRecorder(
-            self.directory, gallery_identity,
-            self.host.config.simconnect_dll_path,
+        self.recorder, self.plan = prepare_capture_recording(
+            self.directory, self.preferences,
+            target_binding if target_binding is not None else self.binding(),
+            gallery_identity, self.host.config.simconnect_dll_path,
             lambda level, message: self.host.events.put((level, message)),
+            dispatch=self.dispatch, photos_only=photos_only, factory=FlightRecorder,
         )
-        if not self.preferences.recording:
-            self.recorder.pause()
-        directory = self.recorder.directory
-        directory.mkdir(parents=True, exist_ok=True)
-        if self.dispatch is not None:
-            self.dispatch.save(directory)
+        directory = self.plan.directory
         self.active_dispatch = self.dispatch
         self.active_dispatch_directory = directory
-        self.plan = SessionPlan(
-            directory=directory,
-            binding=target_binding if target_binding is not None else self.binding(),
-            languages=self.preferences.languages,
-            reports_enabled=(
-                not photos_only and self.preferences.reports and self.preferences.recording
-            ),
-            local_only=False,
-        )
-        self.plan.save()
         self._recovery_state = None
         # A new capture fences delayed recovery even for the same gallery.
         self._progress_generation += 1
@@ -3696,7 +3681,12 @@ class FlightUI:
         now = time.monotonic()
         if self._autoclose_deadline is None:
             self._autoclose_deadline = now + SUCCESS_AUTOCLOSE_SECONDS
-        remaining = max(0, ceil(self._autoclose_deadline - now))
+        # A rounded monotonic deadline can appear fractionally beyond the
+        # full interval. Keep the displayed countdown within that interval.
+        remaining = min(
+            SUCCESS_AUTOCLOSE_SECONDS,
+            max(0, ceil(self._autoclose_deadline - now)),
+        )
         if remaining == 0:
             self.keep_progress_open()
             dialog.withdraw()
@@ -4225,8 +4215,9 @@ class FlightUI:
                     executable = Path(sys.executable)
                     if executable.name.lower() == "pythonw.exe":
                         executable = executable.with_name("python.exe")
-                    requirements = Path(__file__).resolve().parents[1] / "requirements.txt"
-                    detail += f'\n"{executable}" -m pip install --user -r "{requirements}"'
+                    requirements = Path(__file__).resolve().parents[1] / "requirements-core.txt"
+                    user_install = " --user" if sys.prefix == sys.base_prefix else ""
+                    detail += f'\n"{executable}" -m pip install{user_install} -r "{requirements}"'
             detail += f"  ({progress.done}/{progress.total})"
             if progress.bytes_total:
                 detail += f"  {progress.bytes_done}/{progress.bytes_total} B"

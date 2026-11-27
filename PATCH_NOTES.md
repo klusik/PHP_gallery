@@ -1,5 +1,44 @@
 # Patch notes
 
+## Version 1.8.0
+
+Candidate notes for the independent WinApp 1.8.0 installer. The optional
+Qt interface carries the same galleries, saved work and local profile.
+
+### Highlights
+
+#### WinApp interface
+
+- Added **PySide6 / Qt 6 (highly experimental)** in **Settings > Interface**
+  with an explicit restart. Tkinter / ttk is the default and retains both
+  photo renderers. [#445](https://github.com/klusik/PHP_gallery/issues/445)
+- Added retained Qt Quick rendering for Photos and the Lightbox, including
+  bounded EDR presentation on supported macOS displays and SDR fallback.
+- Added Qt controls for gallery management, Watcher, linked and API-key
+  imports, flight reports, Activity, settings and the verified updater.
+
+### Technical Details
+
+#### Installer, credentials and recovery
+
+- Switched the standard Windows setup to a single shared onedir runtime
+  with both backends, replaceable Qt libraries and corresponding-source
+  notices. The existing updater installs it in the registered 1.7.1
+  location and carries the common profile through the upgrade.
+- Reused the uploader's original target binding, FIFO, recovery documents
+  and workers. Verified saved upload grants keep the original credential
+  owner and approved scope.
+- Added hosted setup, updater and paired Photos diagnostics that record the
+  exact source revision and distinguish render proxies from physical output.
+
+### User Impact
+
+#### WinApp users
+
+- The optional installer lets users open the same profile through either
+  frontend. A failed Qt startup reopens Tk, and users can select Tk for
+  subsequent launches in Settings.
+
 ## Version 1.7.1
 
 PHP Gallery 1.7.1 includes WinApp 1.7.1 with steadier workspace switching,

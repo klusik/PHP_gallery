@@ -13,6 +13,8 @@
 
 from dataclasses import dataclass
 from contextlib import nullcontext
+from hashlib import sha256
+import os
 from pathlib import Path
 from typing import Callable, ContextManager
 import uuid
@@ -22,6 +24,12 @@ from .linked_upload import (LinkedTargetLease, UploadPipelineLease,
 from .models import JsonValue
 from .watch_queue import (WatchQueueItem, WatchQueueStore,
                           observe_watch_source)
+
+# Purpose: Bound image bytes admitted by the recovery preview readers.
+# Type: int. Units: bytes. Scope: one exact local or remote recovery preview.
+# Consumers: read_recovery_preview and the desktop image decoders.
+# Rationale: forty MiB preserves the existing Tk limit for captured sources.
+PREVIEW_MAX_BYTES = 40 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -70,6 +78,44 @@ class WatchRecoverySnapshot:
         return (self.item_id, self.sequence, self.source_path,
                 self.source_signature, self.sha256, self.target_binding,
                 self.session_id)
+
+
+def read_recovery_preview(snapshot: WatchRecoverySnapshot) -> tuple[bytes, str]:
+    """Read only the local file generation represented by the recovery row.
+
+    Args:
+        snapshot (WatchRecoverySnapshot): Exact retained head witness.
+    Returns:
+        tuple[bytes, str]: Bounded preview bytes and their computed SHA-256.
+    Raises:
+        OSError: The file is unavailable, oversized, replaced or unverified.
+    """
+    path = Path(snapshot.source_path)
+    info = path.lstat()
+    observed = observe_watch_source(path, snapshot.captured_at)
+    if (observed.signature != snapshot.source_signature or path.is_symlink()
+            or info.st_size > PREVIEW_MAX_BYTES
+            or info.st_size != getattr(snapshot, 'source_size', None)):
+        raise OSError('Retained source generation changed.')
+    expected_mtime = getattr(snapshot, 'source_mtime_ns', 0)
+    if expected_mtime > 0 and info.st_mtime_ns != expected_mtime:
+        raise OSError('Retained source generation changed.')
+    with path.open('rb') as source:
+        opened = os.fstat(source.fileno())
+        before = (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+        if before != (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns):
+            raise OSError('Retained source generation changed.')
+        content = source.read(PREVIEW_MAX_BYTES + 1)
+        after_handle = os.fstat(source.fileno())
+    after = path.lstat()
+    if (len(content) > PREVIEW_MAX_BYTES or path.is_symlink()
+            or (after.st_dev, after.st_ino) != before[:2]
+            or (after_handle.st_size, after_handle.st_mtime_ns) != before[2:]):
+        raise OSError('Retained source changed during preview read.')
+    digest = sha256(content).hexdigest()
+    if snapshot.sha256 and digest != snapshot.sha256:
+        raise OSError('Retained source hash changed.')
+    return content, digest
 
 
 class WatchRecoveryCoordinator:

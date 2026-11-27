@@ -170,15 +170,27 @@ class GameContextTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as directory:
             observer = PRESENCE.GamePresence(lambda: "", Path(directory))
-            observer.cancelled = mock.Mock()
             # Four observations cover game, process-only MSFS, native MSFS and exit.
-            observer.cancelled.is_set.side_effect = [False, False, False, False, True]
+            expected_observations = 4
             labels = []
-            observer.cancelled.wait.side_effect = lambda _delay: labels.append((
-                observer.action_label("begin", "en"),
-                observer.action_label("finish", "en"),
-            ))
+
+            def retain_labels(_delay: float | None) -> None:
+                """Observe each completed poll and stop after all four fixtures.
+
+                Args:
+                    _delay (float | None): Scheduled wake interval in seconds.
+                Returns:
+                    None: The last observation cancels the real observer event.
+                """
+                labels.append((
+                    observer.action_label("begin", "en"),
+                    observer.action_label("finish", "en"),
+                ))
+                if len(labels) == expected_observations:
+                    observer.cancelled.set()
+
             with (
+                mock.patch.object(observer._wake, 'wait', side_effect=retain_labels),
                 mock.patch.object(observer, "probe", side_effect=[False, False, True, False]),
                 mock.patch.object(PRESENCE, "current_user_game_processes", side_effect=[
                     {"cyberpunk2077.exe"}, {"flightsimulator2024.exe"}, set(),
@@ -194,6 +206,70 @@ class GameContextTests(unittest.TestCase):
             ], labels)
             self.assertEqual("Zahájit hru…", observer.action_label("begin", "cs"))
             self.assertIsNone(observer.context)
+
+    def test_demanded_presence_suspends_probes_and_clears_context_when_hidden(self) -> None:
+        """Skip native/process checks outside an explicitly active Qt context.
+
+        Returns:
+            None: Tk-compatible active-by-default behavior remains opt-in to change.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            observer = PRESENCE.GamePresence(
+                lambda: "", Path(directory), active_by_default=False,
+            )
+            observer.context = CONTEXT.GameContext(
+                "microsoft-flight-simulator", "MSFS", "flight",
+            )
+            observer.available = True
+            with (
+                mock.patch.object(observer._wake, 'wait', side_effect=lambda _delay: observer.cancelled.set()) as wake,
+                mock.patch.object(observer, "probe") as probe,
+                mock.patch.object(PRESENCE, "current_user_game_processes") as processes,
+            ):
+                observer.run()
+            wake.assert_called_once_with(None)
+            probe.assert_not_called()
+            processes.assert_not_called()
+            self.assertFalse(observer.available)
+            self.assertIsNone(observer.context)
+
+    def test_demanded_presence_wakes_on_enable_and_clears_immediately_on_hide(self) -> None:
+        """Use one observer only while the Qt Watcher context is interactive.
+
+        Returns:
+            None: Activation probes once; deactivation drops context before its next poll.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            observer = PRESENCE.GamePresence(
+                lambda: "", Path(directory), active_by_default=False,
+            )
+            observer.set_active(True)
+            observed: list[bool] = []
+
+            def finish_observation(_delay: float | None) -> None:
+                """Capture the real native-priority result and end the worker loop.
+
+                Args:
+                    _delay (float | None): Existing bounded observer cadence.
+                Returns:
+                    None: The test closes its local observer deterministically.
+                """
+                observed.append(observer.flight_detected)
+                observer.set_active(False)
+                observer.cancelled.set()
+
+            with (
+                mock.patch.object(observer._wake, 'wait', side_effect=finish_observation) as wake,
+                mock.patch.object(observer, "probe", return_value=True) as probe,
+                mock.patch.object(PRESENCE, "current_user_game_processes") as processes,
+            ):
+                observer.run()
+
+            probe.assert_called_once_with()
+            wake.assert_called_once_with(PRESENCE.PRESENCE_POLL_SECONDS)
+            processes.assert_not_called()
+            self.assertEqual([True], observed)
+            self.assertFalse(observer.flight_detected)
 
 
 class WindowsGameProcessTests(unittest.TestCase):

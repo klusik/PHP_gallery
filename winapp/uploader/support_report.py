@@ -24,12 +24,12 @@ from .diagnostics import redact_text
 
 # Purpose: Bound log-tail bytes included in one report.
 # Type: int. Units: bytes. Scope: one support report log attachment.
-# Consumers: build_support_report. Rationale: Keeps excerpts and memory small.
+# Consumers: read_support_log. Rationale: Keeps excerpts and memory small.
 SUPPORT_LOG_TAIL_MAX_BYTES = 65_536
 
 # Purpose: Identify whether the bounded log offset starts at a line boundary.
 # Type: int. Units: bytes. Scope: one report log-tail seek.
-# Consumers: build_support_report. Rationale: One preceding byte is sufficient.
+# Consumers: read_support_log. Rationale: One preceding byte is sufficient.
 SUPPORT_LOG_BOUNDARY_PROBE_BYTES = 1
 
 # Purpose: Bound each allowlisted metadata value before report formatting.
@@ -90,7 +90,7 @@ _COORDINATE_RE = re.compile(
     r"|[^\s,;}]+)"
 )
 
-def _redact_report_text(value: str, secrets: Iterable[str] = ()) -> str:
+def redact_support_text(value: str, secrets: Iterable[str] = ()) -> str:
     """Apply diagnostic redaction plus report-specific privacy filters.
 
     Args:
@@ -182,11 +182,46 @@ def _safe_metadata(
             continue
         if type(value) is float and not math.isfinite(value):
             continue
-        safe = _redact_report_text(
+        safe = redact_support_text(
             str(value), secrets,
         )[:SUPPORT_METADATA_VALUE_MAX_CHARS]
         output.append((key, safe))
     return output
+
+
+def read_support_log(log_path: Path, secrets: Iterable[str] = ()) -> tuple[str, str]:
+    """Read the same bounded and redacted local log excerpt for each frontend.
+
+    Args:
+        log_path (Path): Current profile's known rotating log file.
+        secrets (Iterable[str]): Known credentials to remove literally.
+    Returns:
+        tuple[str, str]: Source-language inclusion status and safe complete lines,
+            or a missing/unreadable status with empty text.
+    """
+    try:
+        with log_path.open('rb') as stream:
+            stream.seek(0, os.SEEK_END)
+            offset = max(0, stream.tell() - SUPPORT_LOG_TAIL_MAX_BYTES)
+            previous_byte = b''
+            if offset:
+                stream.seek(offset - SUPPORT_LOG_BOUNDARY_PROBE_BYTES)
+                previous_byte = stream.read(SUPPORT_LOG_BOUNDARY_PROBE_BYTES)
+            stream.seek(offset)
+            tail = stream.read(SUPPORT_LOG_TAIL_MAX_BYTES)
+    except FileNotFoundError:
+        return 'status: missing', ''
+    except OSError:
+        return 'status: unreadable', ''
+    leading_partial_line = bool(offset and previous_byte != b'\n')
+    if leading_partial_line:
+        newline = tail.find(b'\n')
+        tail = tail[newline + 1:] if newline >= 0 else b''
+    status = (
+        f"status: included; bytes={len(tail)}; truncated={'yes' if offset else 'no'}; "
+        f"leading_partial_line={'dropped' if leading_partial_line else 'no'}"
+    )
+    return status, redact_support_text(tail.decode('utf-8', errors='replace'), secrets)
 
 
 def build_support_report(
@@ -236,39 +271,16 @@ def build_support_report(
     )
     lines.extend([
         "", "Current diagnostics",
-        _redact_report_text(diagnostic_text, known_secrets),
+        redact_support_text(diagnostic_text, known_secrets),
     ])
     lines.extend(["", "Log tail"])
     if log_path is None:
         lines.append("status: not requested")
     else:
-        try:
-            with log_path.open("rb") as stream:
-                stream.seek(0, os.SEEK_END)
-                total_bytes = stream.tell()
-                offset = max(0, total_bytes - SUPPORT_LOG_TAIL_MAX_BYTES)
-                previous_byte = b""
-                if offset:
-                    stream.seek(offset - 1)
-                    previous_byte = stream.read(SUPPORT_LOG_BOUNDARY_PROBE_BYTES)
-                stream.seek(offset)
-                tail = stream.read(SUPPORT_LOG_TAIL_MAX_BYTES)
-            leading_partial_line = bool(offset and previous_byte != b"\n")
-            if leading_partial_line:
-                newline = tail.find(b"\n")
-                tail = tail[newline + 1:] if newline >= 0 else b""
-            lines.append(
-                f"status: included; bytes={len(tail)}; "
-                f"truncated={'yes' if offset else 'no'}; "
-                f"leading_partial_line={'dropped' if leading_partial_line else 'no'}"
-            )
-            lines.append(_redact_report_text(
-                tail.decode("utf-8", errors="replace"), known_secrets,
-            ))
-        except FileNotFoundError:
-            lines.append("status: missing")
-        except OSError:
-            lines.append("status: unreadable")
+        status, excerpt = read_support_log(log_path, known_secrets)
+        lines.append(status)
+        if status.startswith('status: included;'):
+            lines.append(excerpt)
     report = "\n".join(lines)
     if len(report) > SUPPORT_REPORT_MAX_CHARS:
         marker = "\n[REPORT TRUNCATED]"

@@ -21,6 +21,7 @@ try:
 except ImportError:
     winreg = None
 
+from .gui_backend import public_executable
 from .windows_file_identity import WindowsDirectoryAnchor
 
 
@@ -80,7 +81,7 @@ def synchronize_startup(enabled: bool) -> None:
     if not startup_supported():
         return
 
-    command = '"' + str(Path(sys.executable).resolve()) + '" --startup'
+    command = '"' + str(public_executable().resolve()) + '" --startup'
     if enabled and len(command) > RUN_COMMAND_MAX_CHARACTERS:
         raise OSError("Windows startup command exceeds 260 characters.")
     # Match the x64 installer even if this code is inspected by another runtime.

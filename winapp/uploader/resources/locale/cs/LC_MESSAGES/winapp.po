@@ -822,6 +822,9 @@ msgstr "Prověřuji zdroj, počítám otisky souborů, zjišťuji podporu formá
 msgid "Install local AI module"
 msgstr "Nainstalovat místní modul AI"
 
+msgid "Optional local AI module dependency installation finished successfully. Restart the app before running the Transformers backend for the first time."
+msgstr "Závislosti volitelného místního modulu AI jsou nainstalované. Před prvním použitím backendu Transformers aplikaci restartujte."
+
 msgid "Installed Windows app only. This switch saves immediately."
 msgstr "Pouze pro nainstalovanou aplikaci ve Windows. Tato volba se ukládá ihned."
 
@@ -1161,11 +1164,17 @@ msgstr "Připraveno k nahrávání"
 msgid "Ready when you are"
 msgstr "Připraveno"
 
+msgid "Reapprove saved link"
+msgstr "Znovu schválit uložené propojení"
+
 msgid "Recent events"
 msgstr "Nedávné události"
 
 msgid "Reconnect and verify the created gallery first."
 msgstr "Nejdřív se znovu připojte a ověřte vytvořenou galerii."
+
+msgid "Resume Watcher"
+msgstr "Pokračovat ve Watcheru"
 
 msgid "Reconnect saved link"
 msgstr "Obnovit uložené propojení"
@@ -1265,6 +1274,9 @@ msgstr "Pokračovat v původním vytváření"
 
 msgid "Resume the paused import"
 msgstr "Pokračovat v pozastaveném importu"
+
+msgid "Retry"
+msgstr "Zkusit znovu"
 
 msgid "Retry failed"
 msgstr "Zopakovat neúspěšné položky"
@@ -1890,6 +1902,9 @@ msgstr "Sledovátko stále běží"
 msgid "WATCHER PREFERENCES"
 msgstr "PŘEDVOLBY SLEDOVÁTKA"
 
+msgid "Watcher preparation started."
+msgstr "Příprava Watcheru byla zahájena."
+
 msgid "Watcher remains open"
 msgstr "Sledovátko zůstává otevřené"
 
@@ -2231,3 +2246,220 @@ msgstr "Samostatná instalace neumí přidávat balíčky Pythonu. Použijte Oll
 
 msgid "Bundled dependencies"
 msgstr "Balíčky dodávané s aplikací"
+
+msgid "AI"
+msgstr "AI"
+
+msgid "Active backend: {backend}"
+msgstr "Aktivní backend: {backend}"
+
+msgid "Cancel pending change"
+msgstr "Zrušit čekající změnu"
+
+msgid "Checking for updates…"
+msgstr "Kontroluji aktualizace…"
+
+msgid "Could not check for updates."
+msgstr "Kontrola aktualizací se nezdařila."
+
+msgid "Could not save the GUI backend."
+msgstr "Backend rozhraní se nepodařilo uložit."
+
+msgid "Diagnostics copied."
+msgstr "Diagnostika zkopírována."
+
+msgid "Disconnect"
+msgstr "Odpojit"
+
+msgid "GUI backend"
+msgstr "Backend rozhraní"
+
+msgid "GUI backend settings…"
+msgstr "Nastavení backendu rozhraní…"
+
+msgid "Gallery"
+msgstr "Galerie"
+
+msgid "Gallery connection is unavailable."
+msgstr "Galerie není dostupná."
+
+msgid "Interface"
+msgstr "Rozhraní"
+
+msgid "Link a gallery or open local photos."
+msgstr "Propojte galerii nebo otevřete místní fotky."
+
+msgid "Loading photos…"
+msgstr "Načítám fotky…"
+
+msgid "Loading photo…"
+msgstr "Načítám fotku…"
+
+msgid "No galleries found."
+msgstr "Nebyly nalezeny žádné galerie."
+
+msgid "No photos found."
+msgstr "Nebyly nalezeny žádné fotky."
+
+msgid "No saved PDFs for this flight."
+msgstr "K tomuto letu nejsou uložené žádné PDF zprávy."
+
+msgid "No saved records."
+msgstr "Žádné uložené záznamy."
+
+msgid "Open local photos"
+msgstr "Otevřít místní fotky"
+
+msgid "Open saved PDF"
+msgstr "Otevřít uložené PDF"
+
+msgid "Photo card format"
+msgstr "Formát karty fotky"
+
+msgid "Photo could not be loaded."
+msgstr "Fotku se nepodařilo načíst."
+
+msgid "Photos loading progress"
+msgstr "Průběh načítání fotek"
+
+msgid "PySide6 / Qt 6 (highly experimental)"
+msgstr "PySide6 / Qt 6 (vysoce experimentální)"
+
+msgid "Qt dependencies could not load. WinApp opened with Tkinter. Install the optional Qt requirements for this Python and retry in Settings."
+msgstr "Nepodařilo se načíst balíčky Qt. WinApp běží v Tkinteru. Nainstalujte volitelné balíčky Qt do tohoto Pythonu a zkuste přepnutí znovu v Nastavení."
+
+msgid "Qt did not become ready. WinApp opened with Tkinter. Review the WinApp log and retry or cancel the change in Settings."
+msgstr "Qt se nepodařilo spustit. WinApp běží v Tkinteru. Zkontrolujte log WinApp a v Nastavení přepnutí zkuste znovu nebo zrušte."
+
+msgid "Qt is available in the source launcher with the optional Qt requirements."
+msgstr "Qt je dostupné při spuštění ze zdrojového kódu s volitelnými balíčky Qt."
+
+msgid "Refresh"
+msgstr "Obnovit"
+
+msgid "Reports"
+msgstr "Zprávy"
+
+msgid "Restart required for {backend}."
+msgstr "Pro {backend} je potřeba restart."
+
+msgid "Saved history could not be read."
+msgstr "Uloženou historii se nepodařilo načíst."
+
+msgid "Saved reports could not be read."
+msgstr "Uložené zprávy se nepodařilo načíst."
+
+msgid "Select a saved flight."
+msgstr "Vyberte uložený let."
+
+msgid "Some photos could not be loaded. Use Refresh to retry."
+msgstr "Některé fotky se nepodařilo načíst. Zkuste volbu Obnovit."
+
+msgid "Link for uploads"
+msgstr "Propojit pro nahrávání"
+
+msgid "Select upload gallery"
+msgstr "Vybrat galerii pro nahrávání"
+
+msgid "Edit gallery"
+msgstr "Upravit galerii"
+
+msgid "Root gallery"
+msgstr "Kořen galerie"
+
+msgid "Parent gallery"
+msgstr "Nadřazená galerie"
+
+msgid "Title"
+msgstr "Název"
+
+msgid "Description"
+msgstr "Popis"
+
+msgid "NSFW"
+msgstr "Citlivý obsah"
+
+msgid "Visibility"
+msgstr "Viditelnost"
+
+msgid "Public"
+msgstr "Veřejná"
+
+msgid "Private"
+msgstr "Soukromá"
+
+msgid "Unpublished"
+msgstr "Nezveřejněná"
+
+msgid "Gallery created."
+msgstr "Galerie byla vytvořena."
+
+msgid "Gallery changes saved."
+msgstr "Změny galerie byly uloženy."
+
+msgid "Configuration saved."
+msgstr "Konfigurace byla uložena."
+
+msgid "Download update"
+msgstr "Stáhnout aktualizaci"
+
+msgid "Install update"
+msgstr "Nainstalovat aktualizaci"
+
+
+msgid "The GUI backend was saved. Restart WinApp now to apply it?"
+msgstr "Backend rozhraní byl uložen. Restartovat WinApp a použít ho teď?"
+
+msgid "Tkinter / ttk (stable, default)"
+msgstr "Tkinter / ttk (stabilní, výchozí)"
+
+msgid "Update available: {version}"
+msgstr "Dostupná aktualizace: {version}"
+
+msgid "WinApp is up to date."
+msgstr "WinApp je aktuální."
+
+msgid "WinApp opened with Tkinter to finish the update continuation."
+msgstr "WinApp běží v Tkinteru, aby dokončil práci po aktualizaci."
+
+msgid "WinApp opened with Tkinter to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
+msgstr "WinApp běží v Tkinteru kvůli rozpracované práci. Před přepnutím na Qt zkontrolujte Watcher, Aktivitu a Let."
+
+msgid "Finish the current work in Tkinter before switching to Qt."
+msgstr "Před přepnutím na Qt dokončete rozpracovanou práci v Tkinteru."
+
+msgid "Use a GUI backend for this launch only."
+msgstr "Použít backend rozhraní jen pro toto spuštění."
+
+msgid "API key entered but not saved."
+msgstr "Klíč API je zadaný a čeká na uložení."
+
+msgid "Gallery connection could not be changed."
+msgstr "Připojení ke galerii se nepodařilo změnit."
+
+msgid "Disconnect gallery"
+msgstr "Odpojit galerii"
+
+msgid "A linked gallery connection is selected."
+msgstr "Je vybráno propojení s galerií."
+
+msgid "Start Watcher"
+msgstr "Spustit Watcher"
+
+msgid "The saved API-key connection is selected."
+msgstr "Je vybráno připojení s uloženým klíčem API."
+
+msgid "Local photos"
+msgstr "Místní fotografie"
+
+msgid "Enable the AI worker in Settings and verify the saved gallery connection."
+msgstr "Zapněte AI worker v Nastavení a ověřte uložené připojení ke galerii."
+
+msgid "Select a gallery connection to start an import."
+msgstr "Pro spuštění importu vyberte připojení ke galerii."
+
+msgid "No watched folder selected."
+msgstr "Není vybrána složka ke sledování."
+
+msgid "Continue"
+msgstr "Pokračovat"

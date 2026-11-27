@@ -27,12 +27,14 @@ import subprocess
 import sys
 import tempfile
 
+from qt_installer_tools import installed_error_dialog, verify_installation
 from uploader.runtime_check import runtime_info, validate_runtime_info
+from uploader.update_helper import stage_update_helper_runtime
 
 
 WINAPP_DIR = Path(__file__).resolve().parent
 APP_EXE = "PHPGalleryUploader.exe"
-SIMCONNECT_ARCHIVE_PATH = "runtime/simconnect/SimConnect.dll"
+SIMCONNECT_BUNDLE_PATH = "runtime/simconnect/SimConnect.dll"
 SIMCONNECT_EXPORTS = {
     "SimConnect_Open", "SimConnect_Close", "SimConnect_CallDispatch",
     "SimConnect_GetLastSentPacketID", "SimConnect_AddToDataDefinition",
@@ -43,7 +45,7 @@ SIMCONNECT_EXPORTS = {
 }
 
 # Type: int; Units: seconds; Scope: build; Consumers: frozen runtime smoke.
-# Rationale: 60 seconds bounds cold onefile extraction and runtime attestation.
+# Rationale: 60 seconds bounds cold runtime startup and attestation.
 FROZEN_RUNTIME_TIMEOUT_SECONDS = 60
 
 
@@ -117,51 +119,133 @@ def validate_simconnect_runtime(path):
     return hashlib.sha256(data).hexdigest()
 
 
-def archive_verification_code():
-    """Verify the actual onefile binary payload inside the staged build venv.
+def verify_frozen_simconnect(bundle: Path, expected_sha256: str) -> None:
+    """Check the actual app-local SimConnect payload before building Setup.
 
-    Return Python source for the selected build interpreter, where PyInstaller
-    is available. Its arguments are EXE path, normalized archive entry path,
-    and the preflight SHA256 digest. CArchiveReader extracts the actual bundled
-    bytes; Windows archive separators are normalized for entry selection.
-    Missing/duplicate entries or changed bytes terminate the subprocess before
-    Inno Setup can publish an installer. This also runs with an explicitly
-    selected existing interpreter in the no-install build mode.
+    Args:
+        bundle (Path): The one complete staged PyInstaller directory.
+        expected_sha256 (str): SHA-256 hex digest of the validated source DLL.
+    Returns:
+        None: Exactly the validated runtime DLL is present in its approved slot.
+    Raises:
+        RuntimeError: The bundled location, uniqueness or payload is invalid.
     """
-    return (
-        "import hashlib, sys; from PyInstaller.archive.readers import CArchiveReader; "
-        "archive = CArchiveReader(sys.argv[1]); "
-        "names = [name for name in archive.toc if name.replace('\\\\', '/') == sys.argv[2]]; "
-        "len(names) == 1 or sys.exit('Bundled SimConnect.dll missing or duplicated'); "
-        "payload = archive.extract(names[0]); "
-        "hashlib.sha256(payload).hexdigest() == sys.argv[3] or sys.exit('Bundled SimConnect.dll hash mismatch'); "
-        "print('Bundled SimConnect runtime verified')"
+    target = bundle / "_internal" / SIMCONNECT_BUNDLE_PATH
+    if tuple(bundle.rglob("SimConnect.dll")) != (target,) or target.is_symlink():
+        raise RuntimeError("Bundled SimConnect.dll is missing, duplicated or redirected.")
+    if hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256:
+        raise RuntimeError("Bundled SimConnect.dll hash mismatch.")
+
+
+def verify_frozen_directory(bundle: Path) -> None:
+    """Require exactly one application and one bundled versioned Python runtime.
+
+    Args:
+        bundle (Path): The staged common onedir payload used by the installer.
+    Returns:
+        None: Both frontends' libraries and the project QML source are present.
+    Raises:
+        RuntimeError: The application, versioned Python or a required GUI file
+            is missing or duplicated.
+    """
+    runtime = bundle / "_internal"
+    python_dll = f"python{sys.version_info.major}{sys.version_info.minor}.dll"
+    if tuple(bundle.rglob("*.exe")) != (bundle / APP_EXE,):
+        raise RuntimeError("Expected only the registered WinApp executable.")
+    versioned_runtimes = tuple(
+        path for path in bundle.rglob("*.dll")
+        if re.fullmatch(r"python\d{2,}\.dll", path.name.casefold())
     )
+    if versioned_runtimes != (runtime / python_dll,):
+        raise RuntimeError("Expected one versioned Python runtime beside the shared dependencies.")
+    for filename in ("qwindows.dll", "qjpeg.dll", "qwebp.dll", "Qt6Core.dll", "Qt6Quick.dll"):
+        if len(tuple(runtime.rglob(filename))) != 1:
+            raise RuntimeError("Expected one app-local Qt runtime file: " + filename)
+    if not (runtime / "uploader" / "resources" / "qml" / "Photos.qml").is_file():
+        raise RuntimeError("The shared WinApp bundle omitted its Photos QML scene.")
+
+
+def run_frozen_smoke(arguments: list[str], work: Path, environment: dict[str, str]) -> None:
+    """Exercise one frozen command and expose any native failure to the build log.
+
+    Args:
+        arguments (list[str]): Freshly built launcher and isolated smoke arguments.
+        work (Path): Current builder-owned staging directory.
+        environment (dict[str, str]): Disposable smoke environment and profile.
+    Returns:
+        None: The exact frozen command exited successfully.
+    Raises:
+        RuntimeError: The command timed out, including any owned native dialog.
+        subprocess.CalledProcessError: The command failed without waiting.
+    """
+    with subprocess.Popen(arguments, cwd=work, env=environment) as child:
+        try:
+            status = child.wait(timeout=FROZEN_RUNTIME_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            try:
+                explanation = installed_error_dialog(child.pid)
+            finally:
+                child.kill()
+                child.wait()
+            raise RuntimeError(f"Frozen {arguments[1]} smoke timed out. {explanation}") from error
+        if status != 0:
+            raise subprocess.CalledProcessError(status, arguments)
 
 
 def installed_dependencies_code() -> str:
     """Check existing build packages without installing or changing anything.
 
-    Return subprocess source that enforces the supported PyInstaller range and
-    supported Pillow/pystray/pypdf/ReportLab and polib versions, imports those
-    packages, and creates a Tcl
-    interpreter without opening a window. Missing packages, unsupported versions,
+    Return subprocess source that enforces the exact qualified package versions,
+    imports Tk and Qt components, and creates a Tcl interpreter without opening
+    a window. Missing packages, unsupported versions,
     or broken imports fail before PyInstaller starts. This probe never invokes
     pip, creates a venv, downloads packages, or alters installed dependencies.
 
     Returns:
         str: Subprocess source validating the declared frozen-runtime packages.
     """
+    requirements = WINAPP_DIR / "requirements-build.txt"
+    freeze_pin = re.search(
+        r"^PyInstaller==(\d+\.\d+\.\d+)$", requirements.read_text(encoding="utf-8"), re.M,
+    )
+    if freeze_pin is None:
+        raise RuntimeError("The installer requires one exact PyInstaller pin.")
+    constraint_text = (WINAPP_DIR / "constraints.txt").read_text(encoding="utf-8")
+    constraint_pins = {
+        match.group(1).casefold(): match.group(2)
+        for match in re.finditer(
+            r"^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+-]+)(?:\s*;.*)?$",
+            constraint_text, re.M,
+        )
+    }
+    qt_text = (WINAPP_DIR / "requirements-qt.txt").read_text(encoding="utf-8")
+    qt_pins = {
+        match.group(1).casefold(): match.group(2)
+        for match in re.finditer(
+            r"^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+-]+)$", qt_text, re.M,
+        )
+    }
+    package_names = (
+        "Pillow", "pystray", "reportlab", "pypdf", "polib",
+        "PySide6-Essentials", "shiboken6", "pyinstaller-hooks-contrib",
+        "pefile", "pywin32-ctypes", "altgraph", "packaging",
+        "charset-normalizer", "six", "setuptools",
+    )
+    all_pins = {**constraint_pins, **qt_pins}
+    expected = {
+        name: (freeze_pin.group(1) if name == "PyInstaller" else all_pins.get(name.casefold()))
+        for name in (*package_names, "PyInstaller")
+    }
+    if any(value is None for value in expected.values()):
+        raise RuntimeError("Build requirements are missing an exact qualified package pin.")
     return (
-        "import re, tkinter; from importlib.metadata import version; "
-        "requirements = [('PyInstaller', (6, 19), (7,)), ('Pillow', (10,), None), "
-        "('pystray', (0, 19, 5), None), ('reportlab', (5, 0, 1), (6,)), "
-        "('pypdf', (6,), None), ('polib', (1, 2), (2,))]; "
-        "versions = [(name, tuple(int(p) for p in re.match(r'^([0-9]+(?:\\.[0-9]+)*)', version(name)).group(1).split('.')), low, high) "
-        "for name, low, high in requirements]; "
-        "invalid = [name for name, value, low, high in versions if value < low or (high is not None and value >= high)]; "
-        "not invalid or __import__('sys').exit('Unsupported installed build dependencies: ' + ', '.join(invalid)); "
-        "import PIL.Image, pystray, PyInstaller, reportlab, pypdf, polib; "
+        "import sys, tkinter, tkinter.ttk; from importlib.metadata import version; "
+        f"expected = {expected!r}; "
+        "actual = {name: version(name) for name in expected}; "
+        "invalid = [name for name, value in expected.items() if actual[name] != value]; "
+        "not invalid or sys.exit('Unsupported installed build dependencies: ' + ', '.join(invalid)); "
+        "import PIL.Image, pystray, PyInstaller, reportlab, pypdf, polib, shiboken6; "
+        "from PySide6 import QtCore, QtGui, QtQml, QtQuick, QtWidgets; "
         "root = tkinter.Tcl(); print('Installed build dependencies OK')"
     )
 
@@ -214,6 +298,8 @@ def build_installer(
     iscc: str | Path,
     source: Path = WINAPP_DIR,
     use_installed_dependencies: bool = False,
+    *,
+    verify_installed: bool = False,
 ) -> Path:
     """Publish a complete installer and matching metadata in one version folder.
 
@@ -225,8 +311,8 @@ def build_installer(
     and intermediate outputs in an owned temporary directory on the destination
     volume. Only the default venv mode disables user-site package discovery.
 
-    Validate the source runtime, embed it at runtime/simconnect inside the
-    single application EXE, verify its archived digest, and package that EXE.
+    Validate the source SimConnect runtime, verify its digest in the app-local
+    bundle, and freeze both frontends against the same Python and dependencies.
     Validate x64 CPython 3.14.x in both this interpreter and the actual frozen
     executable before invoking Inno Setup; their concrete patch versions are
     printed separately. A missing/incorrect frozen report refuses publication.
@@ -241,6 +327,8 @@ def build_installer(
         iscc (str | Path): Existing Inno Setup compiler executable.
         source (Path): WinApp source directory containing VERSION and its DLL.
         use_installed_dependencies (bool): Reuse checked packages without downloads.
+        verify_installed (bool): Install and exercise the requested variant on
+            a disposable Windows machine owned by the hosted audit.
 
     Returns:
         Path: Published installer beside its matching update metadata.
@@ -302,70 +390,80 @@ def build_installer(
         print(f"Building PHP Gallery Uploader {version} with {iscc}", flush=True)
         if use_installed_dependencies:
             python = sys.executable
-            run([python, "-c", installed_dependencies_code()])
         else:
             run([sys.executable, "-m", "venv", work / "venv"])
             python = work / "venv" / "Scripts" / "python.exe"
             run([python, "-m", "pip", "install", "-r", source / "requirements-build.txt"])
-            run([python, "-c", "import tkinter, PIL.Image, pystray; root = tkinter.Tcl(); print('Build dependencies OK')"])
+        run([python, "-m", "pip", "check"])
+        run([python, "-c", installed_dependencies_code()])
+        versions_code = (
+            "import json, sys; sys.path.insert(0, " + repr(str(source)) + "); "
+            "from uploader.dependency_versions import dependency_versions; "
+            "print('WinApp dependency versions: ' + json.dumps("
+            "dependency_versions(), sort_keys=True, separators=(',', ':')))"
+        )
+        run([python, "-c", versions_code])
+        notices = work / "qt-notices"
+        run([python, source / "qt_installer_tools.py", notices])
         version_file = work / "version-info.txt"
         write_version_resource(version_file, version)
+        env["PHP_GALLERY_VERSION_RESOURCE"] = str(version_file)
         run([
-            python, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile", "--windowed",
-            "--name", Path(APP_EXE).stem, "--noupx",
+            python, "-m", "PyInstaller", "--noconfirm", "--clean",
             "--distpath", work / "app", "--workpath", work / "pyinstaller-work",
-            "--specpath", work, "--paths", source,
-            "--icon", source / "assets" / "tray-icon.ico", "--version-file", version_file,
-            "--add-data", f"{source / 'assets'}{os.pathsep}assets",
-            "--add-data",
-            f"{source / 'uploader' / 'resources'}{os.pathsep}uploader/resources",
-            "--collect-all", "reportlab",
-            "--add-data", f"{source / 'VERSION'}{os.pathsep}.",
-            "--add-binary", f"{source / 'SimConnect.dll'}{os.pathsep}runtime/simconnect",
-            "--hidden-import", "pystray._win32",
-            "--hidden-import", "uploader.update_helper",
-            source / "gallery_watch_upload.pyw",
+            source / "uploader.spec",
         ])
-        app = work / "app" / APP_EXE
-        if not app.is_file():
-            raise RuntimeError("PyInstaller did not produce the application EXE.")
-        run([python, "-c", archive_verification_code(), app, SIMCONNECT_ARCHIVE_PATH, runtime_hash])
+        bundle = work / "app" / Path(APP_EXE).stem
+        app = bundle / APP_EXE
+        verify_frozen_directory(bundle)
+        verify_frozen_simconnect(bundle, runtime_hash)
+        shutil.copytree(notices, bundle / "licenses")
+        run([python, source / "frozen_windows_libraries.py", bundle])
         runtime_report = work / "frozen-runtime.json"
-        subprocess.run(
+        run_frozen_smoke(
             [str(app), "--runtime-info", str(runtime_report)],
-            cwd=work,
-            check=True,
-            timeout=FROZEN_RUNTIME_TIMEOUT_SECONDS,
-            env={**env, "APPDATA": str(work / "smoke-profile")},
+            work, {**env, "APPDATA": str(work / "smoke-profile")},
         )
         frozen_runtime = json.loads(runtime_report.read_text(encoding="utf-8"))
         validate_runtime_info(frozen_runtime)
         print("Frozen interpreter: " + json.dumps(frozen_runtime), flush=True)
         # Import/startup smoke check without opening the GUI or reading the
         # developer's saved gallery credentials. Logs stay inside staging.
-        subprocess.run(
-            [str(app), "--help"], cwd=work, check=True, timeout=60,
-            env={**env, "APPDATA": str(work / "smoke-profile")},
+        run_frozen_smoke(
+            [str(app), "--help"], work,
+            {**env, "APPDATA": str(work / "smoke-profile")},
         )
         # Exercise the real frozen native version reader from a copied helper,
         # before setup packaging. This never installs or starts the application UI.
         helper_directory = work / "helper-smoke"
         helper_directory.mkdir()
         helper = helper_directory / "helper.exe"
-        shutil.copyfile(app, helper)
-        subprocess.run(
-            [str(helper), "--self-update-smoke"], cwd=work, check=True, timeout=60,
-            env={**env, "APPDATA": str(work / "smoke-profile"),
-                 "LOCALAPPDATA": str(work / "smoke-local-profile")},
+        stage_update_helper_runtime(app, helper)
+        run_frozen_smoke(
+            [str(helper), "--self-update-smoke"], work,
+            {**env, "APPDATA": str(work / "smoke-profile"), "PYINSTALLER_RESET_ENVIRONMENT": "1",
+             "LOCALAPPDATA": str(work / "smoke-local-profile")},
+        )
+        notice = source / "QT-LICENSE.txt"
+        installer_license = work / "setup-license.txt"
+        # Keep the existing license step and append the component notice there.
+        installer_license.write_text(
+            (source.parent / "LICENSE").read_text(encoding="utf-8").rstrip()
+            + "\n\n" + notice.read_text(encoding="utf-8"),
+            encoding="utf-8-sig",
         )
         run([
             iscc, f"/DAppVersion={version}", f"/DSourceRoot={source}",
-            f"/DAppExe={app}", f"/DInstallerOutput={work / 'installer'}",
+            f"/DAppBundle={bundle}", f"/DQtNotice={notice}",
+            f"/DInstallerLicense={installer_license}",
+            f"/DInstallerOutput={work / 'installer'}",
             source / "installer.iss",
         ])
         installer = work / "installer" / output_name
         if not installer.is_file() or installer.stat().st_size == 0:
             raise RuntimeError("Inno Setup did not produce the installer EXE.")
+        if verify_installed:
+            verify_installation(installer, work, env, version=version)
         digest = hashlib.sha256()
         with installer.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
@@ -405,20 +503,28 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iscc", help="Path to the installed Inno Setup ISCC.exe")
     parser.add_argument(
+        "--verify-installed", action="store_true",
+        help="Install and verify the requested setup on a disposable Windows runner",
+    )
+    parser.add_argument(
         "--use-installed-dependencies", action="store_true",
         help="Use checked packages in the selected Python without installing dependencies",
     )
     args = parser.parse_args()
     try:
         if sys.platform != "win32" or struct.calcsize("P") != 8 or platform.machine().lower() not in {"amd64", "x86_64"}:
-            raise RuntimeError("Build with 64-bit x64 Python on Windows (Python 3.10 or newer).")
-        if sys.version_info < (3, 10):
-            raise RuntimeError("Python 3.10 or newer is required.")
-        output = build_installer(find_iscc(args.iscc), use_installed_dependencies=args.use_installed_dependencies)
+            raise RuntimeError("Build with 64-bit x64 CPython 3.14 on Windows.")
+        if sys.version_info[:2] != (3, 14):
+            raise RuntimeError("Build with the qualified CPython 3.14 series.")
+        output = build_installer(
+            find_iscc(args.iscc), use_installed_dependencies=args.use_installed_dependencies,
+            verify_installed=args.verify_installed,
+        )
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"Build failed: {exc}", file=sys.stderr)
         return 1
-    print(f"Installer ready: {output}\nUpdate metadata ready: {output.with_name('winapp-update.json')}\nTemporary build files removed.")
+    descriptor = output.with_name("winapp-update.json")
+    print(f"Installer ready: {output}\nSetup metadata ready: {descriptor}\nTemporary build files removed.")
     return 0
 
 

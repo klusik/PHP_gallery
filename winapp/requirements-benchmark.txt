@@ -1,0 +1,14 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/requirements-benchmark.txt
+# Module Type: Hosted benchmark requirements
+# Purpose: Declare the process sampler used by hosted benchmarks.
+# Responsibilities: Constrain benchmark dependencies to the WinApp lock set.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+-c constraints.txt
+# Purpose: Bound supported hosted sampler releases.
+# Type: package requirement. Units: semantic version. Scope: benchmark runner.
+# Consumers: benchmark measurement processes. Rationale: constraints pin 7.1.3.
+psutil>=7.1,<8

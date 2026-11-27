@@ -585,8 +585,11 @@ class ModeCoordinator:
             if work._owner is self and work._lease._owner is self._admission:
                 work._lease.close()
 
-    def publish(self, expected: ModeView, record: ModeRecord) -> ModeView:
-        """Publish one externally approved generation through both existing owners.
+    def publish(
+        self, expected: ModeView, record: ModeRecord, *,
+        activate_target: LinkedUploadTarget | None = None,
+    ) -> ModeView:
+        """Publish an approved generation through both existing owners.
 
         The host must first verify consent, live identity, unresolved work and
         cross-process exclusivity. This method never authenticates a gallery.
@@ -594,9 +597,11 @@ class ModeCoordinator:
         Args:
             expected (ModeView): Exact mode view reviewed before user consent.
             record (ModeRecord): Explicit non-secret new profile and target binding.
+            activate_target (LinkedUploadTarget | None): Fresh same-target grant
+                to keep active as this scope generation is published.
 
         Returns:
-            ModeView: Verified legacy or linked-disconnected published generation.
+            ModeView: Verified published generation, active only for a verified target.
 
         Raises:
             ModeCoordinatorError: Evidence, admission or publication is uncertain.
@@ -605,6 +610,22 @@ class ModeCoordinator:
             previous = self._evidence
             if not self._healthy or previous is None or previous.snapshot.state != 'valid':
                 raise ModeCoordinatorError('Upload mode evidence is unavailable.')
+            old = expected.record
+            if activate_target is not None and (
+                expected.state != 'linked_active' or old is None
+                or old.mode != 'linked' or record.mode != 'linked'
+                or (old.issuer, old.account_id, old.gallery_id)
+                != (record.issuer, record.account_id, record.gallery_id)
+                or old.scope == record.scope
+                or type(activate_target) is not LinkedUploadTarget
+                or (activate_target.issuer, activate_target.user_id,
+                    activate_target.gallery_id, activate_target.session.approved_scope())
+                != (record.issuer, record.account_id, record.gallery_id, record.scope)
+                or not activate_target.session.matches_issuer(activate_target.issuer)
+                or not activate_target.session.can_upload()
+                or not activate_target.session.available()
+            ):
+                raise ModeCoordinatorError('Linked target changed.')
             try:
                 reservation = self._admission.begin_transition(expected)
             except RuntimeError:
@@ -618,6 +639,18 @@ class ModeCoordinator:
                             if _observe(config, vault) != previous:
                                 raise ModeCoordinatorError('Upload mode evidence changed.')
                             snapshot = previous.snapshot
+                            if activate_target is not None and (
+                                expected.record != previous.record
+                                or expected.state != 'linked_active'
+                                or (activate_target.issuer, activate_target.user_id,
+                                    activate_target.gallery_id, activate_target.session.approved_scope())
+                                != (record.issuer, record.account_id,
+                                    record.gallery_id, record.scope)
+                                or not activate_target.session.matches_issuer(activate_target.issuer)
+                                or not activate_target.session.can_upload()
+                                or not activate_target.session.available()
+                            ):
+                                raise ModeCoordinatorError('Linked target changed.')
 
                             def read_anchor() -> bytes | None:
                                 """Recheck the entire config before reading its anchor.
@@ -648,7 +681,11 @@ class ModeCoordinator:
                             observation = _observe(config, vault)
                             if observation.record != record or observation.snapshot != snapshot:
                                 raise ModeCoordinatorError('Upload mode publication is uncertain.')
-                    view = reservation.commit(observation.state, observation.record)
+                    committed_state = (
+                        'linked_active' if activate_target is not None
+                        else observation.state
+                    )
+                    view = reservation.commit(committed_state, observation.record)
                     self._evidence = observation
                     self._healthy = True
                     return view
@@ -766,6 +803,46 @@ class ModeCoordinator:
                 raise ModeCoordinatorError('Linked target is unavailable.') from None
             disconnected = self.publish(expected, new_record)
             return self.activate_linked(disconnected, target)
+
+    def upgrade_linked_scope(
+        self, expected: ModeView, target: LinkedUploadTarget,
+    ) -> ModeView:
+        """Atomically upgrade scope while preserving the selected live gallery.
+
+        Args:
+            expected (ModeView): Exact active linked mode before browser consent.
+            target (LinkedUploadTarget): Freshly verified same-account/gallery grant.
+        Returns:
+            ModeView: New active mode generation with the approved scope.
+        Raises:
+            ModeCoordinatorError: Mode, target, session or admitted work changed.
+        """
+        with self._gate:
+            previous = self._evidence
+            old = expected.record
+            if (not self._healthy or previous is None
+                    or expected is not self._admission.view()
+                    or expected.state != 'linked_active' or old is None
+                    or old.mode != 'linked'
+                    or type(target) is not LinkedUploadTarget
+                    or (old.issuer, old.account_id, old.gallery_id)
+                    != (target.issuer, target.user_id, target.gallery_id)
+                    or not target.session.matches_issuer(target.issuer)
+                    or not target.session.can_upload()
+                    or not target.session.available()
+                    or target.session.approved_scope() == old.scope):
+                raise ModeCoordinatorError('Linked target changed.')
+            try:
+                path_hash = profile_path_digest(previous.path)
+                updated = ModeRecord(
+                    old.profile_id, secrets.token_hex(16), 'linked', path_hash,
+                    target.issuer, target.user_id,
+                    target.session.approved_scope(), target.gallery_id,
+                )
+                encode_mode_record(updated)
+            except (TypeError, ValueError):
+                raise ModeCoordinatorError('Linked target could not be upgraded safely.') from None
+            return self.publish(expected, updated, activate_target=target)
 
     def select_legacy(self, expected: ModeView) -> ModeView:
         """Explicitly return from linked mode without replacing the saved key.
@@ -1011,6 +1088,32 @@ class GuiModeOwner:
                     raise ModeCoordinatorError('Saved upload target changed during recovery.')
             try:
                 self._view = self._coordinator.select_linked(self._view, target)
+                return self._view
+            except Exception:
+                try:
+                    self._view = self._coordinator.view()
+                except ModeCoordinatorError:
+                    self._view = None
+                raise
+
+    def upgrade_linked_scope(
+        self, target: LinkedUploadTarget, *, expected: ModeView,
+    ) -> ModeView:
+        """Publish a verified scope change for the exact active gallery.
+
+        Args:
+            target (LinkedUploadTarget): Fresh grant for the selected account/gallery.
+            expected (ModeView): Exact mode view captured before Admin approval.
+        Returns:
+            ModeView: New active owner-issued view after the mode transaction.
+        Raises:
+            ModeCoordinatorError: Owner or active target changed or work is admitted.
+        """
+        with self._lock:
+            if self._coordinator is None or self._view is not expected:
+                raise ModeCoordinatorError('Upload mode is unavailable.')
+            try:
+                self._view = self._coordinator.upgrade_linked_scope(expected, target)
                 return self._view
             except Exception:
                 try:

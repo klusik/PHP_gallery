@@ -15,7 +15,7 @@ from types import TracebackType
 from typing import Literal
 from unittest.mock import Mock
 
-from uploader.app_linking import LinkingSession, UPLOAD_SCOPE
+from uploader.app_linking import ADMIN_MEDIA_SCOPE_SUFFIX, LinkingSession, UPLOAD_SCOPE
 from uploader.config_snapshot import ConfigSnapshot
 from uploader.linked_upload import LinkedUploadTarget
 from uploader.mode_coordinator import GuiModeOwner, ModeCoordinator, ModeCoordinatorError
@@ -1047,6 +1047,70 @@ class ModeCoordinatorTests(unittest.TestCase):
             with self.assertRaises(ModeCoordinatorError):
                 owner.select_legacy()
         self.assertEqual(linked.record, self.vault.record)
+
+    def test_linked_scope_upgrade_keeps_exact_active_gallery_and_durable_record(self) -> None:
+        """Publish Admin consent only after the original linked lease is idle.
+
+        Returns:
+            None: A foreign gallery, expired consent, and active work preserve
+                the original files. The exact approved gallery reconnects after restart.
+        """
+        self.vault.record = self.record
+        self.config.anchor = encode_mode_record(self.record)
+        previous = Mock(spec=LinkingSession)
+        previous.matches_issuer.return_value = True
+        previous.can_upload.return_value = True
+        previous.available.return_value = True
+        previous.approved_scope.return_value = UPLOAD_SCOPE
+        old_target = LinkedUploadTarget(previous, 'https://gallery.example', 7, 9, 'Gallery')
+        owner = GuiModeOwner(self.config, lambda: self.vault)
+        owner.initialize()
+        active = owner.select_linked(old_target)
+
+        approved = Mock(spec=LinkingSession)
+        approved.available.return_value = True
+        approved.matches_issuer.return_value = True
+        approved.can_upload.return_value = True
+        approved.can_read_admin_media.return_value = True
+        approved.approved_scope.return_value = UPLOAD_SCOPE + ADMIN_MEDIA_SCOPE_SUFFIX
+        target = replace(old_target, session=approved)
+
+        with owner.acquire('linked', self.config):
+            with self.assertRaises(ModeCoordinatorError):
+                owner.upgrade_linked_scope(target, expected=active)
+        with self.assertRaises(ModeCoordinatorError):
+            owner.upgrade_linked_scope(replace(target, gallery_id=10), expected=active)
+        approved.available.return_value = False
+        with self.assertRaises(ModeCoordinatorError):
+            owner.upgrade_linked_scope(target, expected=active)
+        self.assertIs(active, owner.view())
+        self.assertEqual(self.record, self.vault.record)
+        self.assertEqual(encode_mode_record(self.record), self.config.anchor)
+        self.assertEqual(0, self.vault.writes)
+
+        approved.available.return_value = True
+        upgraded = owner.upgrade_linked_scope(target, expected=active)
+        self.assertEqual('linked_active', upgraded.state)
+        self.assertIsNotNone(upgraded.record)
+        assert upgraded.record is not None
+        self.assertEqual(approved.approved_scope.return_value, upgraded.record.scope)
+        self.assertNotEqual(self.record.generation, upgraded.record.generation)
+        self.assertEqual(self.record, replace(
+            upgraded.record, generation=self.record.generation, scope=self.record.scope,
+        ))
+        self.assertEqual(upgraded.record, self.vault.record)
+        self.assertEqual(encode_mode_record(upgraded.record), self.config.anchor)
+        self.assertEqual(1, self.vault.writes)
+        with self.assertRaises(ModeCoordinatorError):
+            owner.upgrade_linked_scope(target, expected=active)
+        with owner.acquire('linked', self.config):
+            pass
+
+        restored = GuiModeOwner(self.config, lambda: self.vault)
+        restored.initialize()
+        self.assertEqual('linked_disconnected', restored.view().state)
+        self.assertEqual(upgraded.record, restored.select_linked(target).record)
+        self.assertEqual(1, self.vault.writes)
 
     def test_explicit_legacy_fallback_never_occurred_during_restart(self) -> None:
         """Preserve disconnected linked mode when no local grant is available.

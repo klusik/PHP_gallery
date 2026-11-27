@@ -822,6 +822,9 @@ msgstr "Die Quelle wird geprüft. Die App berechnet Datei-Hashes, prüft Medienf
 msgid "Install local AI module"
 msgstr "Lokales KI-Modul installieren"
 
+msgid "Optional local AI module dependency installation finished successfully. Restart the app before running the Transformers backend for the first time."
+msgstr "Die Abhängigkeiten für das optionale lokale KI-Modul wurden installiert. Starten Sie die App neu, bevor Sie das Transformers-Backend zum ersten Mal verwenden."
+
 msgid "Installed Windows app only. This switch saves immediately."
 msgstr "Nur für die installierte Windows-App. Diese Einstellung wird sofort gespeichert."
 
@@ -1161,11 +1164,17 @@ msgstr "Bereit für Uploads"
 msgid "Ready when you are"
 msgstr "Bereit"
 
+msgid "Reapprove saved link"
+msgstr "Gespeicherte Verknüpfung erneut genehmigen"
+
 msgid "Recent events"
 msgstr "Letzte Ereignisse"
 
 msgid "Reconnect and verify the created gallery first."
 msgstr "Verbinden Sie sich zuerst erneut und prüfen Sie die erstellte Galerie."
+
+msgid "Resume Watcher"
+msgstr "Watcher fortsetzen"
 
 msgid "Reconnect saved link"
 msgstr "Gespeicherte Verknüpfung wiederherstellen"
@@ -1265,6 +1274,9 @@ msgstr "Ursprüngliche Erstellung fortsetzen"
 
 msgid "Resume the paused import"
 msgstr "Angehaltenen Import fortsetzen"
+
+msgid "Retry"
+msgstr "Erneut versuchen"
 
 msgid "Retry failed"
 msgstr "Fehlgeschlagene Vorgänge wiederholen"
@@ -1890,6 +1902,9 @@ msgstr "Ordnerüberwachung läuft noch"
 msgid "WATCHER PREFERENCES"
 msgstr "EINSTELLUNGEN DER ORDNERÜBERWACHUNG"
 
+msgid "Watcher preparation started."
+msgstr "Die Vorbereitung der Ordnerüberwachung wurde gestartet."
+
 msgid "Watcher remains open"
 msgstr "Ordnerüberwachung bleibt geöffnet"
 
@@ -2231,3 +2246,220 @@ msgstr "Die eigenständige Installation kann keine Python-Pakete installieren. V
 
 msgid "Bundled dependencies"
 msgstr "Mitgelieferte Pakete"
+
+msgid "AI"
+msgstr "KI"
+
+msgid "Active backend: {backend}"
+msgstr "Aktives Backend: {backend}"
+
+msgid "Cancel pending change"
+msgstr "Ausstehende Änderung verwerfen"
+
+msgid "Checking for updates…"
+msgstr "Suche nach Updates…"
+
+msgid "Could not check for updates."
+msgstr "Die Suche nach Updates ist fehlgeschlagen."
+
+msgid "Could not save the GUI backend."
+msgstr "Das GUI-Backend konnte nicht gespeichert werden."
+
+msgid "Diagnostics copied."
+msgstr "Diagnose kopiert."
+
+msgid "Disconnect"
+msgstr "Trennen"
+
+msgid "GUI backend"
+msgstr "GUI-Backend"
+
+msgid "GUI backend settings…"
+msgstr "GUI-Backend-Einstellungen…"
+
+msgid "Gallery"
+msgstr "Galerie"
+
+msgid "Gallery connection is unavailable."
+msgstr "Die Galerieverbindung ist nicht verfügbar."
+
+msgid "Interface"
+msgstr "Oberfläche"
+
+msgid "Link a gallery or open local photos."
+msgstr "Verbinden Sie eine Galerie oder öffnen Sie lokale Fotos."
+
+msgid "Loading photos…"
+msgstr "Fotos werden geladen…"
+
+msgid "Loading photo…"
+msgstr "Foto wird geladen…"
+
+msgid "No galleries found."
+msgstr "Keine Galerien gefunden."
+
+msgid "No photos found."
+msgstr "Keine Fotos gefunden."
+
+msgid "No saved PDFs for this flight."
+msgstr "Für diesen Flug sind keine PDFs gespeichert."
+
+msgid "No saved records."
+msgstr "Keine gespeicherten Einträge."
+
+msgid "Open local photos"
+msgstr "Lokale Fotos öffnen"
+
+msgid "Open saved PDF"
+msgstr "Gespeichertes PDF öffnen"
+
+msgid "Photo card format"
+msgstr "Fotokartenformat"
+
+msgid "Photo could not be loaded."
+msgstr "Das Foto konnte nicht geladen werden."
+
+msgid "Photos loading progress"
+msgstr "Fortschritt beim Laden von Fotos"
+
+msgid "PySide6 / Qt 6 (highly experimental)"
+msgstr "PySide6 / Qt 6 (stark experimentell)"
+
+msgid "Qt dependencies could not load. WinApp opened with Tkinter. Install the optional Qt requirements for this Python and retry in Settings."
+msgstr "Die Qt-Abhängigkeiten konnten nicht geladen werden. WinApp wurde mit Tkinter geöffnet. Installieren Sie die optionalen Qt-Pakete für dieses Python und versuchen Sie es erneut in den Einstellungen."
+
+msgid "Qt did not become ready. WinApp opened with Tkinter. Review the WinApp log and retry or cancel the change in Settings."
+msgstr "Qt wurde nicht einsatzbereit. WinApp wurde mit Tkinter geöffnet. Prüfen Sie das WinApp-Protokoll und wiederholen oder verwerfen Sie die Änderung in den Einstellungen."
+
+msgid "Qt is available in the source launcher with the optional Qt requirements."
+msgstr "Qt ist beim Start aus dem Quellcode mit den optionalen Qt-Paketen verfügbar."
+
+msgid "Refresh"
+msgstr "Aktualisieren"
+
+msgid "Reports"
+msgstr "Berichte"
+
+msgid "Restart required for {backend}."
+msgstr "Für {backend} ist ein Neustart erforderlich."
+
+msgid "Saved history could not be read."
+msgstr "Der gespeicherte Verlauf konnte nicht gelesen werden."
+
+msgid "Saved reports could not be read."
+msgstr "Die gespeicherten Berichte konnten nicht gelesen werden."
+
+msgid "Select a saved flight."
+msgstr "Wählen Sie einen gespeicherten Flug aus."
+
+msgid "Some photos could not be loaded. Use Refresh to retry."
+msgstr "Einige Fotos konnten nicht geladen werden. Wählen Sie Aktualisieren, um es erneut zu versuchen."
+
+msgid "Link for uploads"
+msgstr "Für Uploads verknüpfen"
+
+msgid "Select upload gallery"
+msgstr "Upload-Galerie auswählen"
+
+msgid "Edit gallery"
+msgstr "Galerie bearbeiten"
+
+msgid "Root gallery"
+msgstr "Galerie auf oberster Ebene"
+
+msgid "Parent gallery"
+msgstr "Übergeordnete Galerie"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Description"
+msgstr "Beschreibung"
+
+msgid "NSFW"
+msgstr "Sensible Inhalte"
+
+msgid "Visibility"
+msgstr "Sichtbarkeit"
+
+msgid "Public"
+msgstr "Öffentlich"
+
+msgid "Private"
+msgstr "Privat"
+
+msgid "Unpublished"
+msgstr "Unveröffentlicht"
+
+msgid "Gallery created."
+msgstr "Galerie wurde erstellt."
+
+msgid "Gallery changes saved."
+msgstr "Galerieänderungen gespeichert."
+
+msgid "Configuration saved."
+msgstr "Konfiguration gespeichert."
+
+msgid "Download update"
+msgstr "Update herunterladen"
+
+msgid "Install update"
+msgstr "Update installieren"
+
+
+msgid "The GUI backend was saved. Restart WinApp now to apply it?"
+msgstr "Das GUI-Backend wurde gespeichert. WinApp jetzt neu starten, um es zu übernehmen?"
+
+msgid "Tkinter / ttk (stable, default)"
+msgstr "Tkinter / ttk (stabil, Standard)"
+
+msgid "Update available: {version}"
+msgstr "Update verfügbar: {version}"
+
+msgid "WinApp is up to date."
+msgstr "WinApp ist auf dem neuesten Stand."
+
+msgid "WinApp opened with Tkinter to finish the update continuation."
+msgstr "WinApp wurde mit Tkinter geöffnet, um die Wiederaufnahme nach dem Update abzuschließen."
+
+msgid "WinApp opened with Tkinter to keep pending work available. Review Watcher, Activity and Flight before switching to Qt."
+msgstr "WinApp wurde mit Tkinter geöffnet, damit ausstehende Arbeit verfügbar bleibt. Prüfen Sie Watcher, Aktivität und Flüge vor dem Wechsel zu Qt."
+
+msgid "Finish the current work in Tkinter before switching to Qt."
+msgstr "Schließen Sie die laufende Arbeit in Tkinter ab, bevor Sie zu Qt wechseln."
+
+msgid "Use a GUI backend for this launch only."
+msgstr "Ein GUI-Backend nur für diesen Start verwenden."
+
+msgid "API key entered but not saved."
+msgstr "Der API-Schlüssel wurde eingegeben und muss noch gespeichert werden."
+
+msgid "Gallery connection could not be changed."
+msgstr "Die Galerieverbindung konnte nicht geändert werden."
+
+msgid "Disconnect gallery"
+msgstr "Galerie trennen"
+
+msgid "A linked gallery connection is selected."
+msgstr "Eine verknüpfte Galerieverbindung ist ausgewählt."
+
+msgid "Start Watcher"
+msgstr "Watcher starten"
+
+msgid "The saved API-key connection is selected."
+msgstr "Die gespeicherte API-Schlüssel-Verbindung ist ausgewählt."
+
+msgid "Local photos"
+msgstr "Lokale Fotos"
+
+msgid "Enable the AI worker in Settings and verify the saved gallery connection."
+msgstr "Aktivieren Sie den KI-Worker in den Einstellungen und prüfen Sie die gespeicherte Galerieverbindung."
+
+msgid "Select a gallery connection to start an import."
+msgstr "Wählen Sie eine Galerieverbindung aus, um den Import zu starten."
+
+msgid "No watched folder selected."
+msgstr "Kein überwachter Ordner ausgewählt."
+
+msgid "Continue"
+msgstr "Fortsetzen"

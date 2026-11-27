@@ -10,7 +10,9 @@
 # License: MIT License (see LICENSE file in repository)
 """Exercise the refresh protocol with in-memory vault and mutex doubles."""
 
+import ctypes
 import os
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,6 +20,7 @@ from types import TracebackType
 from unittest.mock import MagicMock, patch
 
 from uploader import credential_store as credentials
+from uploader import session_resume
 
 
 class _Vault:
@@ -361,6 +364,258 @@ class CredentialProcessMutexTests(unittest.TestCase):
 
 class KeychainRefreshFenceTests(unittest.TestCase):
     """Exercise the native profile lock with an isolated Keychain boundary."""
+
+    def test_noninteractive_keychain_call_restores_prior_policy(self) -> None:
+        """Restore enabled Keychain UI after an unavailable item operation.
+
+        Returns:
+            None: The native selector/status declarations are typed and the
+                previous process interaction policy is restored after refusal.
+        """
+        security = MagicMock()
+        events: list[tuple[str, int]] = []
+
+        def get_allowed(pointer: ctypes.POINTER(ctypes.c_uint8)) -> int:
+            """Return an enabled prior state through the native out pointer.
+
+            Args:
+                pointer (ctypes.POINTER(ctypes.c_uint8)): Security API result.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint8)).contents.value = (
+                session_resume._KEYCHAIN_INTERACTION_ENABLED
+            )
+            events.append(('get', session_resume._KEYCHAIN_INTERACTION_ENABLED))
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        def set_allowed(value: int) -> int:
+            """Record one temporary or restored native policy value.
+
+            Args:
+                value (int): Boolean value passed to Security.framework.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            events.append(('set', value))
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        security.SecKeychainGetUserInteractionAllowed.side_effect = get_allowed
+        security.SecKeychainSetUserInteractionAllowed.side_effect = set_allowed
+
+        def refuse_operation() -> int:
+            """Record an operation refused without authentication UI.
+
+            Returns:
+                int: Native interaction-not-allowed OSStatus.
+            """
+            events.append(('operation', session_resume._KEYCHAIN_STATUS_SUCCESS))
+            return session_resume._KEYCHAIN_ERR_INTERACTION_NOT_ALLOWED
+
+        with self.assertRaises(session_resume.KeychainAccessUnavailable):
+            session_resume._run_keychain_without_ui(security, refuse_operation)
+        self.assertEqual([
+            ('get', session_resume._KEYCHAIN_INTERACTION_ENABLED),
+            ('set', session_resume._KEYCHAIN_INTERACTION_DISABLED),
+            ('operation', session_resume._KEYCHAIN_STATUS_SUCCESS),
+            ('set', session_resume._KEYCHAIN_INTERACTION_ENABLED),
+        ], events)
+        self.assertEqual(
+            [ctypes.POINTER(ctypes.c_uint8)],
+            security.SecKeychainGetUserInteractionAllowed.argtypes,
+        )
+        self.assertEqual(ctypes.c_int32,
+                         security.SecKeychainGetUserInteractionAllowed.restype)
+        self.assertEqual([ctypes.c_uint8],
+                         security.SecKeychainSetUserInteractionAllowed.argtypes)
+        self.assertEqual(ctypes.c_int32,
+                         security.SecKeychainSetUserInteractionAllowed.restype)
+
+    def test_noninteractive_keychain_call_restores_after_exception(self) -> None:
+        """Restore enabled Keychain UI even when the protected call raises.
+
+        Returns:
+            None: The operation exception propagates after restoring prior state.
+        """
+        security = MagicMock()
+        events: list[int] = []
+
+        def get_allowed(pointer: ctypes.POINTER(ctypes.c_uint8)) -> int:
+            """Set the fake prior interaction policy to enabled.
+
+            Args:
+                pointer (ctypes.POINTER(ctypes.c_uint8)): Native state output.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint8)).contents.value = (
+                session_resume._KEYCHAIN_INTERACTION_ENABLED
+            )
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        def set_allowed(value: int) -> int:
+            """Record a fake Security framework state transition.
+
+            Args:
+                value (int): Native interaction policy value.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            events.append(value)
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        security.SecKeychainGetUserInteractionAllowed.side_effect = get_allowed
+        security.SecKeychainSetUserInteractionAllowed.side_effect = set_allowed
+
+        def fail_operation() -> int:
+            """Raise a simulated non-Keychain operation error.
+
+            Returns:
+                int: No value; the fixture raises before returning.
+            """
+            raise ValueError('fixture operation failure')
+
+        with self.assertRaisesRegex(ValueError, 'fixture operation failure'):
+            session_resume._run_keychain_without_ui(security, fail_operation)
+        self.assertEqual([
+            session_resume._KEYCHAIN_INTERACTION_DISABLED,
+            session_resume._KEYCHAIN_INTERACTION_ENABLED,
+        ], events)
+
+    def test_default_keychain_admission_requires_unlock_and_write_bits(self) -> None:
+        """Check default Keychain status without creating or changing items.
+
+        Returns:
+            None: Admission requires unlocked and writable status flags and
+                releases the copied Keychain reference on both outcomes.
+        """
+        security = MagicMock()
+        foundation = MagicMock()
+        required = (session_resume._KEYCHAIN_UNLOCKED_STATUS
+                    | session_resume._KEYCHAIN_WRITE_PERMISSION_STATUS)
+
+        def copy_default(pointer: ctypes.POINTER(ctypes.c_void_p)) -> int:
+            """Return one synthetic owned default Keychain reference.
+
+            Args:
+                pointer (ctypes.POINTER(ctypes.c_void_p)): Native output handle.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p)).contents.value = 7
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        def get_status(
+            _keychain: ctypes.c_void_p,
+            pointer: ctypes.POINTER(ctypes.c_uint32),
+        ) -> int:
+            """Return synthetic unlocked and writable status flags.
+
+            Args:
+                _keychain (ctypes.c_void_p): Synthetic native reference.
+                pointer (ctypes.POINTER(ctypes.c_uint32)): Status output.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint32)).contents.value = (
+                required
+            )
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        security.SecKeychainCopyDefault.side_effect = copy_default
+        security.SecKeychainGetStatus.side_effect = get_status
+
+        def interaction_disabled(
+            pointer: ctypes.POINTER(ctypes.c_uint8),
+        ) -> int:
+            """Report an already-disabled fake interaction policy.
+
+            Args:
+                pointer (ctypes.POINTER(ctypes.c_uint8)): Native state output.
+
+            Returns:
+                int: Success OSStatus.
+            """
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint8)).contents.value = (
+                session_resume._KEYCHAIN_INTERACTION_DISABLED
+            )
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        security.SecKeychainGetUserInteractionAllowed.side_effect = interaction_disabled
+        with patch.object(
+            session_resume, '_keychain', return_value=(security, foundation),
+        ):
+            self.assertTrue(session_resume.default_keychain_write_available())
+            foundation.CFRelease.assert_called_once()
+            foundation.CFRelease.reset_mock()
+
+            def locked_status(
+                _keychain: ctypes.c_void_p,
+                pointer: ctypes.POINTER(ctypes.c_uint32),
+            ) -> int:
+                """Return a keychain status without the unlocked bit.
+
+                Args:
+                    _keychain (ctypes.c_void_p): Synthetic native reference.
+                    pointer (ctypes.POINTER(ctypes.c_uint32)): Status output.
+
+                Returns:
+                    int: Success OSStatus.
+                """
+                flags = required & ~session_resume._KEYCHAIN_UNLOCKED_STATUS
+                ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint32)).contents.value = flags
+                return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+            security.SecKeychainGetStatus.side_effect = locked_status
+            self.assertFalse(session_resume.default_keychain_write_available())
+            foundation.CFRelease.assert_called_once()
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Native Keychain test requires macOS.')
+    def test_native_interaction_policy_is_restored_without_item_access(self) -> None:
+        """Exercise the native guard without selecting or changing a Keychain item.
+
+        Returns:
+            None: Security.framework reports the same interaction policy after
+                a no-op guarded call as it did before the call.
+        """
+        security, _foundation = session_resume._keychain()
+        allowed = ctypes.c_uint8()
+        getter = security.SecKeychainGetUserInteractionAllowed
+        getter.argtypes = [ctypes.POINTER(ctypes.c_uint8)]
+        getter.restype = ctypes.c_int32
+        self.assertEqual(session_resume._KEYCHAIN_STATUS_SUCCESS,
+                         getter(ctypes.byref(allowed)))
+        previous = allowed.value
+
+        def verify_disabled() -> int:
+            """Observe disabled interaction during the guarded native call.
+
+            Returns:
+                int: Success OSStatus after the disabled-state assertion.
+            """
+            during = ctypes.c_uint8()
+            self.assertEqual(
+                session_resume._KEYCHAIN_STATUS_SUCCESS,
+                getter(ctypes.byref(during)),
+            )
+            self.assertEqual(session_resume._KEYCHAIN_INTERACTION_DISABLED,
+                             during.value)
+            return session_resume._KEYCHAIN_STATUS_SUCCESS
+
+        self.assertEqual(
+            session_resume._KEYCHAIN_STATUS_SUCCESS,
+            session_resume._run_keychain_without_ui(security, verify_disabled),
+        )
+        restored = ctypes.c_uint8()
+        self.assertEqual(session_resume._KEYCHAIN_STATUS_SUCCESS,
+                         getter(ctypes.byref(restored)))
+        self.assertEqual(previous, restored.value)
 
     @unittest.skipUnless(os.name == 'posix', 'Keychain adapter uses POSIX flock.')
     def test_pending_marker_survives_lock_release_and_store_reopen(self) -> None:

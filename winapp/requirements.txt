@@ -1,7 +1,11 @@
-Pillow>=10.0
-pystray>=0.19.5
-reportlab==5.0.1
-pypdf>=6.0
-polib>=1.2,<2
-pyobjc-framework-Cocoa>=11.0; sys_platform == "darwin"
-pyobjc-framework-Quartz>=11.0; sys_platform == "darwin"
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/requirements.txt
+# Module Type: Complete source runtime requirements
+# Purpose: Install the common application and both desktop backends.
+# Responsibilities: Include shared core dependencies and optional Qt wheels.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+-r requirements-core.txt
+-r requirements-qt.txt

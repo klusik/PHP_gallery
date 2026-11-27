@@ -35,13 +35,18 @@ PRESENCE_POLL_SECONDS = 3.0
 class GamePresence(threading.Thread):
     """Cache optional game wording with SimConnect taking absolute precedence."""
 
-    def __init__(self, dll_path: Callable[[], str], profile: Path) -> None:
+    def __init__(
+        self, dll_path: Callable[[], str], profile: Path, *,
+        active_by_default: bool = True,
+    ) -> None:
         """Prepare an idle observer using the current saved DLL override.
 
         Args:
             dll_path (Callable[[], str]): Return the saved SimConnect DLL path;
                 an empty string uses the existing runtime discovery policy.
             profile (Path): Uploader profile with optional game-contexts.json.
+            active_by_default (bool): Preserve always-observing Tk behavior, or
+                require explicit visible-context demand from another frontend.
         Returns:
             None: Initializes an unavailable cache without native work.
         """
@@ -51,6 +56,11 @@ class GamePresence(threading.Thread):
         self.available = False
         self.context: GameContext | None = None
         self.cancelled = threading.Event()
+        self._active = threading.Event()
+        if active_by_default:
+            self._active.set()
+        self._wake = threading.Event()
+        self._context_lock = threading.Lock()
 
     def probe(self) -> bool:
         """Probe only a running MSFS 2020/2024 without requesting simulator data.
@@ -101,23 +111,65 @@ class GamePresence(threading.Thread):
                 Tk or network access, and clears state after cancellation.
         """
         try:
-            catalog = GameCatalog(self.profile)
+            catalog: GameCatalog | None = None
             while not self.cancelled.is_set():
-                available = self.probe()
-                context = None if available else catalog.detect(
-                    current_user_game_processes(catalog.process_names)
-                )
-                # Publish one context snapshot so a Tk refresh never combines
-                # a new presence result with the previous game's phrases.
-                self.context = (
-                    GameContext("simconnect", "Flight Simulator", "flight")
-                    if available else context
-                )
-                self.available = available
-                self.cancelled.wait(PRESENCE_POLL_SECONDS)
+                self._wake.clear()
+                if self.cancelled.is_set():
+                    break
+                if self._active.is_set():
+                    if catalog is None:
+                        catalog = GameCatalog(self.profile)
+                    available = self.probe()
+                    if self._active.is_set():
+                        context = None if available else catalog.detect(
+                            current_user_game_processes(catalog.process_names)
+                        )
+                    else:
+                        context = None
+                        available = False
+                    if self._active.is_set():
+                        self._publish_context(
+                            GameContext("simconnect", "Flight Simulator", "flight")
+                            if available else context,
+                            available,
+                        )
+                else:
+                    self._publish_context(None, False)
+                self._wake.wait(PRESENCE_POLL_SECONDS if self._active.is_set() else None)
         finally:
-            self.available = False
-            self.context = None
+            self._publish_context(None, False)
+
+    def _publish_context(self, context: GameContext | None, available: bool) -> None:
+        """Publish one consistent context without crossing into a toolkit.
+
+        Args:
+            context (GameContext | None): Current detected game or no context.
+            available (bool): Whether SimConnect presence took precedence.
+        Returns:
+            None: Readers observe the matching context and source flag together.
+        """
+        with self._context_lock:
+            if not self._active.is_set() or self.cancelled.is_set():
+                context, available = None, False
+            self.context = context
+            self.available = available
+
+    def set_active(self, active: bool) -> None:
+        """Demand or suspend observer work from a frontend visibility owner.
+
+        Args:
+            active (bool): True only while its interactive context is visible.
+        Returns:
+            None: Wakes the observer and clears stale context immediately on hide.
+        """
+        if self._active.is_set() is active:
+            return
+        if active:
+            self._active.set()
+        else:
+            self._active.clear()
+            self._publish_context(None, False)
+        self._wake.set()
 
     def action_label(self, action: str, language: str) -> str:
         """Read one cached localized label without native or filesystem work.
@@ -129,7 +181,8 @@ class GamePresence(threading.Thread):
             str: Contextual label, or the ordinary general game label when
                 detection is unavailable, unknown or ambiguous.
         """
-        context = self.context
+        with self._context_lock:
+            context = self.context
         return context.label(action, language) if context else tr(
             language, action + "_game"
         )
@@ -142,7 +195,8 @@ class GamePresence(threading.Thread):
             bool: True only for a cached flight context; unknown, ambiguous
                 and ordinary game contexts return False without native work.
         """
-        context = self.context
+        with self._context_lock:
+            context = self.context
         return context is not None and context.activity == "flight"
 
     def text(self, key: str, language: str) -> str:
@@ -172,3 +226,4 @@ class GamePresence(threading.Thread):
             None: Requests cancellation of this optional daemon observer.
         """
         self.cancelled.set()
+        self._wake.set()

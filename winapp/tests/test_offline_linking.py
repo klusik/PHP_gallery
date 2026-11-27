@@ -284,6 +284,49 @@ class OfflineLinkingTests(unittest.TestCase):
         ))
         self.assertIsNone(self.store.record)
 
+    def test_native_unavailability_is_distinct_only_before_the_refresh_fence(self) -> None:
+        """Allow temporary browser consent only when the native read failed safely.
+
+        Returns:
+            None: A denied read never calls the server. The same error during
+                replacement leaves the old access fenced and reports uncertainty.
+        """
+        original = self.store.record
+        with (
+            patch.object(_Transaction, 'read_current',
+                         side_effect=credentials.CredentialStoreUnavailable),
+            patch.object(offline, '_request_json') as send,
+        ):
+            with self.assertRaises(credentials.CredentialStoreUnavailable):
+                self._rotate()
+            send.assert_not_called()
+        self.assertEqual(original, self.store.record)
+        self.assertFalse(self.store.pending)
+
+        with (
+            patch.object(_Transaction, 'read_current', return_value=None),
+            patch.object(offline, '_request_json') as send,
+        ):
+            with self.assertRaises(credentials.CredentialStoreUnavailable):
+                self._rotate()
+            send.assert_not_called()
+        self.assertFalse(self.store.pending)
+
+        with (
+            patch.object(_Transaction, 'commit_rotated',
+                         side_effect=credentials.CredentialStoreUnavailable),
+            patch.object(offline, '_request_json',
+                         side_effect=[self.response, self.identity]) as send,
+        ):
+            with self.assertRaises(offline.OfflineLinkingError):
+                self._rotate()
+        self.assertEqual(
+            ['app_linking_token', 'app_linking_identity'],
+            [call.args[1] for call in send.call_args_list],
+        )
+        self.assertEqual(original, self.store.record)
+        self.assertTrue(self.store.pending)
+
     def test_invalid_responses_and_identity_leave_fence(self) -> None:
         """Reject scope, expiry, credential and account mismatches.
 

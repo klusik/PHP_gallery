@@ -216,6 +216,11 @@ uploaded.clear();mode='concurrent';assert.equal(fillDraftAssets(record,completio
 published=true;const before=uploadCount;assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/published/);assert.equal(uploadCount,before);published=false;
 uploaded.clear();add('production.zip',Buffer.from('conflicting original'));assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/conflicting/);assert.equal(uploadCount,before);
 uploaded.clear();add('production.zip',loaded.get('production.zip'));add('production.zip',loaded.get('production.zip'));assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/duplicate/);
+uploaded.clear();
+add('PHPGalleryUploader-1.2.3-Qt-Setup.exe',Buffer.from('retired public flavor'));
+const beforeRetiredFlavor=uploadCount;
+assert.throws(()=>fillDraftAssets(record,completion,7,loaded,adapters),/retired public Qt installer flavor/);
+assert.equal(uploadCount,beforeRetiredFlavor,'A draft with a public Qt flavor is refused before any upload.');
 
 uploaded.clear();let transientCalls=0;delays.length=0;
 const retryAdapters={...adapters,pause:milliseconds=>delays.push(milliseconds),upload:(repo,id,name,bytes)=>{

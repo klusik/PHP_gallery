@@ -106,7 +106,7 @@ _SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
 # Consumers: safe_photos_error_site. Rationale: Never expose arbitrary paths.
 _SAFE_PHOTOS_SOURCE_FILES = frozenset({
     "native_gallery_viewer.py", "app_linking.py", "photos_workspace.py",
-    "gallery_preload.py",
+    "gallery_preload.py", "qt_photos.py",
 })
 
 # Purpose: Keep exception classes to concrete labels used by Photos owners.

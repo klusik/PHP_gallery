@@ -1,2 +1,15 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/requirements-build.txt
+# Module Type: Frozen build requirements
+# Purpose: Install the complete application and pinned PyInstaller builder.
+# Responsibilities: Provide one reproducible input for the common onedir build.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
 -r requirements.txt
-PyInstaller>=6.19,<7
+# Collect Tcl/Tk 9 DLLs with embedded library scripts on Windows.
+# Type: package version requirement. Units: semantic version. Scope: build tool.
+# Consumers: build_installer.py preflight and PyInstaller onedir builder.
+# Rationale: preserve the exact qualified frozen build implementation.
+PyInstaller==6.22.3

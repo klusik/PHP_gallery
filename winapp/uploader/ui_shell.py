@@ -8,26 +8,16 @@
 # License: MIT License (see LICENSE file in repository)
 """Embedded window and prompt adapters for the uploader's Tk root."""
 
+import logging
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import Callable
 
 from uploader.localization import gettext
+from uploader.ui_layout import DESKTOP_DIALOG_MARGIN, DESKTOP_DIALOG_SIZE
 from uploader.ui_theme import (
     Button, DialogSurface, ModalScrim, RaisedDialogSurface, _PALETTE, icon_button,
 )
-
-# Purpose: Keep the root visible around embedded dialogs at supported sizes.
-# Type: int. Units: Tk pixels per edge. Scope: active modal placement.
-# Consumers: EmbeddedWindow._fit.
-# Rationale: 20 px leaves context even at the 840 by 500 application minimum.
-_DIALOG_MARGIN = 20
-
-# Purpose: Give content-heavy dialogs room for their existing scroll controls.
-# Type: tuple[int, int]. Units: Tk pixels. Scope: preferred dialog size.
-# Consumers: EmbeddedWindow. Rationale: 900 by 620 accommodates file pickers,
-# reports and diagnostics while preserving margins on a narrow root.
-_DIALOG_SIZE = (900, 620)
 
 # Purpose: Center questions and text-entry prompts in a compact card.
 # Type: tuple[int, int]. Units: Tk pixels. Scope: one synchronous prompt.
@@ -254,8 +244,8 @@ def _render_notice(root: tk.Tk) -> None:
     text.grid(row=1, column=0, sticky="ew", pady=(6, 0))
     scroll.grid(row=1, column=1, sticky="ns", pady=(6, 0))
     strip.place(
-        relx=0.5, rely=1, relwidth=1, width=-2 * _DIALOG_MARGIN,
-        y=-_DIALOG_MARGIN, anchor="s",
+        relx=0.5, rely=1, relwidth=1, width=-2 * DESKTOP_DIALOG_MARGIN,
+        y=-DESKTOP_DIALOG_MARGIN, anchor="s",
     )
     strip.lift()
     root._embedded_notice_widget = strip
@@ -269,7 +259,7 @@ class EmbeddedWindow(DialogSurface):
     """
 
     def __init__(
-        self, parent: tk.Misc, *, size: tuple[int, int] = _DIALOG_SIZE,
+        self, parent: tk.Misc, *, size: tuple[int, int] = DESKTOP_DIALOG_SIZE,
     ) -> None:
         """Create and display a stacked panel owned by the root.
 
@@ -319,8 +309,10 @@ class EmbeddedWindow(DialogSurface):
                 both dimensions, including after a root resize.
         """
         root = self.winfo_toplevel()
-        width = max(1, min(self._preferred_size[0], root.winfo_width() - 2 * _DIALOG_MARGIN))
-        height = max(1, min(self._preferred_size[1], root.winfo_height() - 2 * _DIALOG_MARGIN))
+        available_width = root.winfo_width() - 2 * DESKTOP_DIALOG_MARGIN
+        available_height = root.winfo_height() - 2 * DESKTOP_DIALOG_MARGIN
+        width = max(1, min(self._preferred_size[0], available_width))
+        height = max(1, min(self._preferred_size[1], available_height))
         if (width, height) != self._placed_size:
             self._surface.place(
                 relx=0.5, rely=0.5, anchor="center", width=width, height=height,
@@ -735,7 +727,7 @@ def _prompt(
     title: str, message: str, parent: tk.Misc | None,
     buttons: tuple[tuple[str, str], ...], initial: str | None = None,
     minimum: int | None = None, maximum: int | None = None,
-    integer: bool = False, default: str = "no",
+    integer: bool = False, default: str = "no", accept_key: str = "",
 ) -> str | None:
     """Show a synchronous embedded prompt and return its selected value.
 
@@ -749,6 +741,7 @@ def _prompt(
         maximum (int | None): Maximum accepted integer, if applicable.
         integer (bool): Whether the entry requires an integer in range.
         default (str): Result token focused initially for keyboard activation.
+        accept_key (str): Optional Tk binding to the explicit Yes button.
     Returns:
         str | None: Selected token or entry text, or None on cancellation.
     """
@@ -848,7 +841,30 @@ def _prompt(
         entry.bind("<Return>", lambda _event: finish("value"))
     elif focused is not None:
         focused.focus_set()
-    panel.wait_variable(completed)
+    root = panel.winfo_toplevel()
+
+    def accept(_event: tk.Event) -> str | None:
+        """Activate the affirmative action only in this visible prompt.
+
+        Args:
+            _event (tk.Event): Explicit confirmation shortcut from the owner.
+        Returns:
+            str | None: Tk break marker after confirmation, otherwise None.
+        """
+        if active_panel(root) is panel:
+            finish("yes")
+            return "break"
+        return None
+
+    binding = root.bind(accept_key, accept, add="+") if accept_key else None
+    try:
+        if binding:
+            root.update_idletasks()
+            logging.info("Desktop restart confirmation ready; backend=tkinter")
+        panel.wait_variable(completed)
+    finally:
+        if binding and root.winfo_exists():
+            root.unbind(accept_key, binding)
     if temporary_root:
         try:
             owner.winfo_toplevel().destroy()
@@ -885,7 +901,7 @@ class _MessageBox:
             title (str): Question heading.
             message (str): Question text.
             parent (tk.Misc | None): Invoking widget, or the existing default root.
-            **_options (str): Default focus token and optional yes/no captions.
+            **_options (str): Default focus, optional captions and yes_shortcut binding.
         Returns:
             bool: True only when the user chooses Yes.
         """
@@ -895,6 +911,7 @@ class _MessageBox:
                 (_options.get("no_label") or gettext("No"), "no"),
             ),
             default=_options.get("default", "no"),
+            accept_key=_options.get("yes_shortcut", ""),
         ) == "yes"
 
     def askyesnocancel(self, title: str, message: str, parent: tk.Misc | None = None, **_options: str) -> bool | None:

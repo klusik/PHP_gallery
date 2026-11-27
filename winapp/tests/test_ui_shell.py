@@ -17,7 +17,6 @@ from tkinter import ttk
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from types import SimpleNamespace
 from unittest import mock
 from PIL import ImageGrab
 
@@ -27,6 +26,8 @@ if str(WINAPP_DIR) not in sys.path:
 
 import uploader.flight_ui as flight_ui
 
+from uploader.app_linking import LinkedGallery, LinkedGalleryPage, LinkingSession
+from uploader.app_linking_ui import LinkingManager
 from uploader.ui_shell import (
     EmbeddedWindow, active_panel, initialize_shell, messagebox, simpledialog,
 )
@@ -109,7 +110,11 @@ class EmbeddedShellTests(unittest.TestCase):
             self.root.after_cancel(self.deadline)
             if self.key_after_id is not None:
                 self.root.after_cancel(self.key_after_id)
+            # Break the fixture callback's cycle with this test case so the
+            # Tcl interpreter can be released on its owning thread.
+            del self.root.report_callback_exception
             self.root.destroy()
+            del self.root
             self.assertEqual(
                 (self.prompt_timed_out, self.callback_errors), (False, []),
                 'Dialog deadline or Tk callback failure: ' + self.key_observation,
@@ -132,6 +137,53 @@ class EmbeddedShellTests(unittest.TestCase):
         self.assertIs(first.grab_current(), first)
         first.destroy()
         self.assertIsNone(active_panel(self.root))
+
+    def test_linked_gallery_panels_render_themed_body(self) -> None:
+        """Map the gallery picker and link-management controls on the embedded host.
+
+        Returns:
+            None: Verifies both native bodies and a visible, unselected gallery row.
+        """
+        issuer = 'https://gallery.example.test'
+        with (
+            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch.object(LinkingManager, '_native_offline_store', return_value=None),
+        ):
+            manager = LinkingManager(self.root)
+            session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+            session.available.return_value = True
+            session.can_list_galleries.return_value = True
+            session.can_create_gallery.return_value = False
+            session.can_read_gallery_detail.return_value = False
+            session.can_change_gallery_visibility.return_value = False
+            session.can_upload.return_value = False
+            manager._session = session
+            manager._session_issuer = issuer
+            manager._session_user_id = 1  # The approved synthetic Admin.
+            gallery = LinkedGallery(7, None, 'Fixture gallery')
+            manager._gallery_page = LinkedGalleryPage((gallery,), None)
+            try:
+                manager.open(self.root, issuer)
+                self.root.update()
+                self.assertIs(active_panel(self.root), manager._window)
+                choice = manager._gallery_choice
+                self.assertTrue(choice.entry.winfo_viewable())
+                self.assertTrue(choice.results.winfo_viewable())
+                self.assertEqual(('0',), choice.results.get_children())
+                self.assertIn('Fixture gallery', choice.results.item('0', 'text'))
+                self.assertFalse(choice.results.selection())
+
+                manager._close_window()
+                manager.open(self.root, issuer, manage=True)
+                self.root.update()
+                self.assertIs(active_panel(self.root), manager._window)
+                canvas = manager._scroll.canvas
+                self.assertTrue(canvas.winfo_viewable())
+                background = ttk.Style(canvas).lookup('Card.TFrame', 'background')
+                self.assertEqual(canvas.cget('background'), background)
+                self.assertTrue(manager._browse_check.winfo_viewable())
+            finally:
+                manager.close()
 
     def capture_root(
         self, name: str, sample: tuple[int, int] = (8, 8),

@@ -38,6 +38,7 @@ from uploader.app_linking import (
     LinkingResponseError, LinkingSession, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
 )
 from uploader.flight_ui import FlightUI
+from uploader.flight_workflow import FinalizationWorker
 import uploader.flight_ui as FLIGHT_UI_MODULE
 from uploader.self_update import UpdateDiagnostic
 from uploader.linked_upload import LinkedUploadTarget, linked_target_binding
@@ -373,10 +374,11 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(event['payload']['automatic'])
         self.assertTrue(event['payload']['ordinary_restart'])
         self.assertEqual(record, event['payload']['continuation'])
-        self.assertTrue(inspect_marker(replace(record, phase='cancelled')).empty())
-        self.assertTrue(inspect_marker(replace(
-            record, update_session='e' * 32,
-        )).empty())
+        for unadmitted in (replace(record, phase='cancelled'),
+                           replace(record, update_session='e' * 32)):
+            events = inspect_marker(unadmitted)
+            self.assertEqual('watcher_resume_inspection_no_offer', events.get_nowait()['kind'])
+            self.assertTrue(events.empty())
         rejected = inspect_marker(record, frozen=True)
         failure = rejected.get_nowait()
         self.assertEqual('watcher_resume_failed', failure['kind'])
@@ -1426,6 +1428,33 @@ class WatcherContinuationTests(unittest.TestCase):
             "watcher_resume_available", app.events.get_nowait()["kind"],
         )
 
+    def test_empty_profile_inspection_releases_the_gui_restart_guard(self) -> None:
+        """Complete the ordinary startup check even with no Watcher checkpoint.
+
+        Returns:
+            None: The current GUI event clears the inspection guard without
+                offering or claiming any operation.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        initialize_continuation_inspection_fixture(app)
+        initialize_event_pump_fixture(app)
+        app._after_update_nonce = None
+        app.events = queue.Queue()
+        app.exiting = False
+        app.flights = SimpleNamespace(lease=self.lease)
+        app.updates = SimpleNamespace(previous_version=MAIN.APP_VERSION)
+        app._continue_update_resume = mock.Mock()
+
+        with (mock.patch.object(MAIN.WatcherContinuation, 'load', return_value=None),
+              mock.patch.object(MAIN.update_helper, 'find_legacy_update_ticket', return_value=None)):
+            MAIN.WatcherApp._inspect_update_continuation(app)
+            completion = wait_for_event_kind(app.events, 'watcher_resume_inspection_no_offer')
+        self.assertTrue(app._update_resume_inspecting)
+        app.events.put(completion)
+        MAIN.WatcherApp._drain_event_batch(app)
+        self.assertFalse(app._update_resume_inspecting)
+        app._continue_update_resume.assert_not_called()
+
     def test_checkpoint_read_oserror_retries_real_primary_and_mirror_load(self) -> None:
         """A transient native read failure retries strict durable validation.
 
@@ -2201,6 +2230,9 @@ class WatcherContinuationTests(unittest.TestCase):
             None: Standard admission runs on the verifier thread, callbacks wait
                 for the UI event owner, and a concurrent mode change refuses it.
         """
+        # Prior GUI fixtures can leave Tcl Variable cycles. Release them on
+        # their owning thread before the admission worker allocates objects.
+        gc.collect()
         issuer = 'https://gallery.example.test/Galerie'
         account_id, gallery_id = 19, 73
         binding = linked_target_binding(issuer, account_id, gallery_id)
@@ -2755,3 +2787,849 @@ class WatcherFactoryResetTests(unittest.TestCase):
         session.can_upload.return_value = False
         self.assertIsNone(app.watched_report_target())
 
+
+class DesktopCaptureRevocationTests(unittest.TestCase):
+    """Exercise the shared Qt capture backend's authenticated key cleanup."""
+
+    def test_snapshot_marks_only_the_real_initial_scan_as_watcher_starting(self) -> None:
+        """Expose the existing worker's initial scan without confusing recovery.
+
+        Returns:
+            None: Startup is true only before capture admission; draining and
+                stopped workers never project the startup activity state.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            mode.view.return_value.record = None
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+                worker = SimpleNamespace(
+                    is_alive=lambda: True, initial_captured=False,
+                    drain_only=False, stop_event=threading.Event(),
+                    drain_event=threading.Event(), linked_target=None,
+                    drain_error='', _recovery_review_only=False,
+                    _update_pause_requested=lambda: False,
+                )
+                capture.worker = worker
+                self.assertTrue(capture.snapshot().watcher_starting)
+                worker.initial_captured = True
+                self.assertFalse(capture.snapshot().watcher_starting)
+                worker.initial_captured = False
+                worker.drain_only = True
+                self.assertFalse(capture.snapshot().watcher_starting)
+                worker.drain_only = False
+                worker.stop_event.set()
+                self.assertFalse(capture.snapshot().watcher_starting)
+
+    def test_idle_revoke_uses_finalizer_and_refuses_stale_local_cleanup(self) -> None:
+        """Require exact positive proof before the shared atomic key handoff.
+
+        Returns:
+            None: A current generation clears once; a stale generation retains
+                the local key and the original retryable revoke ticket.
+        """
+        for stale in (False, True):
+            with self.subTest(stale=stale), tempfile.TemporaryDirectory() as folder:
+                profile = Path(folder)
+                store = MAIN.ConfigStore(profile / 'config.json')
+                config = store.load()
+                config.gallery_url = 'https://capture-revoke.example.test/index.php'
+                config.api_key = 'synthetic revoke credential'
+                store.save(config)
+                mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+                mode.view.return_value.state = 'legacy'
+                ticket = mock.Mock()
+                ticket.kind = 'legacy_revoke'
+                mode.acquire.return_value = ticket
+                mode.save.side_effect = lambda save, **_options: save()
+                positive = {'ok': True, 'action': 'revoke'}
+                with (
+                    mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                    mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                    mock.patch.object(MAIN, 'revoke_upload_key', return_value=positive) as revoke,
+                ):
+                    desktop = MAIN.DesktopConfiguration(store, config, mode)
+                    capture = MAIN.DesktopCapture(
+                        store, desktop.current, mode, desktop.active,
+                        persist_revoked_config=desktop.persist_revoked_config,
+                    )
+                    try:
+                        capture.revoke_legacy()
+                        operation = capture.finalizer
+                        self.assertIsNotNone(operation)
+                        assert operation is not None
+                        operation.join(TEST_WORKER_JOIN_SECONDS)
+                        self.assertFalse(operation.is_alive())
+                        mode.acquire.assert_called_once()
+                        self.assertEqual('legacy_revoke', mode.acquire.call_args.args[0])
+                        event = wait_for_event_kind(capture.events, 'api_key_revoked')
+                        self.assertTrue(operation.server_revocation_confirmed)
+                        self.assertIs(operation, event['payload']['operation'])
+                        revoke.assert_called_once()
+                        if stale:
+                            desktop.config = replace(config, api_key='changed synthetic key')
+                        else:
+                            mode.save.reset_mock()
+                        result = capture.complete_legacy_revocation(operation)
+                        if stale:
+                            self.assertFalse(result)
+                            self.assertTrue(capture.snapshot().revocation_cleanup_pending)
+                            self.assertEqual('synthetic revoke credential', store.load().api_key)
+                            mode.save.assert_not_called()
+                        else:
+                            self.assertTrue(result)
+                            self.assertEqual('', store.load().api_key)
+                            self.assertIs(
+                                ticket, mode.save.call_args.kwargs['completed_work'],
+                            )
+                            ticket.close.assert_called_once()
+                    finally:
+                        if capture.lease is not None:
+                            capture.lease.release()
+
+    def test_stopped_legacy_abandon_preserves_files_and_retries_only_key_save(self) -> None:
+        """Terminalize one exact retained plan before local credential removal.
+
+        Returns:
+            None: The shared close helper retains originals; a failed settings
+                write retries without reopening or changing the terminal plan.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            session_id = 'e' * 32
+            session = flight_root / session_id
+            session.mkdir(parents=True)
+            config_root = profile / 'config.json'
+            store = MAIN.ConfigStore(config_root)
+            config = store.load()
+            config.gallery_url = 'https://capture-abandon.example.test/index.php'
+            config.api_key = 'synthetic abandon credential'
+            store.save(config)
+            binding = MAIN.connection_binding(
+                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            )
+            plan = SessionPlan(
+                directory=session, binding=binding, languages=(),
+                reports_enabled=False,
+            )
+            plan.save()
+            screenshots = profile / 'screenshots'
+            screenshots.mkdir()
+            original = screenshots / 'kept.png'
+            original.write_bytes(b'synthetic retained original')
+            journal = MAIN.WatchQueueStore(
+                session / 'watch-drain.json', binding, screenshots, False,
+            )
+            journal.initialize([])
+            journal.reconcile([
+                MAIN.observe_watch_source(original, time.time()),
+            ])
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            mode.save.side_effect = lambda save, **_options: save()
+            with (
+                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+            ):
+                desktop = MAIN.DesktopConfiguration(store, config, mode)
+                capture = MAIN.DesktopCapture(
+                    store, desktop.current, mode, desktop.active,
+                    persist_abandoned_config=lambda proposed, captured: (
+                        desktop.persist_abandoned_config(proposed, captured)
+                    ),
+                )
+                try:
+                    with mock.patch.object(
+                        desktop, 'persist_abandoned_config',
+                        side_effect=OSError('synthetic settings write failure'),
+                    ):
+                        self.assertFalse(capture.abandon_capture())
+                    terminal = SessionPlan.load(session)
+                    self.assertTrue(terminal.completed)
+                    self.assertTrue(terminal.abandoned)
+                    queue_row = MAIN.WatchQueueStore.read_journal(
+                        session / 'watch-drain.json',
+                    )
+                    self.assertTrue(queue_row['force_finished'])
+                    self.assertEqual([str(original)], queue_row['pending'])
+                    self.assertEqual(b'synthetic retained original', original.read_bytes())
+                    saved = MAIN.ConfigStore(config_root).load(read_only=True)
+                    self.assertEqual('synthetic abandon credential', saved.api_key)
+                    self.assertTrue(capture.snapshot().abandon_cleanup_pending)
+                    self.assertTrue(capture.complete_legacy_abandon())
+                    self.assertEqual('', store.load().api_key)
+                    mode.save.assert_called_once()
+                finally:
+                    if capture.lease is not None:
+                        capture.lease.release()
+
+    def test_active_force_finish_publishes_before_stopping_exact_worker(self) -> None:
+        """Hold the live worker fence until queue and plan abandonment read back.
+
+        Returns:
+            None: The original pending photo remains local and the running
+                shared finalizer cannot advance to analysis during publication.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            session_id = 'f' * 32
+            session = flight_root / session_id
+            session.mkdir(parents=True)
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            config.gallery_url = 'https://capture-force-finish.example.test/index.php'
+            config.api_key = 'synthetic force-finish credential'
+            store.save(config)
+            binding = MAIN.connection_binding(
+                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            )
+            plan = SessionPlan(
+                directory=session, binding=binding, languages=(),
+                reports_enabled=False,
+            )
+            plan.save()
+            screenshots = profile / 'screenshots'
+            screenshots.mkdir()
+            original = screenshots / 'accepted.png'
+            original.write_bytes(b'accepted before force finish')
+            journal = MAIN.WatchQueueStore(
+                session / 'watch-drain.json', binding, screenshots, False,
+            )
+            journal.initialize([])
+            journal.reconcile([
+                MAIN.observe_watch_source(original, time.time()),
+            ])
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            entered = threading.Event()
+
+            def wait_for_worker(
+                cancelled: threading.Event, _deadline: float,
+            ) -> None:
+                """Hold the actual finalizer until force-finish cancellation.
+
+                Args:
+                    cancelled (threading.Event): Shared operation cancel fence.
+                    _deadline (float): Existing bounded finalization deadline.
+                Returns:
+                    None: Ends immediately after the cancellation request.
+                """
+                entered.set()
+                cancelled.wait(TEST_EVENT_WAIT_SECONDS)
+                raise InterruptedError('fixture force finish requested')
+
+            operation = FinalizationWorker(
+                [plan], '', '', wait_for_worker, lambda: None, False,
+            )
+            pipeline_native = SimpleNamespace(verify=mock.Mock())
+            active_worker = SimpleNamespace(
+                is_alive=mock.Mock(return_value=True),
+                drain_manifest=session / 'watch-drain.json',
+                _queue=journal,
+                _retained_stop_publishing=threading.Event(),
+                _pipeline_lease=SimpleNamespace(_native=pipeline_native),
+                _linked_lease=None,
+                _force_finish_lease_lock=threading.RLock(),
+                _force_finish_publishing=threading.Event(),
+                _force_finish_publication_done=threading.Event(),
+                _force_finish_requested=threading.Event(),
+                _force_stop_requested=threading.Event(),
+                _keep_sources_after_stop=False,
+                _producer_stop=threading.Event(),
+                _producer_wake=threading.Event(),
+                _diagnostic_phase='upload',
+                _transport_active=threading.Event(),
+                _pending_transport=None,
+                stop=mock.Mock(),
+            )
+            active_worker._force_finish_publication_done.set()
+            active_worker._transport_active.set()
+            with (
+                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+            ):
+                capture = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+                capture.lease = WorkspaceLease(flight_root)
+                capture.worker = active_worker
+                capture.finalizer = operation
+                try:
+                    operation.start()
+                    self.assertTrue(entered.wait(TEST_EVENT_WAIT_SECONDS))
+                    self.assertTrue(capture.force_finish())
+                    operation.join(TEST_WORKER_JOIN_SECONDS)
+                    self.assertFalse(operation.is_alive())
+                    pipeline_native.verify.assert_called_once()
+                    self.assertTrue(active_worker._force_finish_requested.is_set())
+                    self.assertTrue(active_worker._force_finish_publication_done.is_set())
+                    active_worker.stop.assert_called_once()
+                    self.assertTrue(operation.cancel.is_set())
+                    saved_plan = SessionPlan.load(session)
+                    self.assertTrue(saved_plan.completed)
+                    self.assertTrue(saved_plan.abandoned)
+                    saved_queue = MAIN.WatchQueueStore.read_journal(
+                        session / 'watch-drain.json',
+                    )
+                    self.assertTrue(saved_queue['force_finished'])
+                    self.assertEqual([str(original)], saved_queue['pending'])
+                    self.assertEqual(b'accepted before force finish', original.read_bytes())
+                finally:
+                    if capture.lease is not None:
+                        capture.lease.release()
+
+    def test_active_linked_force_finish_keeps_the_captured_scope_and_target_lease(self) -> None:
+        """Retain linked sources only under their original target ownership.
+
+        Returns:
+            None: A changed saved gallery is refused without mutation; restoring
+                its approved scope and lease permits exact local terminalization.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            session_id = 'e' * 32
+            session = flight_root / session_id
+            session.mkdir(parents=True)
+            watch_folder = profile / 'screenshots'
+            watch_folder.mkdir()
+            original = watch_folder / 'linked-accepted.png'
+            original.write_bytes(b'linked source retained after Force Finish')
+            issuer = 'https://linked-fixture.example.test/Galerie'
+            account_id = 29
+            gallery_id = 83
+            target_session = mock.Mock()
+            target_session.can_upload.return_value = True
+            target_session.matches_issuer.return_value = True
+            target_session.approved_scope.return_value = UPLOAD_SCOPE
+            target = LinkedUploadTarget(
+                target_session, issuer, account_id, gallery_id,
+                'Fixture linked gallery',
+            )
+            binding = linked_target_binding(issuer, account_id, gallery_id)
+            self.assertEqual(binding, target.binding())
+            self.assertEqual(UPLOAD_SCOPE, target_session.approved_scope())
+            mode_record = SimpleNamespace(
+                mode='linked', issuer=issuer, account_id=account_id,
+                gallery_id=gallery_id, scope=UPLOAD_SCOPE,
+            )
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value = SimpleNamespace(
+                state='linked_active', record=mode_record,
+            )
+            plan = SessionPlan(
+                directory=session, binding=binding, languages=(),
+                reports_enabled=False,
+            )
+            plan.save()
+            journal = MAIN.WatchQueueStore(
+                session / 'watch-drain.json', binding, watch_folder, False,
+            )
+            journal.initialize([])
+            journal.reconcile([
+                MAIN.observe_watch_source(original, time.time()),
+            ])
+            target_lease = MAIN.LinkedTargetLease(profile, binding)
+            target_lease.acquire()
+            entered = threading.Event()
+
+            def wait_for_worker(
+                cancelled: threading.Event, _deadline: float,
+            ) -> None:
+                """Hold the original linked finalizer until terminalization wins.
+
+                Args:
+                    cancelled (threading.Event): Shared operation cancellation fence.
+                    _deadline (float): Existing bounded finalization deadline.
+                Returns:
+                    None: Stops at the same drain boundary as the live worker.
+                """
+                entered.set()
+                cancelled.wait(TEST_EVENT_WAIT_SECONDS)
+                raise InterruptedError('fixture linked Force Finish requested')
+
+            operation = FinalizationWorker(
+                [plan], '', '', wait_for_worker, lambda: None, False,
+                linked_target=target,
+            )
+            pipeline_native = SimpleNamespace(verify=mock.Mock())
+            active_worker = SimpleNamespace(
+                is_alive=mock.Mock(return_value=True),
+                drain_manifest=session / 'watch-drain.json',
+                _queue=journal,
+                _retained_stop_publishing=threading.Event(),
+                _pipeline_lease=SimpleNamespace(_native=pipeline_native),
+                _linked_lease=target_lease,
+                linked_target=target,
+                _force_finish_lease_lock=threading.RLock(),
+                _force_finish_publishing=threading.Event(),
+                _force_finish_publication_done=threading.Event(),
+                _force_finish_requested=threading.Event(),
+                _force_stop_requested=threading.Event(),
+                _keep_sources_after_stop=False,
+                _producer_stop=threading.Event(),
+                _producer_wake=threading.Event(),
+                _diagnostic_phase='upload',
+                _transport_active=threading.Event(),
+                _pending_transport=None,
+                stop=mock.Mock(),
+            )
+            active_worker._force_finish_publication_done.set()
+            active_worker._transport_active.set()
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            with (
+                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+            ):
+                capture = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+                capture.lease = WorkspaceLease(flight_root)
+                capture.worker = active_worker
+                capture.finalizer = operation
+                try:
+                    operation.start()
+                    self.assertTrue(entered.wait(TEST_EVENT_WAIT_SECONDS))
+                    plan_before = (session / 'completion.json').read_bytes()
+                    queue_before = (session / 'watch-drain.json').read_bytes()
+                    changed_record = SimpleNamespace(
+                        mode='linked', issuer=issuer, account_id=account_id,
+                        gallery_id=gallery_id + 1, scope=UPLOAD_SCOPE,
+                    )
+                    mode.view.return_value = SimpleNamespace(
+                        state='linked_active', record=changed_record,
+                    )
+                    with self.assertRaisesRegex(ValueError, 'pending-work identity changed'):
+                        capture.force_finish()
+                    self.assertFalse(operation.cancel.is_set())
+                    self.assertFalse(active_worker._force_finish_requested.is_set())
+                    self.assertEqual(plan_before, (session / 'completion.json').read_bytes())
+                    self.assertEqual(queue_before, (session / 'watch-drain.json').read_bytes())
+                    self.assertEqual(
+                        b'linked source retained after Force Finish', original.read_bytes(),
+                    )
+
+                    mode.view.return_value = SimpleNamespace(
+                        state='linked_active', record=mode_record,
+                    )
+                    self.assertTrue(capture.force_finish())
+                    operation.join(TEST_WORKER_JOIN_SECONDS)
+                    self.assertFalse(operation.is_alive())
+                    pipeline_native.verify.assert_called_once()
+                    active_worker.stop.assert_called_once()
+                    self.assertTrue(operation.cancel.is_set())
+                    self.assertTrue(target_lease._native is not None)
+                    saved_plan = SessionPlan.load(session)
+                    self.assertTrue(saved_plan.completed)
+                    self.assertTrue(saved_plan.abandoned)
+                    saved_queue = MAIN.WatchQueueStore.read_journal(
+                        session / 'watch-drain.json',
+                    )
+                    self.assertTrue(saved_queue['force_finished'])
+                    self.assertEqual([str(original)], saved_queue['pending'])
+                    self.assertEqual(
+                        b'linked source retained after Force Finish', original.read_bytes(),
+                    )
+                finally:
+                    if capture.lease is not None:
+                        capture.lease.release()
+                    target_lease.release()
+
+    def test_force_finish_refuses_after_finalizer_enters_report_analysis(self) -> None:
+        """Do not cancel a report once its finalizer has left the drain barrier.
+
+        Returns:
+            None: The report callback completes after refusal and the accepted
+                source, queue journal and plan remain unchanged by Force Finish.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            session_id = 'd' * 32
+            session = flight_root / session_id
+            session.mkdir(parents=True)
+            recorder = MAIN.FlightRecorder(
+                flight_root,
+                MAIN.normalize_upload_url(
+                    'https://capture-analysis.example.test/index.php',
+                ),
+                '',
+                lambda _level, _message: None,
+                _session_id=session_id,
+            )
+            recorder._checkpoint()
+            resumed_recorder = MAIN.FlightRecorder.from_session(
+                session, recorder.gallery_identity, '',
+                lambda _level, _message: None,
+            )
+            self.assertEqual(session_id, resumed_recorder.session_id)
+            watch_folder = profile / 'screenshots'
+            watch_folder.mkdir()
+            original = watch_folder / 'report-in-progress.png'
+            original.write_bytes(b'report ownership remains with finalizer')
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            config.gallery_url = 'https://capture-analysis.example.test/index.php'
+            config.api_key = 'synthetic analysis barrier credential'
+            store.save(config)
+            binding = MAIN.connection_binding(
+                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            )
+            plan = SessionPlan(
+                directory=session, binding=binding, languages=(),
+                reports_enabled=False,
+            )
+            plan.save()
+            journal = MAIN.WatchQueueStore(
+                session / 'watch-drain.json', binding, watch_folder, False,
+            )
+            journal.initialize([])
+            journal.reconcile([
+                MAIN.observe_watch_source(original, time.time()),
+            ])
+            report_entered = threading.Event()
+            release_report = threading.Event()
+
+            def wait_for_workers(
+                _cancelled: threading.Event, _deadline: float,
+            ) -> None:
+                """Finish the drain before the report analysis phase begins.
+
+                Args:
+                    _cancelled (threading.Event): Unused shared cancel fence.
+                    _deadline (float): Existing operation deadline.
+                Returns:
+                    None: Releases the finalizer into its next phase.
+                """
+                return None
+
+            operation = FinalizationWorker(
+                [plan], '', '', wait_for_workers, lambda: None, False,
+            )
+            finish_plan = operation.finish_plan
+
+            def hold_report(plan_row: SessionPlan) -> None:
+                """Hold genuine finalizer ownership inside report analysis.
+
+                Args:
+                    plan_row (SessionPlan): Exact flight whose report is advancing.
+                Returns:
+                    None: Completes the existing report analysis after refusal.
+                """
+                report_entered.set()
+                if not release_report.wait(TEST_EVENT_WAIT_SECONDS):
+                    raise TimeoutError('Fixture report owner was not released.')
+                finish_plan(plan_row)
+
+            operation.finish_plan = hold_report
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            active_worker = SimpleNamespace(
+                is_alive=mock.Mock(return_value=True),
+                drain_manifest=session / 'watch-drain.json',
+                _queue=journal,
+                _retained_stop_publishing=threading.Event(),
+                _pipeline_lease=SimpleNamespace(
+                    _native=SimpleNamespace(verify=mock.Mock()),
+                ),
+                _linked_lease=None,
+                _force_finish_lease_lock=threading.RLock(),
+                _force_finish_publishing=threading.Event(),
+                _force_finish_publication_done=threading.Event(),
+                _force_finish_requested=threading.Event(),
+                _force_stop_requested=threading.Event(),
+                _keep_sources_after_stop=False,
+                _producer_stop=threading.Event(),
+                _producer_wake=threading.Event(),
+                _diagnostic_phase='upload',
+                _transport_active=threading.Event(),
+                _pending_transport=None,
+                stop=mock.Mock(),
+            )
+            active_worker._force_finish_publication_done.set()
+            active_worker._transport_active.set()
+            with (
+                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+            ):
+                capture = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+                capture.lease = WorkspaceLease(flight_root)
+                capture.worker = active_worker
+                capture.finalizer = operation
+                try:
+                    operation.start()
+                    self.assertTrue(report_entered.wait(TEST_EVENT_WAIT_SECONDS))
+                    self.assertEqual('analyzing', operation.snapshot().phase)
+                    queue_before = (session / 'watch-drain.json').read_bytes()
+                    plan_before = (session / 'completion.json').read_bytes()
+                    with self.assertRaisesRegex(
+                        RuntimeError, 'available only during the capture drain',
+                    ):
+                        capture.force_finish()
+                    self.assertFalse(operation.cancel.is_set())
+                    self.assertFalse(active_worker._force_finish_requested.is_set())
+                    self.assertFalse(active_worker._force_finish_publishing.is_set())
+                    active_worker.stop.assert_not_called()
+                    self.assertEqual(queue_before, (session / 'watch-drain.json').read_bytes())
+                    self.assertEqual(plan_before, (session / 'completion.json').read_bytes())
+                    self.assertEqual(
+                        b'report ownership remains with finalizer', original.read_bytes(),
+                    )
+                    release_report.set()
+                    operation.join(TEST_WORKER_JOIN_SECONDS)
+                    self.assertFalse(operation.is_alive())
+                    self.assertEqual('completed', operation.snapshot().phase)
+                    self.assertFalse(operation.cancel.is_set())
+                    self.assertEqual(
+                        b'report ownership remains with finalizer', original.read_bytes(),
+                    )
+                finally:
+                    release_report.set()
+                    if operation.is_alive():
+                        operation.join(TEST_WORKER_JOIN_SECONDS)
+                    if capture.lease is not None:
+                        capture.lease.release()
+
+    def test_force_finish_closes_all_accepted_queues_under_shared_leases(self) -> None:
+        """Terminalize two accepted empty journals while the finalizer drains.
+
+        Returns:
+            None: Each accepted plan gets exact terminal queue and plan markers.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            config.gallery_url = 'https://capture-empty-finish.example.test/index.php'
+            config.api_key = 'synthetic empty-queue credential'
+            store.save(config)
+            binding = MAIN.connection_binding(
+                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            )
+            screenshots = profile / 'screenshots'
+            screenshots.mkdir()
+            plans: list[SessionPlan] = []
+            for session_id in ('a' * 32, 'b' * 32):
+                session = flight_root / session_id
+                session.mkdir(parents=True)
+                plan = SessionPlan(
+                    directory=session, binding=binding, languages=(),
+                    reports_enabled=False,
+                )
+                plan.save()
+                journal = MAIN.WatchQueueStore(
+                    session / 'watch-drain.json', binding, screenshots, False,
+                )
+                journal.initialize([])
+                plans.append(plan)
+            entered = threading.Event()
+
+            def wait_for_worker(
+                cancelled: threading.Event, _deadline: float,
+            ) -> None:
+                """Keep the exact finalizer in its draining phase for admission.
+
+                Args:
+                    cancelled (threading.Event): Shared cancellation fence.
+                    _deadline (float): Existing finalization deadline.
+                Returns:
+                    None: Exits before the normal report phase can start.
+                """
+                entered.set()
+                cancelled.wait(TEST_EVENT_WAIT_SECONDS)
+                raise InterruptedError('fixture empty queue force finish')
+
+            operation = FinalizationWorker(
+                plans, '', '', wait_for_worker, lambda: None, False,
+            )
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            with (
+                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
+                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+            ):
+                capture = MAIN.DesktopCapture(
+                    store, lambda: config, mode, lambda: None,
+                )
+                capture.lease = WorkspaceLease(flight_root)
+                capture.finalizer = operation
+                try:
+                    operation.start()
+                    self.assertTrue(entered.wait(TEST_EVENT_WAIT_SECONDS))
+                    self.assertTrue(capture.force_finish())
+                    operation.join(TEST_WORKER_JOIN_SECONDS)
+                    self.assertFalse(operation.is_alive())
+                    for plan in plans:
+                        saved_plan = SessionPlan.load(plan.directory)
+                        self.assertTrue(saved_plan.completed)
+                        self.assertTrue(saved_plan.abandoned)
+                        saved_queue = MAIN.WatchQueueStore.read_journal(
+                            plan.directory / 'watch-drain.json',
+                        )
+                        self.assertTrue(saved_queue['force_finished'])
+                        self.assertEqual([], saved_queue['pending'])
+                        self.assertEqual([], saved_queue['items'])
+                finally:
+                    if capture.lease is not None:
+                        capture.lease.release()
+
+class DesktopCaptureUtcPreferenceTests(unittest.TestCase):
+    """Verify UTC opt-in persistence and active-manager ownership."""
+
+    def test_shared_preference_uses_desktop_configuration_owner(self) -> None:
+        """Persist the legacy preference through the shared mode transaction.
+
+        Returns:
+            None: ConfigStore and DesktopConfiguration retain the new generation.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value.state = 'legacy'
+            mode.save.side_effect = lambda save, **_options: save()
+            desktop = MAIN.DesktopConfiguration(store, config, mode)
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(
+                    store, desktop.current, mode, desktop.active,
+                    persist_watcher_config=desktop.save_watcher_preference,
+                )
+                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus())
+                capture.utc = mock.Mock()
+                self.assertTrue(capture.set_utc_sync(True))
+                self.assertTrue(store.load().sync_utc_time)
+                self.assertTrue(desktop.current().sync_utc_time)
+                mode.save.assert_called_once()
+
+    def test_profile_preference_refreshes_same_manager_for_exact_worker(self) -> None:
+        """Apply isolated profile choice to the active admitted Watcher only.
+
+        Returns:
+            None: The manager receives the worker's captured DLL and live fence.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            flight_root.mkdir()
+            preferences = {
+                'watched_folder': '', 'scan_interval_seconds': 10.0,
+                'stable_seconds': 1.0, 'attach_sim_camera_metadata': False,
+                'delete_uploaded_files': False, 'watch_recursive': False,
+                'sync_utc_time': False,
+            }
+            lease = WorkspaceLease(flight_root)
+            WatcherProfile(False, '', preferences).save(lease)
+            lease.release()
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+                worker = SimpleNamespace(
+                    config=SimpleNamespace(simconnect_dll_path='captured.dll'),
+                    stop_event=threading.Event(), drain_event=threading.Event(),
+                    is_alive=mock.Mock(return_value=True),
+                )
+                capture.worker = worker
+                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(capturing=True))
+                manager = mock.Mock()
+                capture.utc = manager
+                self.assertTrue(capture.set_utc_sync(True))
+                manager.start.assert_called_once()
+                self.assertEqual('captured.dll', manager.start.call_args.args[0])
+                self.assertTrue(manager.start.call_args.args[1]())
+                self.assertTrue(WatcherProfile.load(flight_root).preferences['sync_utc_time'])
+                lease = capture.lease
+                if lease is not None:
+                    lease.release()
+
+    def test_profile_save_rejection_restores_existing_utc_admission(self) -> None:
+        """Keep an opted-in manager alive if the requested write is rejected.
+
+        Returns:
+            None: Failed disable attempts restore the same worker-bound manager.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            flight_root.mkdir()
+            preferences = {
+                'watched_folder': '', 'scan_interval_seconds': 10.0,
+                'stable_seconds': 1.0, 'attach_sim_camera_metadata': False,
+                'delete_uploaded_files': False, 'watch_recursive': False,
+                'sync_utc_time': True,
+            }
+            lease = WorkspaceLease(flight_root)
+            WatcherProfile(False, '', preferences).save(lease)
+            lease.release()
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+                worker = SimpleNamespace(
+                    config=SimpleNamespace(simconnect_dll_path='captured.dll'),
+                    stop_event=threading.Event(), drain_event=threading.Event(),
+                    is_alive=mock.Mock(return_value=True),
+                )
+                capture.worker = worker
+                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(capturing=True))
+                manager = mock.Mock()
+                capture.utc = manager
+                with mock.patch.object(
+                    MAIN.WatcherProfile, 'save', side_effect=OSError('synthetic refusal'),
+                ):
+                    with self.assertRaises(OSError):
+                        capture.set_utc_sync(False)
+                manager.stop.assert_called_once()
+                manager.start.assert_called_once()
+                self.assertEqual('captured.dll', manager.start.call_args.args[0])
+                self.assertTrue(capture._utc_sync_enabled)
+                if capture.lease is not None:
+                    capture.lease.release()
+
+    def test_finalization_refuses_utc_preference_change(self) -> None:
+        """Keep UTC policy fixed while the existing finalizer owns the capture.
+
+        Returns:
+            None: No profile write or manager change is attempted.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder)
+            flight_root = profile / 'flights'
+            flight_root.mkdir()
+            preferences = {
+                'watched_folder': '', 'scan_interval_seconds': 10.0,
+                'stable_seconds': 1.0, 'attach_sim_camera_metadata': False,
+                'delete_uploaded_files': False, 'watch_recursive': False,
+                'sync_utc_time': False,
+            }
+            lease = WorkspaceLease(flight_root)
+            WatcherProfile(False, '', preferences).save(lease)
+            lease.release()
+            store = MAIN.ConfigStore(profile / 'config.json')
+            config = store.load()
+            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(finishing=True))
+                manager = mock.Mock()
+                capture.utc = manager
+                with self.assertRaises(RuntimeError):
+                    capture.set_utc_sync(True)
+                manager.start.assert_not_called()
+                manager.stop.assert_not_called()
+                self.assertFalse(capture._utc_sync_enabled)

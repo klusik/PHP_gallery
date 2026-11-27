@@ -426,6 +426,20 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         item_timings: list[linking.MediaReadTimings] = []
         timings = linking.MediaReadTimings()
         stats = linking.ThumbnailBatchStats()
+        active_snapshots: list[tuple[int, ...]] = []
+
+        def observe_active(photo_ids: tuple[int, ...]) -> None:
+            """Record observer calls while proving callback errors are isolated.
+
+            Args:
+                photo_ids (tuple[int, ...]): Current exact transport group or
+                    empty completion snapshot.
+
+            Returns:
+                None: The observer records the value and raises harmlessly.
+            """
+            active_snapshots.append(photo_ids)
+            raise RuntimeError('observer failure is informational')
 
         def publish(
             result: linking.ThumbnailPublication | linking.LegacyThumbnailPublication,
@@ -449,7 +463,10 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         with mock.patch.object(
             linking, '_linking_connection', return_value=connection,
         ):
-            session.media_thumbnails(42, photos, publish, timings=timings, stats=stats)
+            session.media_thumbnails(
+                42, photos, publish, timings=timings, stats=stats,
+                active_photos=observe_active,
+            )
         self.assertEqual(list(image_ids), [item.photo.image_id for item in published])
         self.assertEqual([TEST_IMAGE_BODY] * len(image_ids),
                          [item.body for item in published])
@@ -471,6 +488,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         self.assertEqual(len(wire), timings.encoded_bytes)
         self.assertEqual(len(image_ids), stats.wire_items)
         self.assertEqual(len(image_ids), stats.delivered)
+        self.assertEqual([image_ids, ()], active_snapshots)
         self.assertIsNotNone(stats.first_frame_ms)
         self.assertEqual(('POST', '/Galerie/index.php?page=app_linking_thumbnail_batch'),
                          connection.request_args)
@@ -492,8 +510,8 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             'app_linking_upload',
         )):
             with self.subTest(route=route):
-                # Each route gets two distinct positive IDs so the previous
-                # cohort's real disk writes cannot bypass batch admission.
+                # Each route gets two distinct positive IDs so an earlier
+                # cohort cannot satisfy a later thumbnail request.
                 first_id = 7 + case_index * 2
                 second_id = first_id + 1
                 scope = (
@@ -647,7 +665,10 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                     side_effect=record_request,
                 ), mock.patch.object(
                     gate._condition, 'wait', side_effect=observe_wait,
-                ):
+                ), mock.patch.object(self.cache, 'write', return_value=False) as cache_write:
+                    # Disk durability has its own regression cases. Keep this
+                    # real transport order test independent of disk flush latency
+                    # while still requiring both authorized cache-write attempts.
                     batch_worker.start()
                     try:
                         self.assertTrue(
@@ -680,6 +701,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                     request_order,
                 )
                 self.assertEqual(3, connection_factory.call_count)
+                self.assertEqual(2, cache_write.call_count)
                 self.assertTrue(all(connection.request_count == 1
                                     for connection in connections))
                 self.assertTrue(all(connection.closed
@@ -920,12 +942,14 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                     linking.ThumbnailPublication
                     | linking.LegacyThumbnailPublication
                 ] = []
+                active_snapshots: list[tuple[int, ...]] = []
                 with mock.patch.object(
                     linking, '_linking_connection', return_value=connection,
                 ) as connection_factory:
                     session.media_thumbnails(
                         42, photos,
                         lambda result, *_args: published.append(result),
+                        active_photos=active_snapshots.append,
                     )
                     connection_factory.assert_called_once()
 
@@ -936,6 +960,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 )
                 self.assertEqual(1, connection.request_count)
                 self.assertEqual(1, len(published))
+                self.assertEqual([(image_id,), ()], active_snapshots)
                 self.assertEqual(TEST_IMAGE_BODY, published[0].body)
                 self.assertIsInstance(
                     published[0], linking.LegacyThumbnailPublication,
@@ -966,15 +991,20 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         )
         photos = self.register_page(session, (TEST_LEGACY_GATEWAY_IMAGE_ID,))
         connection = _Connection(self.media_response(status=503))
+        active_snapshots: list[tuple[int, ...]] = []
         with mock.patch.object(
             linking, '_linking_connection', return_value=connection,
         ) as connection_factory, mock.patch.object(
             session, '_media_read', wraps=session._media_read,
         ) as legacy:
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                session.media_thumbnails(42, photos, lambda *_args: None)
+                session.media_thumbnails(
+                    42, photos, lambda *_args: None,
+                    active_photos=active_snapshots.append,
+                )
 
         self.assertEqual(503, raised.exception.status)
+        self.assertEqual([(TEST_LEGACY_GATEWAY_IMAGE_ID,), ()], active_snapshots)
         self.assertEqual('app_linking_media', raised.exception.route)
         self.assertEqual('html', raised.exception.content_kind)
         self.assertEqual('http_status', raised.exception.reason)
@@ -1005,16 +1035,21 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
         }))
+        active_snapshots: list[tuple[int, ...]] = []
         with mock.patch.object(
             linking, '_linking_connection', return_value=connection,
         ) as connection_factory, mock.patch.object(
             session, '_media_read',
         ) as legacy:
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                session.media_thumbnails(42, photos, lambda *_args: None)
+                session.media_thumbnails(
+                    42, photos, lambda *_args: None,
+                    active_photos=active_snapshots.append,
+                )
             legacy.assert_not_called()
 
         self.assertEqual(404, raised.exception.status)
+        self.assertEqual([(TEST_BATCH_HTML404_IMAGE_ID,), ()], active_snapshots)
         self.assertEqual('app_linking_thumbnail_batch', raised.exception.route)
         self.assertEqual('html', raised.exception.content_kind)
         self.assertEqual('http_status', raised.exception.reason)
