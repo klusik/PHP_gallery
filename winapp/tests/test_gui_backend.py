@@ -9,6 +9,7 @@
 
 """Exercise backend composition without requiring optional Qt libraries."""
 
+from dataclasses import asdict
 import hashlib
 import json
 import os
@@ -48,6 +49,7 @@ from uploader.offline_linking import (
     OfflineAccess, OfflineBinding, load_offline_binding, offline_binding_path, save_offline_binding,
 )
 from uploader.state_store import JobStateStore, linked_upload_state_path
+from uploader.tk_backend_settings import TkBackendSettings
 from uploader.upload_mode import ModeRecord
 from uploader.watch_queue import WatchQueueStore, observe_watch_source
 from test_redesign import MAIN
@@ -93,6 +95,30 @@ def _write_linked_uncertain_history(
 
 class BackendPreferenceTests(unittest.TestCase):
     """Verify preferences and startup decisions independently of toolkit imports."""
+
+    def test_photos_qt_restart_saves_before_requesting_restart(self) -> None:
+        """Keep the explicit Qt restart behind availability and durable save.
+
+        Returns:
+            None: Restart follows a successful save and is skipped otherwise.
+        """
+        callbacks = MagicMock()
+        callbacks.save.return_value = True
+        settings = SimpleNamespace(
+            qt_available=True, save=callbacks.save, restart=callbacks.restart,
+        )
+        TkBackendSettings.restart_with_qt(settings)
+        self.assertEqual([call.save('pyside6'), call.restart()], callbacks.mock_calls)
+
+        callbacks.reset_mock()
+        settings.qt_available = False
+        TkBackendSettings.restart_with_qt(settings)
+        self.assertEqual([], callbacks.mock_calls)
+
+        settings.qt_available = True
+        callbacks.save.return_value = False
+        TkBackendSettings.restart_with_qt(settings)
+        self.assertEqual([call.save('pyside6')], callbacks.mock_calls)
 
     def test_preferences_are_independent_and_fail_closed(self) -> None:
         """Round-trip both choices and reject duplicate or malformed values.
@@ -225,6 +251,71 @@ class BackendPreferenceTests(unittest.TestCase):
             ])
             self.assertFalse((profile / gui_backend.GUI_BACKEND_FILE).exists())
             instance.return_value.close.assert_called_once_with()
+
+    def test_qt_update_without_watcher_checkpoint_starts_without_resume(self) -> None:
+        """Keep valid legacy update handoffs in Qt without inventing capture state.
+
+        Returns:
+            None: An admitted empty profile starts Qt without capture resumption.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            temporary_root = Path(folder).resolve()
+            profile = temporary_root / 'profile'
+            profile.mkdir()
+            nonce = 'b' * 32
+            child_nonce = 'c' * 32
+            updates = profile / 'updates'
+            session = updates / nonce
+            session.mkdir(parents=True)
+            ticket_path = session / 'ticket.json'
+            installer = session / 'setup.exe'
+            installation = temporary_root / 'installation'
+            installation.mkdir()
+            installed = installation / 'PHPGalleryUploader.exe'
+            installer.write_bytes(b'synthetic installer')
+            installed.write_bytes(b'synthetic launcher')
+            ticket = MAIN.update_helper.UpdateTicket(
+                nonce, MAIN.APP_VERSION, hashlib.sha256(installer.read_bytes()).hexdigest(),
+                installer.stat().st_size, str(installer), str(installed),
+            )
+            ticket_path.write_text(json.dumps(asdict(ticket)), encoding='utf-8')
+            config_path = profile / 'config.json'
+            handshake = profile / 'handshake'
+            handshake.mkdir()
+            with (
+                patch.object(MAIN, 'CONFIG_DIR', profile),
+                patch.object(MAIN, 'WindowsInstance') as instance,
+                patch.object(MAIN, 'setup_logging'),
+                patch.object(MAIN, 'ConfigStore') as store,
+                patch.object(MAIN.update_helper, 'updates_root', return_value=updates),
+                patch.object(
+                    MAIN.update_helper, 'installed_identity', return_value=installed,
+                ),
+                patch.object(
+                    MAIN, 'inspect_gui_profile_work', wraps=inspect_gui_profile_work,
+                ) as inspect,
+                patch.object(
+                    MAIN, 'sys', SimpleNamespace(platform='linux', stderr=sys.stderr),
+                ),
+                patch.object(MAIN, 'run_qt', return_value=False) as run_qt,
+                patch.object(MAIN, 'report_gui_startup') as report,
+                patch.dict(os.environ, {gui_backend.GUI_STARTUP_DIRECTORY: str(handshake)}),
+            ):
+                instance.return_value.acquire.return_value = True
+                store.return_value.load.return_value = MAIN.WatcherConfig()
+                result = MAIN.main([
+                    '--config', str(config_path), '--after-update', nonce,
+                    '--gui-child', child_nonce,
+                ])
+                self.assertEqual(0, result, report.call_args)
+                self.assertEqual(
+                    (nonce, MAIN.APP_VERSION),
+                    inspect.call_args.kwargs['installer_restart'],
+                )
+                run_qt.assert_called_once()
+                self.assertFalse(run_qt.call_args.kwargs['resume_capture'])
+                run_qt.call_args.kwargs['ready']()
+                report.assert_called_once_with(handshake, child_nonce, 'ready')
 
     def test_frozen_qt_reuses_stable_launcher_and_requires_current_runtime(self) -> None:
         """Verify Tk and supervised Qt relaunch the one public executable.

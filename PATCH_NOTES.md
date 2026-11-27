@@ -1,5 +1,41 @@
 # Patch notes
 
+## Version 1.8.2
+
+PHP Gallery 1.8.2 includes WinApp 2.0.2 with a fix for restarting after
+a Windows update and a way to switch back to Qt from Legacy Tk.
+
+### Highlights
+
+#### Windows companion
+
+- Fixed the idle update handoff that could reopen WinApp in Legacy Tk
+  when Qt was selected.
+- Added a Legacy Tk warning above the gallery photos with a button
+  that saves Qt as the default interface and requests a restart.
+
+### Technical Details
+
+#### Windows update and startup
+
+- Recorded idle update intent in the installer ticket before starting
+  the update helper, so the helper used a normal relaunch after setup.
+- Accepted verified tickets from older updaters when the saved profile
+  passed inspection and had no Watcher checkpoint to resume.
+
+#### Verification and documentation
+
+- Added regression coverage for the installer ticket, the Qt startup
+  path, and the Legacy Tk warning and restart action.
+- Updated the WinApp documentation and all four gallery manuals.
+
+### User Impact
+
+- The updater reopened the compact Qt gallery when Qt was the saved
+  interface and no Watcher session needed to resume.
+- Users who entered the gallery in Legacy Tk could switch back to Qt
+  from the Photos view.
+
 ## Version 1.8.1
 
 PHP Gallery 1.8.1 includes WinApp 2.0.1 with SimBrief controls for linked

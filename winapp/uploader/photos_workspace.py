@@ -104,6 +104,12 @@ FOLDER_DIVIDER_KEY_STEP = 20
 # Rationale: 80 ms gives quick feedback without a busy UI polling loop.
 PHOTOS_CATALOG_POLL_MS = 80
 
+# Purpose: Keep the Legacy Tk notice readable next to its restart action.
+# Type: int. Units: logical Tk pixels. Scope: Photos interface notice.
+# Consumers: PhotosWorkspace._build_widgets and _resize_legacy_interface_notice.
+# Rationale: 260 accommodates the short localized warning at typical font sizes.
+PHOTOS_LEGACY_NOTICE_TEXT_WIDTH = 260
+
 # Purpose: Bound implicit attempts to find a gallery with visible photos.
 # Type: int. Units: gallery candidates. Scope: one session auto-selection.
 # Consumers: PhotosWorkspace._ensure_initial_gallery.
@@ -483,6 +489,7 @@ class PhotosWorkspace(ttk.Frame):
         diagnostic_callback: Callable[[str], None] | None = None,
         canvas_grid_enabled: bool = False,
         thumbnail_batch_size: Callable[[], int] | None = None,
+        restart_with_qt: Callable[[], None] | None = None,
     ) -> None:
         """Create the gallery, viewer and optional metadata panes.
 
@@ -550,6 +557,8 @@ class PhotosWorkspace(ttk.Frame):
                 changing saved configuration cannot alter existing workspaces.
             thumbnail_batch_size (Callable[[], int] | None): Host reader for
                 the current steady thumbnail request size.
+            restart_with_qt (Callable[[], None] | None): Optional action for
+                restarting the app with the Qt interface.
 
         Returns:
             None: Starts a bounded asynchronous catalogue read when available.
@@ -560,6 +569,7 @@ class PhotosWorkspace(ttk.Frame):
         self._language = language
         self._canvas_grid_enabled = canvas_grid_enabled is True
         self._thumbnail_batch_size = thumbnail_batch_size
+        self._restart_with_qt = restart_with_qt
         self._manager = manager
         self._format_bytes = format_bytes
         self._manage_link = manage_link
@@ -840,6 +850,34 @@ class PhotosWorkspace(ttk.Frame):
         self.info_pane.grid_propagate(False)
         self.info_pane.rowconfigure(2, weight=1)
         self.info_pane.columnconfigure(0, weight=1)
+        if self._restart_with_qt is not None:
+            self._legacy_interface_notice = GlassCard(self.viewer_pane)
+            self._legacy_interface_notice.pack(fill='x', padx=8, pady=(4, 2))
+            self._legacy_interface_notice.columnconfigure(0, weight=1)
+            self._legacy_interface_notice_label = ttk.Label(
+                self._legacy_interface_notice,
+                text=tr(self._language(), 'photos_workspace_legacy_notice'),
+                style='Warning.TLabel',
+                wraplength=PHOTOS_LEGACY_NOTICE_TEXT_WIDTH,
+                justify='left',
+            )
+            self._legacy_interface_notice_label.grid(
+                row=0, column=0, sticky='ew', padx=(10, 8), pady=6,
+            )
+            self._legacy_interface_restart = Button(
+                self._legacy_interface_notice,
+                text=tr(self._language(), 'photos_workspace_switch_to_qt'),
+                command=self._restart_with_qt,
+                style='Accent.Compact.TButton',
+            )
+            self._legacy_interface_restart.grid(
+                row=0, column=1, sticky='e', padx=(0, 8), pady=4,
+            )
+            self._legacy_interface_notice.bind(
+                '<Configure>',
+                self._resize_legacy_interface_notice,
+                add='+',
+            )
         self._photo_inspector_heading = ttk.Label(
             self.info_pane, text=self._text("photo_info"),
             style="Section.TLabel",
@@ -1515,6 +1553,40 @@ class PhotosWorkspace(ttk.Frame):
         if current.get('row') != row or current.get('column') != columns:
             notice.grid_configure(row=row, column=columns)
         return columns
+
+    def _resize_legacy_interface_notice(self, event: tk.Event) -> None:
+        """Fit the optional Legacy Tk notice and restart action to its pane.
+
+        Args:
+            event (tk.Event): Notice width change from Tk geometry management.
+
+        Returns:
+            None: The action shares a row on desktop and wraps below the message
+                when the Photos pane is narrow.
+        """
+        # The warning label has 20 pixels of theme padding and 18 of grid
+        # margins. The button reserves its requested width and right margin.
+        message_width = event.width - 38
+        inline_width = message_width - self._legacy_interface_restart.winfo_reqwidth() - 8
+        if inline_width < PHOTOS_LEGACY_NOTICE_TEXT_WIDTH:
+            self._legacy_interface_notice_label.grid_configure(
+                row=0, column=0, columnspan=2, sticky='ew',
+            )
+            self._legacy_interface_restart.grid_configure(
+                row=1, column=1, sticky='e',
+            )
+            wraplength = message_width
+        else:
+            self._legacy_interface_notice_label.grid_configure(
+                row=0, column=0, columnspan=1, sticky='ew',
+            )
+            self._legacy_interface_restart.grid_configure(
+                row=0, column=1, sticky='e',
+            )
+            wraplength = inline_width
+        self._legacy_interface_notice_label.configure(
+            wraplength=max(1, wraplength),  # Tk uses zero for unwrapped text.
+        )
 
     def _on_photo_strip_resize(self, event: tk.Event) -> None:
         """Fit the photo controls to their own width below a mixed folder shelf.

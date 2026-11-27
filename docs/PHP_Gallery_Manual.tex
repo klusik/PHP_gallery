@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.8.1}
+\newcommand{\version}{1.8.2}
 \newcommand{\manualdate}{27 November 2026}
 
 \hypersetup{
@@ -2841,7 +2841,10 @@ from the~complete requirements.
 Apply the~choice with \ui{Restart WinApp}. Active work must settle or~have
 a~verified continuation before restart. Both frontends use the~same profile.
 If~Qt startup fails, Legacy Tk opens. You can select Legacy Tk to~keep it
-for~subsequent launches. On~macOS the~Qt Lightbox uses EDR when the~image and
+for~subsequent launches. In~Legacy Tk, Photos shows a~warning above
+the~gallery. \ui{Switch to Qt and restart} saves Qt as the~selected interface
+and~requests a~coordinated restart.
+On~macOS the~Qt Lightbox uses EDR when the~image and
 current display support it and~shows the~SDR rendition otherwise.
 
 The~Qt photo inspector slides open briefly and~shows a~larger preview above
@@ -3001,7 +3004,9 @@ data refuses the~update; identical installers in~several CMS releases
 are~accepted. Gallery credentials are~never sent to~GitHub.
 
 Choose \ui{Update} to~download with progress and~optional cancellation and
-verify the~installer. An~active Watcher finishes the~current acknowledged
+verify the~installer. An~idle update restarts the~selected interface.
+An~active Watcher resumes only from a~checkpoint matching the~installer ticket.
+Before the~update, an~active Watcher finishes the~current acknowledged
 photo operation, saves its~queue and~flushes the~original recording before
 the~helper starts. Unresolved work postpones installation after 120~seconds;
 the~game-presence observer does~not~block it. Finish a~manual import, AI task

@@ -118,6 +118,10 @@ compact Tk header cells. macOS keeps natural control widths around the
 reserved slot. The native narrow Photos and Watcher comparison records
 whether the linked address shares the brand row in each backend.
 
+Legacy Tk Photos displays an amber interface notice above the gallery heading.
+Its action saves Qt as the requested interface through the existing Settings
+owner and requests the coordinated restart.
+
 | Workspace | Reference structure and state treatments | Source |
 | --- | --- | --- |
 | Photos | Disconnected Photos displays a small Connect card at the upper left. The compact connected state has a left gallery tree with expand, collapse, add and refresh icons. In the viewer, the gallery name and pencil sit beside the format strip and contextual controls. Photo and subgallery order and aspect ratios are independent. The photo strip has visible Default, 16:9, 21:9, 4:3, 1:1, 4:5 and 9:16 captions below their icons. Mixed galleries put folder cards above the photo grid. The selected raster has its own outline. A right-side inspector shows the indexed original size before full details, with a partial-data notice if the lookup fails. Inline action cards follow their trigger and close when focus moves outside. | `photos_workspace.py`, `gallery_folders.py`, `native_gallery_viewer.py` |
@@ -603,6 +607,10 @@ data and the Tcl/Tk 9 libraries with embedded scripts in current CPython builds.
 The native Tk-only smoke verifies the supported runtime in the resulting bundle.
 
 The two frontends share the updater, the standard setup and its one descriptor.
+An idle Qt update records its idle intent before starting the helper. The
+relaunch uses the saved interface selection. For a verified older helper
+ticket, Qt first admits the profile and resumes only an exact matching capture
+checkpoint.
 An onedir helper stages a verified, bounded copy of the same executable and
 runtime outside the install directory. The published 1.7.1 onefile helper
 already understands the common setup name and installs it at the same

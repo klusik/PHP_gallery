@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.8.1}
+\newcommand{\version}{1.8.2}
 \newcommand{\manualdate}{27.~listopadu~2026}
 
 \hypersetup{
@@ -2806,6 +2806,9 @@ z~kompletních požadavků.
 Volba se projeví po~\ui{Restartovat WinApp}. Rozpracovaná úloha musí skončit
 nebo mít ověřený záznam pro~pokračování. Obě rozhraní sdílejí stejný profil.
 Při~selhání startu Qt se~otevře Legacy Tk, který lze zvolit i~pro~další spuštění.
+V~Legacy Tk se nad fotkami zobrazí upozornění.
+\ui{Přepnout na Qt a~restartovat} uloží Qt jako zvolené rozhraní a~požádá
+o~bezpečný restart.
 Na~macOS používá Qt Lightbox EDR u~podporovaného snímku a~displeje,
 v~ostatních případech zobrazí SDR.
 
@@ -2967,6 +2970,8 @@ aktualizaci odmítnou; shodné instalátory ve více vydáních CMS jsou přijí
 Přihlašovací údaje galerie se na GitHub neposílají.
 
 Volba \ui{Update} stáhne a~ověří instalátor s~průběhem a~možností zrušit stahování.
+Při aktualizaci v~klidu se znovu otevře zvolené rozhraní. Aktivní Watcher
+se obnoví pouze z~checkpointu odpovídajícího lístku instalátoru.
 Aktivní Watcher dokončí právě nahrávaný snímek včetně potvrzení, uloží frontu
 a~zapíše původní záznam před spuštěním pomocníka. Nevyřešená práce po
 120~sekundách instalaci odloží; sledování přítomnosti hry ji neblokuje.

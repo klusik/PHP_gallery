@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.8.1}
+\newcommand{\version}{1.8.2}
 \newcommand{\manualdate}{27.~November~2026}
 
 \hypersetup{
@@ -3151,7 +3151,10 @@ Qt-Abhängigkeiten in~den vollständigen Anforderungen enthalten.
 Übernehmen Sie die Auswahl mit \ui{WinApp neu starten}. Laufende Arbeit muss
 abgeschlossen sein oder eine überprüfte Fortsetzung besitzen. Beide
 Oberflächen verwenden dasselbe Profil. Bei einem Startfehler von Qt öffnet
-sich Legacy Tk. Sie können Legacy Tk auch für spätere Starts wählen. Unter macOS
+sich Legacy Tk. Sie können Legacy Tk auch für spätere Starts wählen.
+Über den Fotos zeigt Legacy Tk einen Hinweis an.
+\ui{Zu Qt wechseln und neu starten} speichert Qt als gewählte Oberfläche
+und fordert einen koordinierten Neustart an. Unter macOS
 verwendet die Qt-Lightbox bei geeignetem Bild und Display EDR, sonst SDR.
 
 Die Qt-Fotoinformationen gleiten kurz ins Bild und~zeigen eine größere Vorschau
@@ -3327,8 +3330,11 @@ identische Installer in mehreren CMS-Releases werden akzeptiert.
 Galerie-Zugangsdaten werden nie an GitHub gesendet.
 
 \ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter
-und prüft ihn. Ein aktiver Watcher beendet den aktuellen bestätigten
-Fototransfer, speichert seine Warteschlange und schreibt die ursprüngliche
+und prüft ihn. Bei einem Update im Leerlauf startet die gewählte Oberfläche
+erneut. Ein aktiver Watcher setzt die Arbeit nur mit einem zum Installerticket
+passenden Checkpoint fort. Vor dem Update beendet ein aktiver Watcher
+den aktuellen bestätigten Fototransfer, speichert seine Warteschlange und
+schreibt die ursprüngliche
 Aufzeichnung vor dem Helferstart. Ungeklärte Arbeit verschiebt die Installation
 nach 120~Sekunden; die Spielerkennung blockiert sie nicht. Beenden Sie einen
 manuellen Import, eine KI-Aufgabe oder Berichtserstellung zuerst. Bei einem

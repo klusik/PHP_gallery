@@ -1812,7 +1812,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.8.1. Release verification uses the
+This guide applies to PHP Gallery Version 1.8.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2215,6 +2215,12 @@ Qt updater fixture validates installer bytes, refuses installation during
 active work and closes only after the existing helper boundary is ready.
 Continuation admission also rejects a foreign helper nonce or wrong version
 and preserves the original queue bytes.
+The portable startup fixtures verify that the idle Qt updater saves its
+restart policy before launching the helper. A valid ticket from an older
+updater with an admitted idle profile reports Qt ready with Watcher idle.
+The native gallery fixture captures the Legacy Tk notice and action in
+desktop and narrow Photos layouts and exercises the coordinated restart
+callback.
 
 The same opt-in suite verifies installed updates using the published
 WinApp 1.7.1 onefile setup and two hosted common onedir builds. The earlier build sets

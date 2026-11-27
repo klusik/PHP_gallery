@@ -714,6 +714,47 @@ class UpdateHelperTests(unittest.TestCase):
         self.assertEqual(str(self.installed.parent), options["cwd"])
         self.assertEqual("1", options["env"]["PYINSTALLER_RESET_ENVIRONMENT"])
 
+    def test_launch_update_binds_idle_policy_before_helper_starts(self) -> None:
+        """Persist idle restart intent before the helper process is launched.
+
+        Returns:
+            None: The launched helper observes a schema-compatible false policy.
+        """
+        ticket_path = self.session / 'ticket.json'
+        ticket_path.write_text(json.dumps(asdict(self.ticket)), encoding='utf-8')
+        asset = types.SimpleNamespace(
+            version=self.ticket.target_version,
+            sha256=self.ticket.expected_sha256,
+            size=self.ticket.expected_size,
+        )
+        process = mock.Mock(spec=helper.subprocess.Popen)
+
+        def observe_launch(path: Path) -> mock.Mock:
+            """Read the durable ticket at the exact helper launch boundary.
+
+            Args:
+                path (Path): Ticket passed to the helper launcher.
+
+            Returns:
+                mock.Mock: Process double returned by the mocked launcher.
+            """
+            self.assertEqual(ticket_path, path)
+            ticket = helper.load_ticket(path)
+            self.assertFalse(ticket.resume_capture)
+            self.assertEqual(1, ticket.schema)
+            self.assertEqual(self.ticket.session_id, ticket.session_id)
+            return process
+
+        with (
+            mock.patch.object(helper, 'installed_identity', return_value=self.installed),
+            mock.patch.object(helper, 'prepare_helper', return_value=ticket_path),
+            mock.patch.object(helper, 'launch_helper', side_effect=observe_launch) as launch,
+        ):
+            result = helper.launch_update(self.setup, asset)
+
+        self.assertIs(process, result)
+        launch.assert_called_once_with(ticket_path)
+
     def test_restart_required_and_unknown_codes_are_honest(self) -> None:
         """Restart-required results never prematurely relaunch the uploader.
 

@@ -220,9 +220,23 @@ def installed_identity(executable_path: Path | None = None) -> Path:
 
 
 def launch_update(installer_path: Path, asset: "ReleaseAsset") -> subprocess.Popen:
-    """Stage a verified asset and confirm helper readiness before UI shutdown."""
+    """Stage an idle Qt update and confirm helper readiness before UI shutdown.
+
+    Args:
+        installer_path (Path): Verified downloaded installer to hand to setup.
+        asset (ReleaseAsset): Verified release identity for the installer.
+
+    Returns:
+        subprocess.Popen: Ready helper process for the idle update handoff.
+
+    Raises:
+        OSError: Staging, writing the ticket or starting the helper failed.
+        RuntimeError: Installed identity or helper readiness could not be verified.
+        ValueError: The installer or staged ticket failed validation.
+    """
     executable = installed_identity()
     ticket_path = prepare_helper(installer_path, asset.version, asset.sha256, asset.size, executable)
+    bind_capture_resume(ticket_path, False)
     return launch_helper(ticket_path)
 
 

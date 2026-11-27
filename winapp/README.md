@@ -156,6 +156,9 @@ choices are retained and the startup supervisor falls back to Legacy Tk if
 Qt cannot start. The setting is independent of the
 upload configuration and the Tk Canvas choice. Both frontends show the active
 backend, offer restart or a later retry, and can cancel a pending selection.
+In Legacy Tk, Photos displays a warning above the gallery. **Switch to Qt and
+restart** saves Qt as the selected interface and uses the same coordinated
+restart as Settings.
 The icon rail, compact connection header and latest Activity strip use the
 same shell structure in both frontends. Flight is part of Watcher in both.
 
@@ -211,7 +214,10 @@ The same destination can receive a newly created PDF revision in one action.
 On macOS, Lightbox can render supported HDR sources through Core Image and
 the native EDR layer. It keeps a bounded Qt SDR rendition available if the
 source, OS or current display cannot present HDR.
-The launcher opens Tkinter for incompatible work or older update continuations.
+The launcher opens Legacy Tk when retained work needs its recovery owner.
+An idle Windows update restarts the selected interface. Qt can also open
+after an older verified helper asks for a Watcher continuation and profile
+admission finds none to resume.
 Flights explicitly closed by older versions remain available as local history.
 The selected backend opens with the verified archived queues and their original
 photographs still available in the saved flights.
