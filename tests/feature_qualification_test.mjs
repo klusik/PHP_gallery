@@ -11,7 +11,8 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {loadFeatureExecution,verifyFeatureOwners} from '../.github/scripts/feature-qualification.mjs';
+import {loadFeatureExecution,verifyFeatureOwners,
+    verifyFeatureJobInventory} from '../.github/scripts/feature-qualification.mjs';
 import {bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {loadDevelopSource} from '../.github/scripts/coverage-artifacts.mjs';
 import {releaseStableMain,verifyMaintenanceMainBridge} from '../.github/scripts/release-origin.mjs';
@@ -19,6 +20,29 @@ import {fullMatrixOwners} from '../.github/scripts/ci-owner-contract.mjs';
 import {coverageFixtureZip} from './support/coverage_artifact_fixture.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
 import {qualifyCiInstallation} from '../.github/scripts/ci-installation.mjs';
+
+{
+    const runId=100,attempt=1;
+    const mandatory={name:'Develop integration / Complete required CI matrix',
+        run_id:runId,run_attempt:attempt,workflow_name:'Integrate into develop',
+        status:'completed',conclusion:'success'};
+    const skipped={...mandatory,name:'Issue 445 exact prepared WinApp evidence',
+        conclusion:'skipped'};
+    const expected=new Set([mandatory.name]);
+    verifyFeatureJobInventory([mandatory],expected,runId,attempt);
+    verifyFeatureJobInventory([mandatory,skipped],expected,runId,attempt);
+    for (const patch of [
+        {name:'Unexpected optional workflow'},
+        {status:'queued',conclusion:null},
+        {conclusion:'success'}, {conclusion:'failure'},
+        {run_id:101}, {run_attempt:2}, {workflow_name:'Unrelated workflow'},
+    ]) {
+        assert.throws(()=>verifyFeatureJobInventory([mandatory,{...skipped,...patch}],
+            expected,runId,attempt),/BLOCKED unexpected native feature qualification job/);
+    }
+    assert.throws(()=>verifyFeatureJobInventory([mandatory,skipped,{...skipped}],
+        expected,runId,attempt),/BLOCKED unexpected native feature qualification job/);
+}
 
 /** Build real in-memory archives and independently mutable provider evidence for a feature execution.
  * @returns {{repository:string,expected:{candidate:string,tree:string,base:string},record:Record<string,unknown>,run:Record<string,unknown>,jobs:Record<string,unknown>[],api:function(string):Record<string,unknown>,download:function(string,number):Buffer}} Inert exact-source execution and provider records; no Git or network writes occur.

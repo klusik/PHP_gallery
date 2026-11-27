@@ -18,10 +18,23 @@ import tempfile
 import time
 import types
 import unittest
+from collections.abc import Iterator
+from typing import BinaryIO, TextIO
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from uploader import update_helper as helper
+
+# Purpose: Make the source mutation visible to nanosecond file metadata checks.
+# Type: int. Units: nanoseconds. Scope: one staging race regression fixture.
+# Consumers: TestUpdateHelper._open_with_source_mutation. Rationale: advance the
+#   timestamp by one full second so filesystem timestamp granularity cannot hide it.
+SOURCE_MTIME_ADVANCE_NS = 1_000_000_000
+# Purpose: Exercise a Windows launch refusal distinct from cancelling UAC.
+# Type: int. Units: Win32 error code. Scope: ShellExecuteExW failure fixture.
+# Consumers: UpdateHelperTests. Rationale: ERROR_ACCESS_DENIED (5) models a
+# refused launch and follows the original-runtime restart path.
+ERROR_ACCESS_DENIED = 5
 
 
 class FakeBackend:
@@ -95,6 +108,204 @@ class UpdateHelperTests(unittest.TestCase):
         self.ticket = helper.UpdateTicket("a" * 32, "1.2.3", hashlib.sha256(self.setup.read_bytes()).hexdigest(),
                                           self.setup.stat().st_size, str(self.setup), str(self.installed))
 
+    def _make_onedir_runtime(self) -> tuple[Path, dict[str, bytes]]:
+        """Create a small canonical launcher runtime for staging checks.
+
+        Returns:
+            tuple[Path, dict[str, bytes]]: Launcher path and all source file bytes.
+        """
+        runtime = self.root / "canonical-runtime"
+        internal = runtime / helper.PYINSTALLER_INTERNAL_DIRECTORY
+        nested = internal / "uploader" / "resources"
+        nested.mkdir(parents=True)
+        executable = runtime / "PHPGalleryUploader.exe"
+        executable.write_bytes(b"canonical onedir launcher")
+        (internal / "python314.dll").write_bytes(b"python runtime")
+        (nested / "catalog.json").write_bytes(b'{"ready":true}')
+        notices = runtime / "licenses"
+        notices.mkdir()
+        (notices / "LGPL-3.0-only.txt").write_text("license notice", encoding="utf-8")
+        content = {
+            str(path.relative_to(runtime)): path.read_bytes()
+            for path in runtime.rglob("*") if path.is_file()
+        }
+        return executable, content
+
+    def test_stage_update_helper_runtime_copies_complete_onedir_tree(self) -> None:
+        """Copy the executable, _internal and licenses without linking source files.
+
+        Returns:
+            None: The helper session is byte-identical and independently owned.
+        """
+        executable, content = self._make_onedir_runtime()
+        helper_exe = self.session / "helper.exe"
+        setup_before = self.setup.read_bytes()
+        metrics = helper.stage_update_helper_runtime(executable, helper_exe)
+        staged_root = self.session
+        staged = {
+            str(path.relative_to(staged_root)): path.read_bytes()
+            for path in staged_root.rglob("*") if path.is_file()
+        }
+        expected = dict(content)
+        expected["helper.exe"] = expected.pop("PHPGalleryUploader.exe")
+        expected["setup.exe"] = setup_before
+        self.assertEqual(expected, staged)
+        self.assertEqual(setup_before, (self.session / "setup.exe").read_bytes())
+        self.assertEqual(sum(map(len, content.values())), metrics["runtime_bytes"])
+        self.assertGreaterEqual(metrics["runtime_entries"], len(content))
+        self.assertGreaterEqual(metrics["duration_ms"], 0)
+        for relative in content:
+            source = executable.parent / relative
+            copied = (
+                helper_exe if relative == "PHPGalleryUploader.exe"
+                else staged_root / relative
+            )
+            self.assertFalse(os.path.samestat(source.stat(), copied.stat()))
+
+    def _open_with_source_mutation(
+        self, path: Path, mode: str = "r",
+        *args: int | str | None, **kwargs: int | str | None,
+    ) -> BinaryIO | TextIO:
+        """Change one source file between staging inventory and byte copy.
+
+        Args:
+            path (Path): File requested by staging or the source mutation.
+            mode (str): Requested open mode.
+            *args (int | str | None): Positional buffering and text-mode options.
+            **kwargs (int | str | None): Named buffering and text-mode options.
+        Returns:
+            BinaryIO | TextIO: Opened file returned by Path.open.
+        """
+        original_open = self._original_path_open
+        if path == self._mutated_runtime_file and mode == "rb":
+            with original_open(path, "wb") as destination:
+                destination.write(b"PYTHON RUNTIME")
+            modified = path.stat()
+            os.utime(
+                path, ns=(
+                    modified.st_atime_ns,
+                    modified.st_mtime_ns + SOURCE_MTIME_ADVANCE_NS,
+                ),
+            )
+        return original_open(path, mode, *args, **kwargs)
+
+    def test_stage_update_helper_runtime_refuses_inaccessible_source_tree(self) -> None:
+        """An unreadable source directory removes all earlier staged entries.
+
+        Returns:
+            None: Permission failure is surfaced and helper runtime is cleaned.
+        """
+        executable, _ = self._make_onedir_runtime()
+        internal = executable.parent / helper.PYINSTALLER_INTERNAL_DIRECTORY
+        original_iterdir = Path.iterdir
+
+        def fail_source_listing(path: Path) -> Iterator[Path]:
+            """Raise permission failure only for the owned source directory.
+
+            Args:
+                path (Path): Source or staged directory requested by the caller.
+            Returns:
+                Iterator[Path]: Entries from a readable directory.
+            Raises:
+                PermissionError: The synthetic source runtime is inaccessible.
+            """
+            if path == internal:
+                raise PermissionError("synthetic inaccessible runtime")
+            return original_iterdir(path)
+
+        with mock.patch.object(Path, "iterdir", fail_source_listing):
+            with self.assertRaisesRegex(PermissionError, "inaccessible"):
+                helper.stage_update_helper_runtime(
+                    executable, self.session / "helper.exe",
+                )
+        self.assertFalse((self.session / "helper.exe").exists())
+        self.assertFalse((self.session / helper.PYINSTALLER_INTERNAL_DIRECTORY).exists())
+
+    def test_stage_update_helper_runtime_refuses_runtime_changed_mid_copy(self) -> None:
+        """A changed runtime after inventory is rejected and partial bytes removed.
+
+        Returns:
+            None: A source mutation cannot produce an executable staged helper.
+        """
+        executable, _ = self._make_onedir_runtime()
+        self._original_path_open = Path.open
+        self._mutated_runtime_file = (
+            executable.parent / helper.PYINSTALLER_INTERNAL_DIRECTORY
+            / "python314.dll"
+        )
+        with mock.patch.object(
+            Path, "open", autospec=True,
+            side_effect=self._open_with_source_mutation,
+        ):
+            with self.assertRaisesRegex(ValueError, "changed"):
+                helper.stage_update_helper_runtime(
+                    executable, self.session / "helper.exe",
+                )
+        self.assertFalse((self.session / "helper.exe").exists())
+        self.assertFalse((self.session / helper.PYINSTALLER_INTERNAL_DIRECTORY).exists())
+
+    def test_stage_update_helper_runtime_requires_explicit_legacy_allowance(self) -> None:
+        """Only the historical onefile fixture may omit _internal.
+
+        Returns:
+            None: Default staging fails closed; explicit legacy staging copies only EXE.
+        """
+        runtime = self.root / "historical-onefile"
+        runtime.mkdir()
+        executable = runtime / "PHPGalleryUploader.exe"
+        executable.write_bytes(b"historical onefile")
+        helper_exe = self.session / "helper.exe"
+        with self.assertRaisesRegex(RuntimeError, "missing _internal"):
+            helper.stage_update_helper_runtime(executable, helper_exe)
+        helper.stage_update_helper_runtime(
+            executable, helper_exe, allow_legacy_onefile=True,
+        )
+        self.assertEqual(executable.read_bytes(), helper_exe.read_bytes())
+        self.assertFalse((self.session / helper.PYINSTALLER_INTERNAL_DIRECTORY).exists())
+
+    def test_stage_update_helper_runtime_cleans_partial_copy_when_bound_exceeded(self) -> None:
+        """Bound the complete copy and remove every partially staged runtime entry.
+
+        Returns:
+            None: Oversized runtime raises and leaves the owned session clean.
+        """
+        executable, _ = self._make_onedir_runtime()
+        with mock.patch.object(helper, "UPDATE_RUNTIME_PROOF_MAX_BYTES", 16):
+            with self.assertRaisesRegex(OSError, "byte limit"):
+                helper.stage_update_helper_runtime(executable, self.session / "helper.exe")
+        self.assertFalse((self.session / "helper.exe").exists())
+        self.assertFalse((self.session / helper.PYINSTALLER_INTERNAL_DIRECTORY).exists())
+        self.assertFalse((self.session / "licenses").exists())
+
+    def test_stage_update_helper_runtime_rejects_redirected_and_hardlinked_files(self) -> None:
+        """Runtime staging refuses links before a helper can execute them.
+
+        Returns:
+            None: Reparse directories and multiply linked files are rejected.
+        """
+        executable, _ = self._make_onedir_runtime()
+        internal = executable.parent / helper.PYINSTALLER_INTERNAL_DIRECTORY
+        ordinary_file = internal / "python314.dll"
+        external = self.root / "external-runtime.dll"
+        external.write_bytes(b"outside runtime")
+        original = internal / "redirected.dll"
+        try:
+            original.symlink_to(external)
+        except (OSError, NotImplementedError):
+            self.skipTest("The current account cannot create a source runtime symlink")
+        with self.assertRaisesRegex(ValueError, "reparse|redirected"):
+            helper.stage_update_helper_runtime(executable, self.session / "helper.exe")
+        self.assertFalse((self.session / "helper.exe").exists())
+        original.unlink()
+        linked = internal / "hardlinked.dll"
+        try:
+            os.link(ordinary_file, linked)
+        except OSError:
+            self.skipTest("The current volume cannot create a runtime hardlink")
+        with self.assertRaisesRegex(ValueError, "linked or special"):
+            helper.stage_update_helper_runtime(executable, self.session / "helper.exe")
+        self.assertFalse((self.session / "helper.exe").exists())
+
     def test_ticket_rejects_external_paths_and_invalid_identity(self) -> None:
         """Web-derived path injection and wrong field types never become setup."""
         helper.validate_ticket(self.ticket, self.session / "ticket.json")
@@ -107,7 +318,11 @@ class UpdateHelperTests(unittest.TestCase):
                 helper.validate_ticket(ticket, self.session / "ticket.json")
 
     def test_native_libraries_avoid_frozen_version_data_collision(self) -> None:
-        """Exercise all native loads under PyInstaller's case-insensitive VERSION redirection."""
+        """Exercise native loads under PyInstaller's case-insensitive VERSION redirection.
+
+        Returns:
+            None: System libraries resolve securely and setup refusal keeps its exact category.
+        """
         extraction = self.root / "_MEI"
         extraction.mkdir()
         version_data = extraction / "VERSION"
@@ -133,15 +348,29 @@ class UpdateHelperTests(unittest.TestCase):
 
         self.assertEqual(str(version_data), frozen_name("version"))
         with mock.patch.object(helper.ctypes, "WinDLL", side_effect=load_library, create=True) as loader, \
-                mock.patch.object(helper.ctypes, "get_last_error", return_value=1223, create=True):
+                mock.patch.object(
+                    helper.ctypes, "get_last_error",
+                    side_effect=[helper.ERROR_CANCELLED, ERROR_ACCESS_DENIED], create=True,
+                ):
             backend = helper.WindowsBackend()
             with mock.patch.object(backend, "create_status_pipe", return_value=None), \
                     self.assertRaises(InterruptedError):
                 backend.install(self.ticket, mock.Mock())
+            with mock.patch.object(backend, "create_status_pipe", return_value=None), \
+                    self.assertRaises(helper.SetupLaunchError):
+                backend.install(self.ticket, mock.Mock())
             with self.assertRaisesRegex(OSError, "version unavailable"):
                 backend.version(str(self.installed))
+        for invocation in shell.ShellExecuteExW.call_args_list:
+            shell_info = invocation.args[0]._obj
+            self.assertEqual('runas', shell_info.lpVerb)
+            self.assertEqual(
+                helper.SEE_MASK_NOCLOSEPROCESS | helper.SEE_MASK_FLAG_NO_UI,
+                shell_info.fMask,
+            )
         self.assertEqual([mock.call(name, use_last_error=True, winmode=0x00000800)
-                          for name in ("kernel32.dll", "shell32.dll", "version.dll")], loader.call_args_list)
+                          for name in ("kernel32.dll", "shell32.dll", "shell32.dll", "version.dll")],
+                         loader.call_args_list)
 
     def test_broken_symlink_is_rejected_before_existence_check(self) -> None:
         """A dangling link remains a forbidden path even without a target."""
@@ -336,7 +565,7 @@ class UpdateHelperTests(unittest.TestCase):
                 helper.installed_identity(copied)
 
     def test_running_target_refuses_setup_without_force_killing(self) -> None:
-        """Both onefile processes must exit before installer execution starts."""
+        """The exact common executable must exit before installer execution starts."""
         backend = FakeBackend(running=True)
         with self.assertRaisesRegex(RuntimeError, "still running"):
             helper.perform_update(self.ticket, backend, mock.Mock(), timeout=0)
@@ -378,6 +607,54 @@ class UpdateHelperTests(unittest.TestCase):
             helper.perform_update(self.ticket, backend, mock.Mock())
         self.assertEqual([(str(self.installed), self.ticket.session_id)], backend.restarts)
 
+    def test_definitive_setup_launch_refusal_restarts_only_unchanged_runtime(self) -> None:
+        """Recover exact capture only when ShellExecute proves setup never started.
+
+        Returns:
+            None: Exact nonce restarts for unchanged bytes; changed runtime stays fenced.
+        """
+        backend = FakeBackend()
+        with mock.patch.object(
+            backend, "install", side_effect=helper.SetupLaunchError("refused"),
+        ):
+            with self.assertRaises(helper.SetupLaunchError):
+                helper.perform_update(self.ticket, backend, mock.Mock())
+        self.assertEqual([(str(self.installed), self.ticket.session_id)], backend.restarts)
+
+        changed_backend = FakeBackend()
+        with (
+            mock.patch.object(
+                helper, "_installed_runtime_fingerprint", side_effect=[b"before", b"after"],
+            ),
+            mock.patch.object(
+                changed_backend, "install", side_effect=helper.SetupLaunchError("refused"),
+            ),
+        ):
+            with self.assertRaises(helper.SetupLaunchError):
+                helper.perform_update(self.ticket, changed_backend, mock.Mock())
+        self.assertEqual([], changed_backend.restarts)
+
+        uncertain_backend = FakeBackend()
+        with mock.patch.object(
+            uncertain_backend, "install", side_effect=OSError("wait failed"),
+        ):
+            with self.assertRaisesRegex(OSError, "wait failed"):
+                helper.perform_update(self.ticket, uncertain_backend, mock.Mock())
+        self.assertEqual([], uncertain_backend.restarts)
+
+    def test_uac_cancellation_refuses_a_changed_idle_runtime(self) -> None:
+        """Check a non-capture install identity even when approval is cancelled.
+
+        Returns:
+            None: No changed runtime restarts after a definitive cancellation.
+        """
+        backend = FakeBackend(cancelled=True)
+        idle = replace(self.ticket, resume_capture=False)
+        with mock.patch.object(helper, '_installed_runtime_fingerprint', side_effect=[b'old', b'new']):
+            with self.assertRaises(InterruptedError):
+                helper.perform_update(idle, backend, mock.Mock())
+        self.assertEqual([], backend.restarts)
+
     def test_windows_restart_passes_only_the_validated_update_nonce(self) -> None:
         """Relaunch uses the helper nonce without adding privilege elevation.
 
@@ -388,12 +665,16 @@ class UpdateHelperTests(unittest.TestCase):
         backend = object.__new__(helper.WindowsBackend)
         nonce = self.ticket.session_id
         (self.session / 'ticket.json').write_text(json.dumps(asdict(self.ticket)), encoding='utf-8')
-        with mock.patch.object(helper.subprocess, "Popen") as popen:
+        with (
+            mock.patch.object(helper.subprocess, "Popen") as popen,
+            mock.patch.object(helper, "installed_identity", return_value=self.installed) as registered,
+        ):
             backend.restart(str(self.installed), update_session=nonce)
-            popen.assert_called_once_with(
-                [str(self.installed), "--after-update", nonce],
-                cwd=str(self.installed.parent),
-            )
+            registered.assert_called_once_with(self.installed)
+            arguments, options = popen.call_args
+            self.assertEqual([str(self.installed), "--after-update", nonce], arguments[0])
+            self.assertEqual(str(self.installed.parent), options["cwd"])
+            self.assertEqual("1", options["env"]["PYINSTALLER_RESET_ENVIRONMENT"])
             popen.reset_mock()
             with self.assertRaises(ValueError):
                 backend.restart(str(self.installed), update_session="not-a-nonce")
@@ -410,16 +691,28 @@ class UpdateHelperTests(unittest.TestCase):
         helper.bind_capture_resume(ticket_path, False)
         self.assertFalse(helper.load_ticket(ticket_path).resume_capture)
         backend = object.__new__(helper.WindowsBackend)
-        with mock.patch.object(helper.subprocess, 'Popen') as popen:
+        with (
+            mock.patch.object(helper.subprocess, 'Popen') as popen,
+            mock.patch.object(helper, 'installed_identity', return_value=self.installed),
+        ):
             backend.restart(str(self.installed), update_session=self.ticket.session_id)
-        popen.assert_called_once_with([str(self.installed)], cwd=str(self.installed.parent))
+        arguments, options = popen.call_args
+        self.assertEqual([str(self.installed)], arguments[0])
+        self.assertEqual(str(self.installed.parent), options["cwd"])
+        self.assertEqual("1", options["env"]["PYINSTALLER_RESET_ENVIRONMENT"])
         helper.bind_capture_resume(ticket_path, True)
-        with mock.patch.object(helper.subprocess, 'Popen') as popen:
+        with (
+            mock.patch.object(helper.subprocess, 'Popen') as popen,
+            mock.patch.object(helper, 'installed_identity', return_value=self.installed),
+        ):
             backend.restart(str(self.installed), update_session=self.ticket.session_id)
-        popen.assert_called_once_with(
+        arguments, options = popen.call_args
+        self.assertEqual(
             [str(self.installed), '--after-update', self.ticket.session_id],
-            cwd=str(self.installed.parent),
+            arguments[0],
         )
+        self.assertEqual(str(self.installed.parent), options["cwd"])
+        self.assertEqual("1", options["env"]["PYINSTALLER_RESET_ENVIRONMENT"])
 
     def test_restart_required_and_unknown_codes_are_honest(self) -> None:
         """Restart-required results never prematurely relaunch the uploader.
@@ -435,11 +728,50 @@ class UpdateHelperTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "code 42"):
             helper.perform_update(self.ticket, FakeBackend(code=42), mock.Mock())
 
+    def test_failed_setup_resumes_only_the_byte_identical_installed_runtime(self) -> None:
+        """Keep a paused capture on the original runtime after a failed setup.
+
+        Returns:
+            None: A changed _internal file keeps recovery fenced.
+        """
+        internal = self.installed.parent / helper.PYINSTALLER_INTERNAL_DIRECTORY
+        internal.mkdir()
+        library = internal / 'python314.dll'
+        library.write_bytes(b'original sealed fixture')
+        backend = FakeBackend(code=42)
+        with self.assertRaisesRegex(RuntimeError, 'code 42'):
+            helper.perform_update(self.ticket, backend, mock.Mock())
+        self.assertEqual([(str(self.installed), self.ticket.session_id)], backend.restarts)
+
+        def failed_partial_setup(_ticket: helper.UpdateTicket, _progress: helper.Progress) -> int:
+            """Change one _internal file before the injected setup failure.
+
+            Args:
+                _ticket (helper.UpdateTicket): Valid site-specific fixture ticket.
+                _progress (helper.Progress): Unused setup feedback no-op.
+            Returns:
+                int: Synthetic nonzero setup failure exit code.
+            """
+            library.write_bytes(b'replaced runtime fixture')
+            return 42
+
+        backend = FakeBackend(code=42)
+        with mock.patch.object(backend, 'install', side_effect=failed_partial_setup):
+            with self.assertRaisesRegex(RuntimeError, 'code 42'):
+                helper.perform_update(self.ticket, backend, mock.Mock())
+        self.assertEqual([], backend.restarts)
+
     def test_launch_timeout_cancels_before_proceed_handshake(self) -> None:
-        """A late helper cannot autonomously install after uploader timeout."""
-        with mock.patch.object(helper.subprocess, "Popen"):
+        """Prevent a late helper from installing after uploader timeout.
+
+        Returns:
+            None: Launch publishes cancellation without the proceed marker.
+        """
+        with mock.patch.object(helper.subprocess, "Popen") as popen:
             with self.assertRaisesRegex(RuntimeError, "remains open"):
                 helper.launch_helper(self.session / "ticket.json", timeout=0)
+        options = popen.call_args.kwargs
+        self.assertEqual("1", options["env"]["PYINSTALLER_RESET_ENVIRONMENT"])
         self.assertTrue((self.session / "cancel").is_file())
         self.assertFalse((self.session / "proceed").exists())
 

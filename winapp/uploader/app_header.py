@@ -13,26 +13,8 @@
 import tkinter as tk
 
 from uploader.localization import gettext
+from uploader.ui_layout import HEADER_GROUP_GAP, HEADER_ROW_GAP, HEADER_WORKSPACE_GAP
 from tkinter import ttk
-
-
-# Purpose: Separate horizontal header groups without framed secondary surfaces.
-# Type: int. Units: logical Tk pixels. Scope: native application header.
-# Consumers: CompactAppHeader branding and measured layout.
-# Rationale: 12 matches the existing shell spacing while keeping groups distinct.
-HEADER_GROUP_GAP = 12
-
-# Purpose: Separate wrapped header rows without retaining empty vertical space.
-# Type: int. Units: logical Tk pixels. Scope: narrow header rows.
-# Consumers: CompactAppHeader._layout.
-# Rationale: 2 preserves readable row separation with a compact native baseline.
-HEADER_ROW_GAP = 2
-
-# Purpose: Give gallery content a small clear edge below the application header.
-# Type: int. Units: logical Tk pixels. Scope: main-window header grid placement.
-# Consumers: WatcherApp.build_app_header.
-# Rationale: 6 replaces the old 10-pixel gap after its three stacked label rows.
-HEADER_WORKSPACE_GAP = 6
 
 
 class CompactAppHeader(ttk.Frame):

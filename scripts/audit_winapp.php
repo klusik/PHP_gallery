@@ -8,7 +8,8 @@
  * Purpose: Validate structured outcomes from the central WinApp unittest discovery.
  * Responsibilities:
  *   - Require complete per-test and fixture evidence before reporting WinApp coverage.
- *   - Reconcile reported outcomes with their exact summary counts and native success flag.
+ *   - Reconcile ordinary, delegated and selected-ID reports with exact identity unions.
+ *   - Preserve the unchanged full-suite and selected native diagnostic contracts.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -22,11 +23,35 @@ namespace PhpGallery\Audit;
  * @var int
  * Units: child processes. Scope: the optional partitioned WinApp full suite.
  * Consumers: audit_validate_winapp_report() and audit.php's coordinator call.
- * Rationale: retain five exclusive measured groups and split the observed
- * canonical remainder into three class-preserving children after repeated
- * 90-second Windows timeouts with two children. Require complete discovery.
+ * Rationale: retain seven exclusive groups (the viewer, four measured owners,
+ * paired visuals and the crash-prone Tk shell class) and split the canonical
+ * remainder into three class-preserving children. Linux/Xvfb runs 310 and
+ * 8621 crashed in the Tk focus test and lost 537 identities; a fresh child
+ * isolates its Tcl/Tk lifetime without changing its assertions. The full
+ * process total becomes ten; existing child/run deadlines stay unchanged.
  */
-const AUDIT_WINAPP_PARTITION_COUNT = 8;
+const AUDIT_WINAPP_PARTITION_COUNT = 10;
+
+/**
+ * Define nonvisual partition count when Windows or macOS Qt delegates visuals.
+ * @var int
+ * Units: child processes. Scope: issue 445 Windows/macOS Qt qualification.
+ * Consumers: audit_validate_winapp_report() and split coordinator invocation.
+ * Rationale: retain the viewer, five isolated nonvisual classes and three
+ * remainder shards under unchanged 90-second child/480-second run limits.
+ */
+const AUDIT_WINAPP_NONVISUAL_PARTITION_COUNT = 9;
+
+/**
+ * Identify the only class delegated to the separate visual audit suite.
+ * @var string
+ * Units: canonical unittest class identity. Scope: issue 445 Windows Qt split.
+ * Scope: issue 445 Windows/macOS Qt split qualification.
+ * Consumers: split partition proof and dedicated visual report validation.
+ * Rationale: bind both audit suites to the existing paired production class.
+ */
+const AUDIT_WINAPP_DELEGATED_VISUAL_CLASS =
+    'test_gui_visual_parity.VisualParityTests';
 
 /**
  * Validate a complete version-one WinApp unittest evidence document.
@@ -38,14 +63,18 @@ const AUDIT_WINAPP_PARTITION_COUNT = 8;
  * may require the narrower native-viewer pattern instead.
  *
  * @param array<string,mixed> $report Untrusted schema-1 object with exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_*.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>` and same-shaped `fixture_skips`; partitioned mode additionally requires one ordered process record per configured partition and complete proof identity lists.
- * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>} Validated schema-v1 evidence with calculated counts and coverage.
+ * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float,delegated_test_ids?:list<string>,canonical_test_ids?:list<string>}|null,gaps:list<string>} Validated schema-v1 evidence with calculated counts and coverage.
  * @param bool $nativeOnly Require the explicit native-viewer diagnostic pattern instead of complete discovery; default false never accepts a diagnostic as full evidence.
- * @param bool $partitioned Require the configured partition count and complete full-discovery proof; default false retains the original schema contract.
+ * @param bool $partitioned Require the configured partition count and complete identity proof; default false retains the original schema contract.
+ * @param bool $delegatedVisual Require the split proof with exactly one delegated visual class.
+ * @param list<string>|null $selectedTestIds Require this exact ordered selected-ID child report when non-null.
  */
 function audit_validate_winapp_report(
     array $report,
     bool $nativeOnly = false,
     bool $partitioned = false,
+    bool $delegatedVisual = false,
+    ?array $selectedTestIds = null,
 ): array
 {
     $emptyCounts = [
@@ -66,6 +95,7 @@ function audit_validate_winapp_report(
         $report,
         $emptyCounts,
         $partitioned,
+        $delegatedVisual,
     ): array {
         $result = [
             'valid' => false,
@@ -116,7 +146,11 @@ function audit_validate_winapp_report(
         $rawProcesses = $report['partition_processes'];
         $rawProof = $report['partition_proof'];
         if (!is_array($rawProcesses) || !array_is_list($rawProcesses)
-            || count($rawProcesses) !== AUDIT_WINAPP_PARTITION_COUNT
+            || count($rawProcesses) !== (
+                $delegatedVisual
+                    ? AUDIT_WINAPP_NONVISUAL_PARTITION_COUNT
+                    : AUDIT_WINAPP_PARTITION_COUNT
+            )
             || !is_array($rawProof)
             || array_is_list($rawProof)) {
             return $invalid('invalid-partition-evidence');
@@ -125,11 +159,19 @@ function audit_validate_winapp_report(
             'partition_count', 'complete', 'exact_union', 'expected_test_ids',
             'observed_test_ids', 'total_duration_seconds',
         ];
+        if ($delegatedVisual) {
+            $expectedProofKeys[] = 'delegated_test_ids';
+            $expectedProofKeys[] = 'canonical_test_ids';
+        }
         $actualProofKeys = array_keys($rawProof);
         sort($expectedProofKeys, SORT_STRING);
         sort($actualProofKeys, SORT_STRING);
         if ($actualProofKeys !== $expectedProofKeys
-            || $rawProof['partition_count'] !== AUDIT_WINAPP_PARTITION_COUNT
+            || $rawProof['partition_count'] !== (
+                $delegatedVisual
+                    ? AUDIT_WINAPP_NONVISUAL_PARTITION_COUNT
+                    : AUDIT_WINAPP_PARTITION_COUNT
+            )
             || !is_bool($rawProof['complete'])
             || !is_bool($rawProof['exact_union'])
             || !is_array($rawProof['expected_test_ids'])
@@ -148,6 +190,34 @@ function audit_validate_winapp_report(
             || count(array_filter($expectedIds, 'is_string')) !== count($expectedIds)
             || count(array_filter($observedIds, 'is_string')) !== count($observedIds)) {
             return $invalid('invalid-partition-test-identities');
+        }
+        $delegatedIds = [];
+        $canonicalIds = [];
+        if ($delegatedVisual) {
+            $delegatedIds = $rawProof['delegated_test_ids'] ?? null;
+            $canonicalIds = $rawProof['canonical_test_ids'] ?? null;
+            if (!is_array($delegatedIds) || !array_is_list($delegatedIds)
+                || !is_array($canonicalIds) || !array_is_list($canonicalIds)
+                || count(array_filter($delegatedIds, 'is_string')) !== count($delegatedIds)
+                || count(array_filter($canonicalIds, 'is_string')) !== count($canonicalIds)
+                || $delegatedIds === []
+                || count($delegatedIds) !== count(array_unique($delegatedIds))
+                || count($canonicalIds) !== count(array_unique($canonicalIds))
+                || count($canonicalIds) !== count($expectedIds) + count($delegatedIds)
+                || count(array_unique(array_merge($expectedIds, $delegatedIds)))
+                    !== count($canonicalIds)
+                || array_diff($canonicalIds, array_merge($expectedIds, $delegatedIds)) !== []
+                || array_diff(array_merge($expectedIds, $delegatedIds), $canonicalIds) !== []) {
+                return $invalid('invalid-delegated-visual-identity-proof');
+            }
+            foreach ($delegatedIds as $testId) {
+                if (!str_starts_with(
+                    $testId,
+                    AUDIT_WINAPP_DELEGATED_VISUAL_CLASS . '.',
+                )) {
+                    return $invalid('unexpected-delegated-visual-test-class');
+                }
+            }
         }
         $exactUnion = count($expectedIds) > 0
             && count($expectedIds) === count(array_unique($expectedIds))
@@ -299,6 +369,9 @@ function audit_validate_winapp_report(
         'runner' => 'unittest.TextTestRunner',
         'verbosity' => 1,
     ];
+    if ($selectedTestIds !== null) {
+        $expectedSuiteSettings['partition_selection'] = 'selected-id-subset';
+    }
     $suiteSettingKeys = array_keys($expectedSuiteSettings);
     $actualSuiteSettingKeys = is_array($suiteSettings)
         ? array_keys($suiteSettings)
@@ -564,6 +637,23 @@ function audit_validate_winapp_report(
             $gaps[] = 'Partition child exit, report or complete identity proof failed.';
         }
     }
+    if ($selectedTestIds !== null) {
+        if (!array_is_list($selectedTestIds)
+            || $selectedTestIds === []
+            || count($selectedTestIds) !== count(array_unique($selectedTestIds))
+            || count(array_filter($selectedTestIds, 'is_string')) !== count($selectedTestIds)
+            || array_column($tests, 'id') !== $selectedTestIds) {
+            return $invalid('selected-test-identities-do-not-match');
+        }
+        foreach ($selectedTestIds as $testId) {
+            if (!str_starts_with(
+                $testId,
+                AUDIT_WINAPP_DELEGATED_VISUAL_CLASS . '.',
+            )) {
+                return $invalid('unexpected-selected-test-class');
+            }
+        }
+    }
 
     $fixtureErrors = [];
     $fixtureSkips = [];
@@ -707,21 +797,29 @@ function audit_validate_winapp_report(
  *
  * @param string|null $contents Exact saved adapter report bytes, or null when the output file is missing or unreadable.
  * @param array{exit_code:?int,timed_out:bool,duration_seconds:int|float} $process Bounded process result returned by the central audit runner.
- * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
- * @param bool $nativeOnly Validate only explicitly requested native-viewer diagnostic evidence; default false retains complete-suite qualification.
- * @param bool $partitioned Validate the ordered child processes and complete/disjoint full-discovery identities.
+ * @param bool $nativeOnly Validate only the explicitly selected native viewer pattern.
+ * @param bool $partitioned Validate ordered children and their exact identity union.
+ * @param bool $delegatedVisual Require canonical IDs to include the split visual class.
+ * @param list<string>|null $selectedTestIds Require this exact selected child test order.
+ * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float,delegated_test_ids?:list<string>,canonical_test_ids?:list<string>}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
  */
 function audit_evaluate_winapp_report(
     ?string $contents,
     array $process,
     bool $nativeOnly = false,
     bool $partitioned = false,
+    bool $delegatedVisual = false,
+    ?array $selectedTestIds = null,
 ): array
 {
-    $empty = audit_validate_winapp_report([], $nativeOnly, $partitioned);
+    $empty = audit_validate_winapp_report(
+        [], $nativeOnly, $partitioned, $delegatedVisual, $selectedTestIds,
+    );
     $decoded = $contents === null ? null : json_decode($contents, true);
     $validation = is_array($decoded)
-        ? audit_validate_winapp_report($decoded, $nativeOnly, $partitioned)
+        ? audit_validate_winapp_report(
+            $decoded, $nativeOnly, $partitioned, $delegatedVisual, $selectedTestIds,
+        )
         : $empty;
     if (!$validation['valid']) {
         $validation['reason'] = $contents === null

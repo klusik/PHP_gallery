@@ -34,7 +34,7 @@ import { setupImageBulkMoveFields, confirmImageBulkSubmission } from './admin-bu
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20261023-compact-scroll-v2';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261102-repeat-modes-v1';
-import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261023-picture-manager-context-v1';
+import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261127-gallery-move-v2';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261023-discovery-clearance-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261027-appearance-state-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
@@ -2370,7 +2370,7 @@ async function reflectUploadedGalleryInCurrentView(result) {
  * @param {AdminPanelCompletionOverrides} overrides Optional owner-guarded panel refresh implementation.
  * @return {Promise<AdminPanelSynchronization>} Original coordinator outcome, not a new mutation response.
  */
-async function completeCoreGalleryMutationInCurrentView(result, overrides = {}) {
+export async function completeCoreGalleryMutationInCurrentView(result, overrides = {}) {
     const panel = document.querySelector('[data-admin-side-panel]');
     const owner = adminPanelMutationOwner(result, panel);
     const syncResult = await completeAdminMutation(result, {
@@ -2974,7 +2974,7 @@ function teardownPublicGalleryLifecycleBeforeRefresh() {
  * @return {void} Binds the replaced public markup, including gallery ordering, after coordinator-owned replacement.
  */
 function rebindPublicGalleryLifecycleAfterRefresh() {
-    setupPictureManager();
+    setupPictureManager(completeCoreGalleryMutationInCurrentView);
     setupBackToTopButton();
     setupGalleryLightbox();
     setupPublicGalleryPageReordering();

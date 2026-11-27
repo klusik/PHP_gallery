@@ -24,10 +24,15 @@ from PIL import Image
 
 from uploader.flight_maps import MAP_SIZE, MAP_DPI, map_viewport, print_size, project, render_map
 from uploader.flight_navdata import remember_plan
+from uploader.flight_dispatch_owner import (
+    SavedDispatchTarget, capture_saved_dispatch_target, persist_saved_dispatch,
+)
+from uploader.flight_jobs import SessionPlan, WorkspaceLease
 from uploader.flight_simbrief import (
     DispatchPlan, DispatchPoint, fetch_dispatch, identity_query,
     import_dispatch, load_dispatch, parse_dispatch,
 )
+from uploader.state_store import atomic_write_json
 
 
 class FlightDispatchTests(unittest.TestCase):
@@ -46,6 +51,116 @@ class FlightDispatchTests(unittest.TestCase):
             "weights": {"pax_count": "0"}, "params": {"airac": "2610"},
             "navlog": {"fix": {"ident": "TEST", "pos_lat": "50.0", "pos_long": "12.0"}},
         })
+
+    def _saved_session(self, root: Path, *, recording_ended: bool = True) -> Path:
+        """Create one stopped fixture with its normal completion plan.
+
+        Args:
+            root (Path): Temporary parent for one flights workspace.
+            recording_ended (bool): Whether the source session is closed.
+        Returns:
+            Path: Exact saved-flight directory accepted by the owner service.
+        """
+        workspace = root / 'flights'
+        session = workspace / 'fixture-flight'
+        session.mkdir(parents=True)
+        atomic_write_json(session / 'session.json', {
+            'recording_ended': recording_ended,
+        })
+        SessionPlan(
+            directory=session, binding='a' * 64, languages=('en',),
+            reports_enabled=True,
+        ).save()
+        return session
+
+    def test_saved_dispatch_persists_only_after_stopped_target_recheck(self) -> None:
+        """Commit a fetched plan to its pinned stopped session and identity.
+
+        Returns:
+            None: Existing plan replacement is atomic and provider identity is trimmed.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary)
+            session = self._saved_session(profile)
+            prior = self.plan()
+            prior.save(session)
+            lease = WorkspaceLease(profile / 'flights')
+            try:
+                target = capture_saved_dispatch_target(
+                    profile / 'flights', lease, session, None, False,
+                )
+                replacement = self.plan()
+                replacement.destination = 'EDDM'
+                alternate = profile / 'same-workspace'
+                alternate.mkdir()
+                persist_saved_dispatch(
+                    alternate / '..' / 'flights', lease, target, '  test.pilot  ',
+                    replacement, None, False,
+                )
+                saved = load_dispatch(session)
+                self.assertIsNotNone(saved)
+                self.assertEqual('EDDM', saved.destination)
+                self.assertEqual(
+                    'test.pilot',
+                    json.loads((profile / 'flights' / 'simbrief-account.json').read_text())['identity'],
+                )
+            finally:
+                lease.release()
+
+    def test_saved_dispatch_rejects_active_or_open_targets_before_writes(self) -> None:
+        """Keep SimBrief persistence behind the stopped-session/finalizer fence.
+
+        Returns:
+            None: Active work, finalization and open recordings leave no plan files.
+        """
+        for active, finalizer, recording_ended in (
+            (Path('active-session'), False, True),
+            (None, True, True),
+            (None, False, False),
+        ):
+            with self.subTest(active=active, finalizer=finalizer, ended=recording_ended):
+                with tempfile.TemporaryDirectory() as temporary:
+                    profile = Path(temporary)
+                    session = self._saved_session(profile, recording_ended=recording_ended)
+                    lease = WorkspaceLease(profile / 'flights')
+                    try:
+                        with self.assertRaises((RuntimeError, ValueError)):
+                            capture_saved_dispatch_target(
+                                profile / 'flights', lease, session, active, finalizer,
+                            )
+                        self.assertFalse((session / 'simbrief.json').exists())
+                        self.assertFalse((profile / 'flights' / 'simbrief-account.json').exists())
+                    finally:
+                        lease.release()
+
+    def test_saved_dispatch_rejects_replaced_session_identity(self) -> None:
+        """Do not attach a provider response after its selected folder is replaced.
+
+        Returns:
+            None: A same-name replacement cannot receive the original fetch result.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary)
+            session = self._saved_session(profile)
+            lease = WorkspaceLease(profile / 'flights')
+            try:
+                target = capture_saved_dispatch_target(
+                    profile / 'flights', lease, session, None, False,
+                )
+                replacement = SavedDispatchTarget(
+                    target.directory, target.device, target.inode + 1,
+                )
+                with patch(
+                    'uploader.flight_dispatch_owner.capture_saved_dispatch_target',
+                    return_value=replacement,
+                ), self.assertRaises(ValueError):
+                    persist_saved_dispatch(
+                        profile / 'flights', lease, target, 'test.pilot',
+                        self.plan(), None, False,
+                    )
+                self.assertFalse((profile / 'flights' / 'simbrief-account.json').exists())
+            finally:
+                lease.release()
 
     def test_identity_query_is_one_encoded_provider_selector(self) -> None:
         """Distinguish numeric IDs and usernames while rejecting URL injection.

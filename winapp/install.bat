@@ -82,13 +82,21 @@ for %%I in ("%PYTHON_EXE%") do set "PYTHON_DIR=%%~dpI"
 set "PYTHONW_EXE=%PYTHON_DIR%pythonw.exe"
 if not exist "%PYTHONW_EXE%" set "PYTHONW_EXE=%PYTHON_EXE%"
 
+rem A virtual environment installs directly into its own site-packages.
+set "PIP_USER_OPTION="
+"%PYTHON_EXE%" -c "import sys; sys.exit(sys.prefix != sys.base_prefix)"
+if not errorlevel 1 set "PIP_USER_OPTION=--user"
+
 if exist "%REQUIREMENTS_FILE%" (
     echo Installing Python dependencies into this runtime:
     echo   "%PYTHON_EXE%"
-    "%PYTHON_EXE%" -m pip install --user -r "%REQUIREMENTS_FILE%"
+    "%PYTHON_EXE%" -m pip install %PIP_USER_OPTION% -r "%REQUIREMENTS_FILE%"
     if errorlevel 1 (
         echo WARNING: Dependency installation failed. The uploader will still run,
         echo but client-side thumbnail generation will remain unavailable.
+    ) else (
+        "%PYTHON_EXE%" -m pip check
+        if errorlevel 1 echo WARNING: Installed dependency versions have conflicts.
     )
 ) else (
     echo WARNING: requirements.txt was not found. Skipping dependency installation.
@@ -96,12 +104,12 @@ if exist "%REQUIREMENTS_FILE%" (
 
 echo Verifying Python dependencies in this runtime:
 echo   "%PYTHON_EXE%"
-"%PYTHON_EXE%" -c "from PIL import Image; import pystray; print('Pillow OK:', Image.__version__); print('pystray OK:', pystray.__version__ if hasattr(pystray, '__version__') else 'installed')"
+"%PYTHON_EXE%" -c "import tkinter; import tkinter.ttk; import shiboken6; from PySide6 import QtCore, QtGui, QtQml, QtQuick, QtWidgets; from PIL import Image; import pystray; print('Tk/Tcl OK:', tkinter.Tcl().eval('info patchlevel')); print('Pillow OK:', Image.__version__); print('pystray OK:', pystray.__version__ if hasattr(pystray, '__version__') else 'installed'); print('Qt OK:', QtCore.__version__, 'Shiboken OK:', shiboken6.__version__)"
 if errorlevel 1 (
-    echo WARNING: Pillow or pystray is still unavailable in this runtime.
+    echo WARNING: A required Tk, Pillow, tray or Qt component is unavailable in this runtime.
     echo Open the uploader and use the Manual upload tab button named:
     echo   Install or repair dependencies
-    echo That button installs requirements.txt for this runtime.
+    echo This repair uses core or full requirements for the saved backend.
 )
 
 if not exist "%START_MENU_DIR%" (

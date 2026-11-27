@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.7.1}
-\newcommand{\manualdate}{25.~November~2026}
+\newcommand{\version}{1.8.0}
+\newcommand{\manualdate}{27.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -429,9 +429,11 @@ FTP-Bereitstellungsskripte wurden entfernt. Siehe
 
 Schrift und~Lizenz von~WinApp stehen im~optionalen Feld
 \codeword{companion_resource_files}. Gettext-Kataloge verwenden das~Feld
-\codeword{companion_locale_files}. Installierte Leser verarbeiten die~Felder,
-die~sie kennen. Die~aktuelle Paketrichtlinie prüft die~exakten Pfade beider
-Listen. Das~Update-Inventar legt fest, welche CMS-Dateien ersetzt werden.
+\codeword{companion_locale_files}. Abhängigkeitsdateien, Qt-Quick-Szene,
+Lizenzhinweise und~Eingaben für~den gemeinsamen onedir-Build verwenden
+\codeword{companion_backend_files}. Installierte Leser verarbeiten die~Felder,
+die~sie kennen. Die~aktuelle Paketrichtlinie prüft die~exakten Pfade jeder
+Liste. Das~Update-Inventar legt fest, welche CMS-Dateien ersetzt werden.
 Direkte Updates verwenden ein~vollständiges
 neueres Paket und~alle ausstehenden Migrationen ohne jede Zwischenversion.
 Dies qualifiziert keine beliebigen historischen Hosting- oder~Datenbankzustände.
@@ -1971,6 +1973,73 @@ Solange die~Änderung aussteht, ist \ui{WinApp neu starten} in~den~Einstellungen
 verfügbar. Die~Sprache der~Website und~die
 PDF-Sprachfassungen der~Flugberichte lassen sich getrennt einstellen.
 
+Unter \ui{Einstellungen} und~\ui{Oberfläche} wählen Sie das~GUI-Backend
+für den~nächsten Start. WinApp 2.0.0 verwendet standardmäßig \ui{Qt / PySide6}.
+Die vollständigen Quellabhängigkeiten installieren Qt und~den gemeinsamen Kern.
+Das Standard-Setup für Windows enthält Qt und~\ui{Legacy Tk}.
+Der normale Updater übernimmt vorhandene Installationen und~gespeicherte Auswahlen.
+In~älteren Versionen ausdrücklich geschlossene Flüge bleiben im~lokalen Verlauf.
+Ihre Fotowarteschlangen bleiben beim Oberflächenwechsel gespeichert und~inaktiv.
+Beide Oberflächen verwenden die linke Symbolleiste und~die kompakte Verbindungsleiste.
+Flugsteuerung und~gespeicherte Flüge finden Sie unter \ui{Watcher}.
+Fortschritt und~gespeicherte Berichte öffnen sich separat. Unter \ui{KI}
+finden Sie die~Einstellungen des~Workers und~optionale Abhängigkeiten.
+Das Galeriemenü in~Qt-Fotos bietet freigegebene Details, Vorladen und~lokale
+Aufbewahrung. Im Fotomenü lassen sich Details öffnen und nach Admin-Freigabe
+die~Sichtbarkeit ändern oder das~Löschen der~ausgewählten Fotos bestätigen.
+Die~Bestätigung erscheint neben dem~Foto, über das~Sie das~Menü geöffnet haben.
+In~Qt kennzeichnet ein~rotierender Pfeil jede gerade geladene Miniatur.
+Wartende Miniaturen zeigen ein~statisches Symbol. Die~Fortschrittskarte der
+Ordnerüberwachung bündelt verfügbare Aktionen auf einer Fläche mit Schatten.
+Bei SDR-Fotos wechselt die~Lightbox zwischen erkanntem Bildausschnitt
+und~Originalrahmen. Die~native HDR-Ansicht zeigt den~gesamten Rahmen.
+Wenn Sie im~Browser verlängerbaren Upload-Zugriff genehmigen, speichert
+WinApp die Zugangsdaten in~der Windows-Anmeldeinformationsverwaltung und
+kann nach einem Neustart dieselbe Galerie erneut prüfen.
+Das Galeriemenü kann die Ordnerüberwachung mit einem temporären Schlüssel
+für diese Galerie starten. Bei einem sicheren Neustart wird der Schlüssel
+geschlossen und der temporäre Zugriff vor der Fortsetzung erneut geprüft.
+Die~Importprüfung zeigt akzeptierte Bytes, übersprungene Formate, abgewiesene
+ZIP-Einträge und~verfügbare lokale Decoder. In~den Importdetails können Sie
+einzelne Dateien prüfen und~den Ort der Vorschaubilderstellung wählen.
+Die~Auswahl verknüpfter Galerien öffnen Sie im~Werkzeugmenü oder mit
+\codeword{Ctrl+Shift+G}.
+Einen überprüften unterbrochenen Import können Sie in~Qt kontrollieren.
+Unbestätigte Uploads bleiben ausgesetzt. Nach unterbrochener PDF-Erstellung
+können Sie für einen beendeten Flug eine neue lokale Ausgabe erzeugen.
+Bei aktiver Ordnerüberwachung sendet \ui{Erstellen und hochladen} eine
+neue PDF-Fassung für einen beendeten Flug an die aktuell überwachte Galerie.
+Eine genehmigte Galeriepräsentation bestimmt das Intervall der manuell
+gestarteten Qt-Diashow. Unter Windows und~macOS können Sie MP3 und~WAV aus
+der freigegebenen Wiedergabeliste abspielen.
+Die Qt-Einstellungen zeigen den normalen und dauerhaft aufbewahrten
+Fotospeicher und ändern das gemeinsame Limit für Miniaturbilder.
+Mit \ui{Speichern und testen} prüfen Sie die~Verbindung mit API-Schlüssel.
+Der Widerruf des~gespeicherten Schlüssels erfordert eine Bestätigung und
+den Abschluss der~geprüften Watcher-Warteschlange. Der lokale Schlüssel
+wird nach der~Serverbestätigung entfernt.
+Die~Qt-Aktualisierung prüft das~passende Setup und wartet vor der Installation
+auf das~Ende der laufenden Arbeit oder speichert eine unterstützte Aufnahme.
+Die~Oberfläche zeigt Galerien und~den Verlauf und~erstellt lokale PDF-Dateien
+für gespeicherte Flüge. Beide Oberflächen teilen sich den~gespeicherten
+Galeriebaum und~die Auswahl. Unter Windows kann sie mit~einem
+geprüften API-Schlüssel manuelle Importe, Watcher, SimConnect-Aufzeichnung
+und~den eingerichteten KI-Worker starten. Der Abschluss leert die~ursprüngliche
+Warteschlange und~übermittelt die~konfigurierten Berichte. Eine passende
+gespeicherte Watcher-Warteschlange öffnet sich zur ausdrücklichen Prüfung.
+Eine gespeicherte Aufnahme kann lokal geschlossen und ein~SimBrief-Plan
+einem Flug hinzugefügt werden.
+Nach einem~Neustart kann WinApp dieselbe aktive Aufnahme nach Prüfung fortsetzen.
+Das Zurücksetzen stellt die~Watcher-Vorgaben wieder her. Ausgewählte PDFs
+können in~die~Galerie des~laufenden Watchers hochgeladen werden.
+Unter Windows können Sie in~Fotos einen Upload-Zugang verknüpfen und eine
+Galerie wählen. Mit den~passenden Rechten können Sie Galerien erstellen
+und ihre Metadaten bearbeiten.
+Ein geprüfter, unvollständiger Import öffnet sich nach einem Neustart zur
+Überprüfung und zum ausdrücklichen Wiederholen.
+Falls Qt nicht startet oder ausstehende Arbeit Tkinter erfordert, öffnet sich Tkinter. Die~Option
+\codeword{--gui-backend tkinter} gilt für einen Start.
+
 \subsection{Dauerhafte Capture-Warteschlange und Wiederherstellung}
 
 Einmal verbinden, Capture starten und am Ende einmal \ui{Finish} wählen.
@@ -2197,6 +2266,7 @@ Klicken Sie im Hauptfenster auf \ui{Website verbinden}. Bestätigen Sie die
 Adresse der gespeicherten API-Verbindung oder geben Sie die Adresse Ihrer
 PHP-Gallery-Website mit ihrem Installationspfad ein. Wählen Sie danach eine
 Galerie aus.
+Für eine Website mit aktiver Verbindung wählen Sie \ui{Website wechseln}.
 Host und Installationspfad können Sie auch ohne Protokoll eingeben.
 Beim Bestätigen ergänzt WinApp \texttt{https://} und zeigt die normalisierte
 Adresse vor der Prüfung der Galerie. Auf demselben
@@ -2253,6 +2323,12 @@ nach einem Neustart dasselbe Konto und wählen Sie die Galerie erneut. Erweitert
 finden Sie in den Einstellungen unter \ui{Manage link…}. Uploads per
 API-Schlüssel verwenden eine eigene \ui{Gallery URL} und einen
 galeriegebundenen Schlüssel.
+Die Verwaltung zeigt nur Berechtigungen, die Galerie und Plattform
+unterstützen. Eine aktive Freigabe ist bis zum Trennen schreibgeschützt.
+Das sichere Speichern erfordert eine separate Browserzustimmung und einen
+unterstützten nativen Tresor. Die Upload-Berechtigung wählt kein Upload-Ziel;
+dieses muss separat ausgewählt und geprüft werden. Serverseitige Freigaben
+können Sie über \ui{Manage gallery links} prüfen oder widerrufen.
 
 Wählen Sie \ui{Read gallery details}
 gesondert und stimmen Sie dem Leserecht zu. Dann zeigt \ui{Read selected
@@ -2285,6 +2361,8 @@ Originale ZIP-Dateien und entpackte Staging-Verzeichnisse bleiben unabhängig
 von Alter und Uploadbestätigung zur manuellen Prüfung erhalten; die automatische
 Altersbereinigung ist deaktiviert, da sichtbare Job-IDs keine vollständige
 Historie beweisen.
+Beide Desktop-Backends bieten die Wiederherstellung verknüpfter Uploads in
+der Galerieauswahl, sobald das ursprüngliche Uploadziel erneut verbunden ist.
 Für genau einen ungewissen verknüpften Upload fragt \ui{Check uncertain upload}
 die Dateigröße in Byte bis 64~MiB ab und prüft den gespeicherten Hash einmal,
 ohne die lokale Datei zu öffnen. Ein Treffer
@@ -2437,6 +2515,10 @@ Das responsive Raster scrollt durchgehend und fordert nur sichtbare
 Vorschaubilder an, ohne separate Detailbilder zu laden. Die ausdrückliche Aktion
 \ui{Galerie vorladen} lädt Vorschaubilder und Lightbox-Varianten. Ein~Klick wählt
 ein~Foto und~zeigt seine Metadaten im~anpassbaren rechten Bereich.
+Beim Überfahren eines Galerie-Symbols im~Qt-Baum zeigt ein Hinweis den
+Cache-Status, die Aufbewahrung und~den Watcher-Status an.
+Qt kann lange Titel in~der Überschrift kürzen. Der vollständige Titel erscheint
+in~den Metadaten und~beim Überfahren der Überschrift mit der Maus.
 Das Kreuz rechts oben schließt ihn und gibt der Galerie Platz zurück, ohne
 die Auswahl zu ändern oder das Album neu zu laden. Ein weiterer Klick auf
 dasselbe Foto öffnet die Informationen erneut. Eine verspätete Metadatenantwort
@@ -2446,6 +2528,8 @@ die~Leertaste schaltet ein~Foto um. Control-Klick (Command-Klick unter macOS)
 schaltet einzelne Auswahlen um; Shift-Klick oder Shift-Pfeil wählt einen
 verankerten Bereich innerhalb des~Limits von~64~Fotos.
 Control-Pfeil (Command-Pfeil unter macOS) bewegt den~Fokus ohne Auswahlverlust.
+Beim Öffnen wird ein Foto ausgewählt, wenn es noch nicht zur Auswahl gehört.
+Das Blättern in der~Lightbox behält die Rasterauswahl bei.
 Nur~ausgewählte Fotos erhalten einen leicht gerundeten Umriss direkt um die
 tatsächliche Vorschau und ihren gemeinsamen Rand, ohne leeren Beschriftungsraum
 unter dem Bild. Gewählte Formate haben horizontal und vertikal einen kompakten
@@ -2454,8 +2538,11 @@ Spalte. Standard behält die stabile Zeilenhöhe natürlicher Vorschauen. Datein
 erscheinen in~einem kompakten kontrastierenden Tooltip. Bereich und~Kontextinfo
 teilen berechtigungsgeprüfte Metadaten, Formatierung und~einen kurzen
 begrenzten Sitzungscache.
-Links und Rechts durchlaufen das ganze Album in einer Schleife. Schließen oder Escape stellt Baum und Raster
-auch nach einem Bildfehler wieder her. Beim Start aus dem Quellcode muss
+Links und Rechts durchlaufen das ganze Album in einer Schleife. Escape schließt
+zuerst einen offenen Standortbereich oder das Bildmenü und~verlässt dann den
+Vollbildmodus, während das Foto geöffnet bleibt. Im~normalen Lightbox-Fenster
+stellt Escape Baum und Raster auch nach einem Bildfehler wieder her.
+Beim Start aus dem Quellcode muss
 Pillow im verwendeten Python-Interpreter installiert sein.
 \ui{Erneut versuchen} lädt fehlgeschlagene Inhalte erneut. Mausrad,
 Zweifinger-Scrollen oder + und~\ensuremath{-} ändern den Zoom. 0 setzt die Ansicht zurück.
@@ -2849,6 +2936,11 @@ erfolgreichen authentifizierten Nutzung oder Erneuerung. WinApp erneuert das
 Manager. Geprüftes HTTPS und direktes \texttt{http://localhost} werden
 unterstützt. Ältere Server nutzen eine temporäre Verbindung von bis zu
 15~Minuten.
+WinApp greift ohne Passwortabfrage auf den macOS-Schlüsselbund zu. Kann es
+den gespeicherten Zugang vor der Erneuerung nicht lesen, ermöglicht
+\ui{Website verbinden} eine vorübergehende Freigabe im Browser und behält
+die gespeicherte Verbindung bei.
+Bei einem Verbindungsfehler zeigt der Fotodialog den fehlgeschlagenen Schritt an.
 Administratoren können Zugriffe unter den verbundenen Anwendungen widerrufen.
 Nicht ausgetauschte Codes verfallen innerhalb von 120~Sekunden. Siehe
 \filepath{docs/APP_LINKING_PHASE_0.md}.
@@ -3042,6 +3134,20 @@ Bedienhilfe, mit \texttt{Ctrl+Shift+D} die Supportdiagnose sowie About.
 Die Navigationsregister bleiben verfügbar. Solange ein Panel die Eingabe
 besitzt, sind Menübefehle und~Kurzbefehle gesperrt.
 
+Unter \ui{Einstellungen > Oberfläche > GUI-Backend} ist \ui{Qt / PySide6}
+die~Vorgabe ohne gespeicherte Auswahl. \ui{Legacy Tk} bleibt verfügbar.
+Das Standard-Setup für Windows enthält Qt. Für den Quellstart sind die
+Qt-Abhängigkeiten in~den vollständigen Anforderungen enthalten.
+Übernehmen Sie die Auswahl mit \ui{WinApp neu starten}. Laufende Arbeit muss
+abgeschlossen sein oder eine überprüfte Fortsetzung besitzen. Beide
+Oberflächen verwenden dasselbe Profil. Bei einem Startfehler von Qt öffnet
+sich Legacy Tk. Sie können Legacy Tk auch für spätere Starts wählen. Unter macOS
+verwendet die Qt-Lightbox bei geeignetem Bild und Display EDR, sonst SDR.
+
+Die Qt-Fotoinformationen gleiten kurz ins Bild und~zeigen eine größere Vorschau
+über den Details. Kompakte Gruppen teilen sich eine Wertespalte. Der Pfeil bei
+einem langen Namen zeigt den vollständigen Text zum Lesen und Kopieren.
+
 Einstellungen, Hilfe, Verbindungsabfragen und~Hinweise erscheinen im
 Hauptfenster. Informative Hinweise nutzen eine nicht blockierende, schließbare
 Leiste mit scrollbarem Text. Sie reiht bis zu 32~Hinweise ein und~zeigt die
@@ -3077,7 +3183,9 @@ mit \ui{Fortsetzen} und \ui{Unterbrechen} je nach Warteschlangenstatus.
 \ui{Support diagnostics…} öffnet eine lokale Vorschau mit \ui{Refresh},
 \ui{Copy} und~\ui{Save}. Der Bericht enthält freigegebene Einstellungen und
 Laufzeitdaten, den aktuellen Diagnosesnapshot sowie höchstens die letzten
-64~KiB des vorhandenen Anwendungslogs. Fehlende oder unlesbare Logabschnitte,
+64~KiB des vorhandenen Anwendungslogs. Qt-Laufzeitmeldungen nutzen dasselbe
+rotierende Log. Das Ergebnis des Vorladens zählt abgelehnte Fotos nach der
+ersten nicht erfüllten Cache-Regel. Fehlende oder unlesbare Logabschnitte,
 ein gekürzter Anfang und eine verworfene unvollständige erste Zeile werden
 angezeigt. Der Bericht verwendet kein Netzwerk
 und filtert erkennbare Zugangsdaten, URL-Abfrageparameter/Fragmente, lokale
@@ -3236,6 +3344,10 @@ bieten den geprüften Installer zum manuellen Start. Ein nötiger Windows-Neusta
 bleibt ausdrücklich; ein UAC-Abbruch öffnet die alte Installation erneut.
 Ältere beim Warten auf Worker blockierte Clients benötigen einen manuellen
 Installerstart nach vollständigem Schließen der alten Anwendung.
+Wenn Windows den Start des Installationsprogramms definitiv ablehnt, startet
+der Helfer die vorhandene Anwendung nur bei unverändertem Fingerabdruck der
+gesamten installierten Runtime neu. Ein gestarteter, aber nicht beobachtbarer
+Installer bleibt gesperrt; dies ist kein Rollback.
 
 
 \subsection{Flugaufzeichnung und Berichte}
@@ -3317,6 +3429,8 @@ die gespeicherten Flüge.
 \ui{Gespeicherte Flüge und PDFs} zeigt Beginn, Flugzeug oder gespeicherte
 Galerie, Messpunkte, lokale PDFs, Status und Fehler. \ui{Nur Flüge anzeigen}
 ist anfangs aus. Der Filter behält Sitzungen mit Flugdaten oder PDFs.
+Qt zeigt den aktuellen Bereich und~bietet Seiten für neuere und~ältere Flüge.
+Gespeicherte PDF-Ausgaben zeigen Erstellungszeit und~Seitenzahl, falls verfügbar.
 Ein Doppelklick oder die Eingabetaste öffnet eine PDF. \ui{Ordner} öffnet
 die Dateien. Aktualisieren und das App-Protokoll stehen im Menü.
 \ui{Flug beenden und PDFs erstellen} erzeugt ohne Bestätigung vier
@@ -3387,6 +3501,10 @@ verknüpfte Uploadmodus bietet das erneute Verbinden der Galerie. Aktive
 Aufzeichnung, ausstehende Arbeit und Abschluss behalten ihre bisherigen
 Abschluss-, Prüf- oder Fortschrittsaktionen; ein laufender manueller Import
 behält seine eigenen Bedienelemente.
+Qt~bietet dieselbe Aktion Beginnen oder Galerie erneut verbinden in Watcher
+und Import. Der Begin-Dialog verwendet die gespeicherte Verbindung und speichert
+nur URL und API-Schlüssel; Abbrechen und andere ungespeicherte Settings-Werte
+bleiben unverändert.
 SimBriefs Laden/Entfernen-Aktion, Einstellungssymbol und Status erscheinen nur
 bei erkanntem Flug; Ausblenden behält den geladenen Plan. Außerhalb eines Flugs
 verwenden Watcher, Import und Fortschritt \ui{Spiel aufgeben} samt passender
@@ -7791,7 +7909,10 @@ kopieren. Reine Fotoauswahlen können außerdem auf eine sichtbare Untergalerie
 gezogen, über die durchsuchbare Zielauswahl verschoben oder kopiert, über den
 nativen Gerätefreigabedialog geteilt, sofern unterstützt, oder heruntergeladen
 werden. Natives Teilen fällt auf die ZIP-Datei ausgewählter Fotos zurück, wenn
-der Browser vorbereitete Dateien nicht teilen kann. Smart Galleries sind von
+der Browser vorbereitete Dateien nicht teilen kann. Administratoren können eine
+reine Galerieauswahl mit \ui{Verschieben} unter eine andere Galerie verschieben.
+IDs, gespeicherte Sichtbarkeit und alle Untergalerien bleiben erhalten. Geerbter
+Zugriff richtet sich nach der neuen übergeordneten Galerie. Smart Galleries sind von
 physischen Teilbaumaktionen ausgeschlossen. Die Auswahl selbst ist nur
 Browserzustand und gewährt keine Berechtigung. Jede Änderungs-/ZIP-Anfrage prüft
 erneut normales angemeldetes Konto, CSRF-Token, Quellgalerie, ausgewählte
@@ -7804,12 +7925,14 @@ Kopier-, physische Galerieerstellungs- und Auswahlexportabläufe anbieten.
 
 Die kompakte obere Leiste zeigt stets die Anzahl ausgewählter Elemente.
 Aufgeklappt bietet sie Gesamtauswahl, Aufheben der Auswahl, Teilen, Löschen
-und die Zielgalerie zum Verschieben oder Kopieren von Fotos. Öffnen Sie
+und die Zielgalerie zum Verschieben von Fotos oder Galerien und zum Kopieren
+von Fotos. Öffnen Sie
 \ui{Neue Galerie aus Auswahl} erst beim Erstellen einer Galerie; als
 übergeordnete Galerie ist die aktuelle Galerie voreingestellt. Das schlichte
 \ui{?} öffnet Hinweise zu Auswahl, Ziehen, Kopieren und Verschieben;
-ein Klick außerhalb oder Escape schließt sie. Auswahlhinweise und der Link
-zum Galerieverzeichnis erscheinen bei Fokus in der Zielauswahl. Fortschritt,
+ein Klick außerhalb oder Escape schließt sie. Suchergebnisse öffnen sich unter
+dem Zielfeld. Bei leeren oder nicht verfügbaren Ergebnissen erscheint der Link
+zum Galerieverzeichnis. Fortschritt,
 Erfolg und Fehler bleiben sichtbar; die Bereitschaftsmeldung entfällt.
 
 Ohne Auswahl ist die Verwaltung oberhalb der Seite verborgen. Bewegen Sie
@@ -11222,15 +11345,24 @@ Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal
 Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
 ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte
 Identitätsnachweis und die bisherigen Prozess-/Koordinatorfristen bleiben Pflicht.
-Acht serielle Gruppen erhalten fünf exklusive Messgruppen und drei
-deterministische Rest-Shards, die Klassen zusammenhalten. Jeder Prozess erhält
+Neun serielle Gruppen halten sechs Gruppen exklusiv: den~Viewer, vier
+gemessene Klassen und~die gepaarte native Visual-Suite. Die übrigen Klassen
+verteilen sich auf drei deterministische Shards. Jeder Prozess erhält
 explizite Quell-/Test-Importpfade.
 
-Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
-in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für
-das Tray-Badge ausgeführt und nicht übersprungen wird. Lokale Läufe ohne Pillow
-dürfen diesen optionalen visuellen Test überspringen; der gehostete Job ohne
-grafische Oberfläche installiert pystray nicht.
+Bei ausgewählten nativen Visualtests speichert macOS zuerst das gewöhnliche
+Audit des exakten Quell-SHA und führt anschließend die delegierte Visual-Suite
+auf einem separaten frischen Runner aus. Das zentrale Audit prüft vor der
+Übernahme des Artefakts den sauberen Quellstand, die Python-Laufzeit und die
+vollständige Menge delegierter Identitäten. Vor der Aufnahme laufen auf dem
+Visual-Host keine gewöhnlichen socketbasierten Tests; der Job ändert weder
+macOS-Datenschutzrechte noch schließt er Systemdialoge. Ohne Visualauswahl
+bleibt der bestehende informative macOS-Standardlauf unverändert.
+
+Der gehostete portable WinApp-Job installiert die festgelegten Abhängigkeiten
+aus \filepath{winapp/requirements-core.txt} in~den Audit-Interpreter. Pillow
+ist dort für~den Pixeltest der~Tray-Anzeige erforderlich. Die~separaten
+Qt-Jobs verwenden die~vollständigen Abhängigkeiten für~den Quellstart.
 
 Die~Regression für~das~Galerietitelbild erweitert die~bereits registrierten
 Admin-Seitenpanel- und~Browser-Lifecycle-Suiten sowie die~bestehende

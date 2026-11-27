@@ -5,7 +5,8 @@
 The existing central owners cover this batch. `test_watch_recovery_ui.py`
 renders real in-window progress/recovery widgets on hosted Windows with synthetic
 flight data: all four report rows visible at 390×560, desktop/narrow action bounds
-and the successful three-second countdown. The Watcher-recovery workflow retains its PNGs without
+and the successful three-second countdown at a monotonic-clock rounding boundary.
+The Watcher-recovery workflow retains its PNGs without
 using a live profile or gallery. Portable WinApp tests cover same-target linked
 report transport, durable receipts, retained failures and presentation-only close.
 
@@ -1811,7 +1812,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.7.1. Release verification uses the
+This guide applies to PHP Gallery Version 1.8.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2062,6 +2063,179 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ### WinApp gallery controls
 
+The issue 445 workflow installs `winapp/requirements-core.txt` into a clean
+Windows virtual environment and `winapp/requirements.txt` into separate clean
+Windows, Linux and advisory macOS environments. Each install runs `pip check`.
+The WinApp partitions start the real source CLI with the requested Tk and Qt
+backends, confirm core has no PySide6 or Shiboken6, and retain the observed
+Python, Tcl/Tk, Qt and application package versions. An explicit Qt job also
+requires its native test class to load and execute. It retains desktop
+and narrow Settings images, validates real Qt Quick scene output and covers
+JPEG/WebP decoding, stale authorization proof, warm-cache reentry, slideshow,
+preference rollback and normal application readiness. Startup crash, hang,
+invalid preferences and retained-work
+protection use isolated profiles and subprocesses. Linux software rendering
+and advisory macOS source execution are labeled independently. Cross-toolkit
+operator and performance qualification follow the [backend gate](docs/WINAPP_GUI_BACKENDS.md).
+The same hosted source and frozen owners cover the WinApp 2.0 branch in issue
+446. They verify clean-profile Qt startup, saved Legacy Tk and fallback, both
+installed Settings switch directions, and the inspector's settled frame,
+authorized preview and wrapping metadata.
+On the issue 445 feature branch, `[gui-compare]` at the start of the commit
+message requests all six paired Photos cells. `[445-bench]` selects the
+2,000-photo warm diagnostic. The paired driver verifies the stable Tk module
+roots and records newly visible thumbnail publications during each measured
+jump. The 2,000-photo warm cell also includes the paired durable synthetic
+Import workload, with 50 ms minimum spacing between item admissions and
+both durable transitions for each item. Native Import samples use the same
+90-second process cap and fail after 20 seconds without confirmed progress.
+A `[445-report]` run with the full comparison requires the six exact Photo
+cells, Import measurements and the native soak heartbeat.
+The native Settings case reads the effective accessibility names and checks
+the complete focus chain and Tab traversal on the visible form. The real Tab
+events follow the platform's keyboard-navigation policy, including the macOS
+text/list mode. The icon case compares the Qt raster and the shared artwork at
+twice the logical density.
+
+The P6 visual lane starts native Tk and Qt windows in independent processes on
+the same runner and restores the same synthetic profile inputs. It records
+client geometry, display and DPI metadata, exact source identity, visible
+action geometry and paired workspace images. The English and Czech scenarios
+require the actual semantic state, displayed controls and valid profile seed.
+The Lightbox captures check the opened photo's grid selection. The existing
+native scene test opens with keypad Enter, preserves the
+selection during navigation and verifies the grid after Escape. Photos
+failure and Watcher recovery captures retain their sanitized activity context.
+On Windows the fixture positions the normal Tk client clear of the taskbar
+before capture so the complete footer remains available for comparison at the
+same requested size. Native maximize is still exercised separately.
+At standard Flight size, each backend also opens its real Saved Flights archive
+over the same seeded completed local session. The supplemental evidence records
+the visible session row and shared action-caption order alongside the unchanged
+Flight progress image; the fixture does not generate a PDF or upload a report.
+The pending Watcher pair uses its own identical durable seed on both frontends.
+The browser approval fixture holds its synthetic callback until the native
+Cancel action releases it. The Czech HTML includes paired images, individual
+findings and raw evidence. For visual opt-ins, macOS runs these captures on a
+fresh runner after downloading the exact ordinary audit artifact; the central
+audit binds its source SHA, runtime and delegated test IDs before running the
+visual children. The visual lane preserves macOS privacy settings and native
+system prompts. If an ordinary macOS native Qt child is still alive two
+seconds after its report appears, the harness samples its native stack within
+the same deadline. An overdue child still fails the partition.
+The shell benchmark also records CPU time and
+Qt scene signals in settled idle, inactive workspace, minimized and supported
+tray scenarios independently of the longer worker-event soak.
+
+The installed update lane also verifies a native linked profile. A disposable
+loopback owner grants the test account through the normal linking, credential
+and upload-mode services. The qualification drives the installed app's native
+controls to reconnect the exact upload target in each frontend. It checks that
+browsing-grant restoration and upload-target admission remain separate, and
+disposes only of the fixture's vault entries.
+The installed test authenticates GitHub repository metadata with the runner's
+read-only token, then removes it from the environment before launching Setup or
+WinApp. Release assets still require their original checked size and digest.
+
+A Qt lifecycle fixture holds an admitted synthetic AI worker during restart.
+A native Import fixture uses the existing preflight, accepted job binding
+and worker termination path in an isolated profile. It holds the upload at a
+synthetic transport boundary while testing Pause, Resume, Cancel and restart,
+then verifies that retry reopens the same job ID with a new generation.
+The native local PDF fixture uses a stopped synthetic flight, the existing
+workspace lease and report finalization worker. It holds the renderer while
+attempting restart and verifies the earlier report and completion bytes.
+Backend admission verifies that a safely queued Import can change frontend
+under the exact saved legacy binding. A foreign binding or uncertain FIFO
+head refuses the change and preserves the complete journal bytes.
+Capture admission reads the original Watcher journal without publishing a
+new cutoff or dispatching. Native Watcher widgets exercise Start, live
+telemetry presentation, the restart barrier and explicit retained Interrupt.
+The native Finish fixture runs the actual empty screenshot FIFO and
+recorder lifecycle with a staged synthetic SimBrief plan. It verifies the
+ordinary restart checkpoint, same recorder identity on resume, one-use
+consumption and the original terminal journal, plan and attached OFP. Reset
+then verifies the cleared Watcher target and retained original, OFP and API key.
+The settings fixture checks that only edited fields reach the profile owner.
+The Qt storage fixture uses both shared cache snapshots and verifies that a
+failed quota save restores the observed value and reports the failure.
+The upload selection fixture verifies the linked target carried to preflight
+and refuses a missing linked grant even when a saved API key exists.
+The rolling consent fixture verifies the exact non-secret restart hint, one
+native vault publication and renewal, plus cancellation and account mismatch.
+The native backend startup fixtures retain the bytes of an interrupted Import
+whose saved source and digest match and preserve a stopped flight's partial
+report. They also check refusal with unverified source or recording evidence.
+The Photos Watcher fixture checks explicit selection, the temporary key
+handoff, and retirement of an unused key after a refused start. The capture
+owner fixture checks a report writer's barrier and retry of the exact key
+after an unconfirmed closure.
+The saved flight fixture checks exact active Watcher binding, stopped recording
+evidence, and use of the shared worker for new PDFs sent to that destination.
+The Qt Photos fixture restores an account's saved tree without a preference
+write, then verifies explicit gallery selection and in-session photo focus
+after returning to a recent gallery.
+The Admin fixture opens the photo menu and its tile-anchored confirmation
+for the exact selected batch. It checks Escape and Cancel, permission loss
+before final confirmation, one-shot dispatch even after an ambiguous reply,
+read-only catalogue reconciliation and the Admin-only metadata boundary.
+The paired visual fixture compares the caption and action order in each actual
+client window and checks the Qt confirmation initially focuses Cancel.
+The Qt Import detail fixture checks the real disclosure, both thumbnail
+choices, bounded review columns and current stable row identity under a
+partial revision. The shared preflight summary test covers accepted bytes,
+unsupported groups, bounded archive and warning previews, and absent local
+thumbnail support. The native paired shell case checks the Import source and
+primary actions against the visible scroll viewport.
+The Qt presentation fixture verifies the authorized slideshow preset, an
+exact track transfer, pause, and temporary file cleanup on lost permission.
+Its native output boundary is doubled, so it does not establish physical
+speaker output.
+On macOS the same canonical Qt test IDs run in a child with its own Cocoa
+application. The outer partition consumes the existing audit report for
+those IDs, retaining complete identity coverage without mixing Tk's and Qt's
+native application classes in one process.
+The restart requests stop once and retains the current window until the
+worker exits. The real worker's mode and request fences remain in the shared
+WinApp regressions.
+
+The same central frozen-installer suite builds the standard Windows setup
+from one spec with `winapp/requirements-build.txt`. The package evidence
+records the actual PyInstaller, Tcl/Tk and wheel versions. The suite installs
+the candidate to a disposable directory and
+verifies one executable and one Python runtime, a default visible Tk window,
+actual Settings switches in both directions, and first Qt frame and normal
+close. A byte-distinct ABI-compatible Qt Core DLL proves library replacement.
+Missing Qt DLL and platform plugin fixtures verify Tk fallback and repair
+through the same setup. The runtime lookup excludes externally installed
+Python and Qt paths. The suite checks Qt licenses and corresponding sources
+along with app-local VC runtime imports and provenance.
+Portable release fixtures verify the shared asset and descriptor. The native
+Qt updater fixture validates installer bytes, refuses installation during
+active work and closes only after the existing helper boundary is ready.
+Continuation admission also rejects a foreign helper nonce or wrong version
+and preserves the original queue bytes.
+
+The same opt-in suite verifies installed updates using the published
+WinApp 1.7.1 onefile setup and two hosted common onedir builds. The earlier build sets
+1.7.2 only in its disposable copy. The target uses the tracked WinApp
+version. The upgrade audit checks both setup descriptors before executing the
+real frozen helper on a dedicated Windows runner and retains a sanitized
+per-scenario report. The installed journeys, native credential sentinel and
+synthetic Watcher continuation use disposable profiles and source folders.
+
+The same hosted workflow admits the paired Photos comparison for an
+explicit comparison checkpoint. The central `watcher-tk-performance`
+suite retains exact workload identity, raw child samples, runner/API facts
+and paired intervals. This diagnostic measures decoded data, provider
+publication and frame or idle-paint proxies for an equivalent viewport under
+synthetic transport. Its reports include actual dependency versions obtained
+through the same application manifests and constraints as the production build.
+`winapp/requirements-benchmark.txt` supplies the separate process sampler.
+The prepared qualifier checks that the Windows build, source and paired Photos
+use the same relevant versions. Physical frame rate and GPU memory require
+separate measurements.
+
 The central complete WinApp discovery covers gallery controls. The existing
 read-only **Issue 381 Watcher recovery** workflow can run its serial partitions
 on Linux and Windows for an exact selected feature SHA and retain native
@@ -2085,15 +2259,17 @@ single safe header-timeout retry.
 `test_gallery_load_progress.py` exercises real Tk progress controls and the
 mounted viewer through the existing complete WinApp discovery. Held newest-first
 scans use 500, 2,000 and 5,000 descriptors with both renderers, observing count
-updates and native bar animation before releasing the request. Only presented
-visible thumbnails contribute a determinate fraction. Small oldest-first reads,
-cached reopen during a held refresh, manual quota Retry, safe header-timeout
-retry, transient thumbnail waits and viewer cancellation retain their actual
-owner behavior. The coalesced count slot cannot occupy a photo-result queue
-entry; stale generations cannot repaint the current indicator. Native captures
-check painted progress and its drop shadow within the mapped renderer at both
-widths. The held-metadata screenshot allows up to 0.5 seconds for Windows to
-compose the shadow, then asserts the painted pixels in the retained capture.
+updates and native bar animation before releasing the request. During the
+existing animation window the observer checks every pumped Tk event turn, so
+a return to the original indeterminate value preserves the observed motion.
+Only presented visible thumbnails contribute a determinate fraction. Small
+oldest-first reads, cached reopen during a held refresh, manual quota Retry,
+safe header-timeout retry, transient thumbnail waits and viewer cancellation
+retain their owner behavior. The coalesced count slot stays outside the photo
+result queue, and stale generations cannot repaint the current indicator.
+Native captures check painted progress and its drop shadow within the mapped
+renderer at both widths. The held-metadata screenshot allows up to 0.5 seconds
+for Windows to compose the shadow, then asserts its painted pixels.
 Component checks cover elapsed/last-progress text, unknown delays and terminal
 cleanup.
 
@@ -2148,6 +2324,17 @@ The native Windows fixture exercises actual anchored editors and grouped
 menus, repeats A/B/A/B title edits without remounting the viewer, retains an
 editable unresolved draft without reload actions, and captures desktop/narrow menu and
 information screenshots under `cache/test-audit/gallery-controls/`.
+
+The native Qt title-editor scenario keeps a linked Watcher active while it
+renames an unpublished gallery. It checks accepted-write ownership, live
+capture, the returned title and the blocked disconnect and conflicting actions.
+The disposable MySQL/MariaDB gallery edit fixture moves a protected subtree
+through the actual Picture manager route and checks stable IDs, visibility,
+destination ownership, original bytes and refusals, including a pending
+visibility recovery in a descendant. The catalog-picker browser
+fixture submits the committed destination and verifies the in-place refresh.
+Its desktop and narrow panel screenshots are under
+`cache/test-audit/picture-manager-move/`.
 These fixtures do not establish an installed-client upgrade, target-host
 sidecar failure recovery or production account consent.
 
@@ -2163,7 +2350,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery in eight serial partitions. It performs no integration,
+central complete discovery in nine serial partitions. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
 
@@ -2536,7 +2723,11 @@ private and updater-owned resource entries, while retaining published resource
 placement. The WinApp catalog check covers all three locale paths, rejection in
 the old inventory fields and the published 1.5.7 font/license constraint.
 Compact real folder/ZIP fixtures preserve the exact font, license and catalog
-bytes. `updates_path_safety_test.php` checks updater destination ancestors. The
+bytes. They also validate the locked backend dependencies, Qt Quick scene,
+notices and onedir build inputs through the additive companion backend field.
+The installed-reader fixture preserves the historical field allowlists and
+checks the unchanged activation scope with the new package.
+`updates_path_safety_test.php` checks updater destination ancestors. The
 compact `production_package_test.php` uses the real canonical PHP builder with
 a minimal isolated payload: folder and ZIP membership, complete SHA-256
 content, deterministic output, missing/stale/unsafe inputs, links, destination
@@ -3128,11 +3319,10 @@ identity and elevated installation. AST contracts enforce documented, typed
 definitions and absence of future imports in new updater modules/tests.
 The central WinApp suite owns these checks; tests never download a live
 installer.
-The hosted portable job installs only the existing Pillow requirement into the
-Python interpreter selected for the audit and sets
+The hosted portable job installs the constrained `winapp/requirements-core.txt`
+in the Python interpreter selected for the audit. It sets
 `PHP_GALLERY_REQUIRE_PILLOW=1`, so the tray-badge pixel fixture must run there.
-Local runs without Pillow may still skip that optional visual fixture; the
-headless hosted job does not install pystray.
+Dedicated Qt jobs install the complete source requirements.
 
 Frozen updater regression must distinguish the bundled `VERSION` text file from
 Windows `version.dll`. Source tests cover explicit `version.dll`, `kernel32.dll`
@@ -7426,8 +7616,12 @@ comments and literal here-documents do not create declarations. Unsupported
 function
 forms, dynamic `eval`/`Invoke-Expression`, unterminated literals and unbalanced
 function boundaries remain `BLOCKED`. Native-script argument/result typing and
-execution semantics remain manual; the whole-tree inventory still checks their
-headers only. Batch bodies remain outside declaration-parser coverage.
+execution semantics remain manual. The batch lexer fingerprints the entrypoint
+and standalone labels in files with commands or labels. Its fixture verifies
+that new batch programs count their entrypoint as added, that `call :name`
+labels require documentation, and that unsupported control targets block the
+comparison. Empty or comment-only sources yield no declaration snapshot.
+The whole-tree inventory retains its separate native header checks.
 
 For named functions and methods, the shared contract is a meaningful summary,
 one typed and described `@param` for
@@ -8637,21 +8831,26 @@ last selection restores hiding when the pointer and keyboard focus leave.
 Verify the collapsed count, expand/collapse,
 Select all/Clear, individual and range selection, and photo-only versus mixed
 selection action availability. Search a destination by keyboard and verify the
-committed picker value enables Move/Copy only for photos. Expand New gallery
+committed picker value enables Move/Copy for photos and Move for physical
+subgalleries. Keep Move unavailable for mixed selections. Expand New gallery
 from selection, verify the current parent and title-dependent Create state,
 and keep actual filesystem mutations on disposable data only.
 
 Open `?` using click and keyboard; dismiss by outside click and Escape. Check
-that picker guidance/directory access appears on focus and that request errors
-and completion feedback remain visible. Review desktop and narrow layouts,
+that search results remain in the panel flow and the directory fallback appears
+with empty or unavailable results. Request errors and completion feedback must
+remain visible. Review desktop and narrow layouts,
 long localized labels, Theme colors, visible focus and mobile 44px targets.
 This presentation review complements the existing mixed-selection/copy
 contracts; hosted BASIC alone does not qualify filesystem operations.
 
 The lightbox quick-tag race fixture waits for native `fullscreenchange` and
-committed layout before sending the fullscreen tagging key. Its strict popup
-viewport bounds remain unchanged; fullscreen ownership alone does not establish
-settled HUD geometry on the hosted Chromium runner.
+committed layout before sending the trusted fullscreen tagging key. It injects a
+one-pixel `visualViewport.width` for that open to reproduce transient native
+fullscreen geometry, then restores the measured viewport before checking the
+strict popup bounds. The production owner must use the layout viewport while
+visual viewport dimensions cannot fit both edge insets; the actual fullscreen,
+keyboard-lock and popup-bound assertions remain intact.
 
 ### Compact Appearance preference coverage
 
@@ -8900,6 +9099,15 @@ server temporarily unreachable before refresh, verify that a retry can reuse the
 original valid grant. Inspect the profile for address-only history and
 non-secret bindings. The rotating credential belongs in Keychain or Windows
 Credential Manager. Check temporary-link fallback on an older server.
+The WinApp source suites exercise a denied native read before renewal with
+a synthetic site and saved profile. An explicit Link opens one temporary
+browser approval for the selected address, including a localhost port and
+mount. Startup does not open approval. Verify the original hint and
+credential remain intact, and that a failure after fencing still blocks reuse.
+Use the mounted loopback authority to exercise explicit Admin Photos edit
+consent through the callback, one code exchange, identity verification and
+catalogue load. Confirm the persisted scope matches the approval, the dialog
+closes, and upload activation remains separately guarded.
 
 Use a current listing grant and an identity-only grant against the native
 photo endpoints. Listing must allow already-public photos, including from an
@@ -10035,6 +10243,29 @@ metadata and builder runtime/help/updater-helper smoke evidence. The separate
 it does not change the Tk measurement protocol. Building does not install,
 launch an installed GUI, uninstall, publish or qualify the installed lifecycle.
 
+Issue #445 uses the same suite in dedicated hosted modes. It installs the
+common onedir setup, exercises real Settings restarts and missing Qt-library
+repair, verifies upgrades from the authenticated public and earlier common
+setups, and compares the published onefile, historical dual and current common
+layouts. An exact-SHA Czech HTML report retains measurements and the original
+compact JSON and CSV evidence. The report downloads each single Windows
+Tk-only, installed UI, updater and packaging evidence artifact into its
+own SHA-bound directory. These modes never publish a release asset.
+The three installed qualification jobs consume the same SHA-bound candidate
+setup in independent Windows VMs and keep distinct native outcomes.
+The Qt fixture runs consecutive cohorts of up to 16 original test IDs on
+macOS and 24 on Windows. Hosted runs on both systems finished the cases but
+hit the 35-second process deadline during shutdown, including a 24-case macOS
+cohort. Each child owns one QApplication and must exit and return its complete
+result. The 35-second process limit and 90-second parent partition limit remain
+in effect. On macOS the monitor samples a child that remains alive two seconds
+after its report appears, within the same exit deadline.
+The native Qt case releases its widget wrappers after the registered owner
+cleanups. Qt dispatches deferred deletion while the GUI thread still owns
+the application, and the fixture collects wrapper cycles before the next
+case. A hosted Apple sample identified Shiboken wrapper traversal during
+CPython finalization after the native cases had finished.
+
 The issue #362 Windows feature job selects `winapp-partitioned`, which still
 discovers the canonical complete `test_*.py` inventory. Based on hosted timeout
 evidence, the coordinator places all classes discovered from
@@ -10054,8 +10285,14 @@ The initial seven-child split later exhausted its remainder deadline on
 Windows runs 45645021519, 45646864051 and 45648688561. The coordinator
 splits only the exact remaining inventory into three
 deterministic least-loaded, class-preserving shards; test order within each shard
-follows canonical discovery. All eight children run
-serially in separate Python processes, each under the existing 90-second cap;
+follows canonical discovery. Issue #445 run 45751719204 reached the last
+remainder deadline after several costly native and FIFO classes ran together.
+The comparator uses measured class weights for those owners and test counts
+for the rest. Windows Tk-only run 45932615592 recorded 17.48 seconds across
+16 recovery cases, 12.88 seconds in queue tests, and 18.88 seconds in native
+localization. Those costs inform remainder placement alongside the longest
+observed retry progress case and the native Qt cohorts. Each child runs
+serially in a separate Python process under the existing 90-second cap;
 the coordinator retains its 480-second outer bound for child execution plus
 inventory and report handling. It retains each original schema-1 child report
 and log. Selected-ID children flush
@@ -10067,7 +10304,7 @@ JSON report serialization.
 verify this progress evidence itself.
 Report verbosity, schema, child limits and selection remain unchanged. The
 coordinator checks runtime identity and report
-counts, and requires the exact disjoint test-ID union across all eight children
+counts, and requires the exact disjoint test-ID union across all children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
 and its 90-second full-process behavior remain unchanged; earlier full-process

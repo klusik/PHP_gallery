@@ -61,11 +61,60 @@ child loads only its owned local test modules, validates every requested identit
 against standard discovery in those modules, and retains normal module/class
 fixtures and the selected-subset report marker. This removes repeated unrelated
 imports without narrowing parent coverage, adding a parallel registry or changing
-the existing 90-second child and 480-second whole-run limits. Eight serial groups
-keep the viewer and four measured classes exclusive, then split only the canonical
-remainder into three deterministic, class-preserving shards. Source/test imports
+the existing 90-second child and 480-second whole-run limits. Ten serial groups
+keep the viewer, four measured classes, the paired native visual suite and the
+Tk shell focus class exclusive, then split only the canonical remainder into
+three deterministic, class-preserving shards. The shell class owns a real Tk
+focus operation that caused Linux/Xvfb SIGSEGVs in hosted partitions 7 on runs
+310 and 8621, losing 537 otherwise-discovered test identities. A fresh Tcl/Tk
+process preserves the actual focus assertion while limiting any native crash
+to that class. The coordinator weights the measured slower remainder classes
+using hosted Windows timings. The Qt visual-delegated suite uses the native Qt
+and wide viewport costs observed in run `45991503477`. The complete ordinary
+suite uses its own weights to cover the Tk-only Windows environment.
+
+The issue 445 Windows, Linux and macOS Qt qualification uses a registered two-suite
+split to keep the measured visual class outside the ordinary coordinator's
+unchanged 480-second ceiling. `winapp-partitioned-no-visual` discovers the same
+complete canonical inventory, reports the exact `VisualParityTests` IDs as
+delegated, and runs every other identity in nine class-preserving processes
+with the unchanged 90-second child cap. The following `winapp-visual-parity`
+suite reads that exact retained report and runs each delegated ID through
+standard unittest discovery in its own 90-second child. It rejects a different
+selected set or Python runtime. Each Qt job requires both
+central audit results on the same checkout, platform and SHA. The ordinary
+`winapp-partitioned` suite remains a complete ten-process run for other
+callers. The split does not change visual assertions, per-test limits, or the
+ordinary suite's coverage; reports bind the nonvisual and delegated sets into
+one exact, disjoint canonical identity union.
+
+For issue 445 visual opt-ins and prepared candidates, macOS runs the ordinary
+suite first on the existing matrix runner and uploads its exact-SHA audit
+artifact. A separate fresh `macos-15` runner downloads that artifact and runs
+only the registered visual suite with the same pinned Python/dependencies. The
+central audit verifies the ordinary artifact's clean checkout SHA, Python
+runtime and complete delegated test-ID inventory before selecting any visual
+child. This prevents earlier ordinary tests from leaving host state before the
+native capture while preserving the same-run source proof. The visual job does
+not grant, dismiss or bypass operating-system privacy prompts; a prompt remains
+visible evidence and causes the capture to fail. Without visual opt-in, the
+existing advisory macOS ordinary job remains the only macOS source run.
+
+Source/test imports
 are bootstrapped explicitly in every independent process. Unknown, unsafe,
 duplicate or missing IDs and incomplete process/report evidence remain failures.
+An import failure during canonical discovery reports the original discovery
+traceback before invalid synthetic unittest IDs can reach a child.
+The #445 Windows core-only owner also checks out the immutable Tk baseline
+under the hosted cache. A separate interpreter runs that revision's canonical
+discovery adapter. The current partition coordinator compares those IDs with
+actual child outcomes and retains the two SHAs, missing IDs and current skip
+reasons in `winapp-baseline-inventory.json`. Its result supplements the existing
+exact child union and native regression outcomes.
+The portable owner uses Python 3.14.10 and installs the constrained WinApp
+core manifest. Its workflow contract verifies the exact manifest invocation,
+the dependency check, and direct constrained Pillow, ReportLab, pypdf and
+polib coverage. Qt and frozen builder packages remain in their dedicated owners.
 
 Contract 4 dispatches macOS packaging independently from the selected feature
 workflow after preparation, with the same exact candidate A and immutable base
@@ -87,6 +136,11 @@ The read-only **Retain integration execution** job uploads the original
 `develop-integration-execution/develop-execution.json` before any develop write.
 `qualify_only` performs preparation and complete qualification without writing
 develop. To finish later, supply its run ID as `qualified_run`.
+
+An unselected issue 445 desktop workflow call leaves a skipped job row in
+GitHub Actions. The execution seal admits at most one such row on the current
+integration run and attempt. The required FULL inventory and the independent
+desktop qualification evidence keep their existing ownership.
 
 Reuse requires the identical candidate SHA, complete Git input tree and develop
 base. The original native owner IDs, run/attempt, workflow revision, explicit

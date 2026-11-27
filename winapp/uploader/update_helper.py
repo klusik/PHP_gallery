@@ -29,6 +29,7 @@ import queue
 from typing import Callable, Protocol, TYPE_CHECKING
 
 from uploader.self_update import _version
+from uploader.gui_backend import public_executable
 from uploader.windows_file_identity import (
     FILE_ATTRIBUTE_REPARSE_POINT as UPDATE_REPARSE_POINT_ATTRIBUTE,
     reject_reparse_path,
@@ -63,6 +64,10 @@ SHUTDOWN_POLL_SECONDS = 0.1
 # Type: float; Units: seconds; Scope: one update session.
 # Consumers: main worker. Rationale: preserve the existing 25-second handshake.
 HANDSHAKE_TIMEOUT_SECONDS = 25.0
+# Purpose: Keep an unresponsive helper from delaying graceful app shutdown.
+# Type: float. Units: seconds. Scope: one staged update helper launch.
+# Consumers: launch_helper. Rationale: retain the existing 20-second bound.
+HELPER_READY_TIMEOUT_SECONDS = 20.0
 # Yield between proceed/cancel marker observations.
 # Type: float; Units: seconds; Scope: one update session.
 # Consumers: main worker. Rationale: 0.05 seconds avoids a spin loop.
@@ -85,6 +90,29 @@ UPDATE_TICKET_MAX_BYTES = 4096
 # Type: int; Units: bytes; Scope: one legacy ready/proceed marker read.
 # Consumers: _legacy_marker_is_fresh. Rationale: old helpers write one byte.
 LEGACY_UPDATE_MARKER_MAX_BYTES = 1
+# Purpose: Bound a staged helper runtime and installed recovery fingerprint.
+# Type: int. Units: bytes. Scope: executable, _internal and license runtime trees.
+# Consumers: stage_update_helper_runtime, _installed_runtime_fingerprint.
+# Rationale: 1 GiB accommodates the complete shipped runtime with build room.
+UPDATE_RUNTIME_PROOF_MAX_BYTES = 1024 * 1024 * 1024
+# Purpose: Bound runtime directory enumeration before staging or recovery.
+# Type: int. Units: filesystem entries. Scope: one installed runtime tree.
+# Consumers: stage_update_helper_runtime, _installed_runtime_fingerprint.
+# Rationale: 4096 covers the shipped PyInstaller runtime and notices.
+UPDATE_RUNTIME_PROOF_MAX_ENTRIES = 4096
+# Purpose: Stream runtime proof without retaining large DLLs in memory.
+# Type: int. Units: bytes. Scope: one runtime digest read.
+# Consumers: _installed_runtime_fingerprint. Rationale: 1 MiB matches setup digest I/O.
+UPDATE_RUNTIME_PROOF_CHUNK_BYTES = 1024 * 1024
+# Purpose: Name PyInstaller's relocatable onedir dependency tree.
+# Type: str. Units: sibling directory name. Scope: the common installed app.
+# Consumers: staging, cleanup and failure recovery. Rationale: match PyInstaller layout.
+PYINSTALLER_INTERNAL_DIRECTORY = "_internal"
+# Purpose: Include app-local legal notices in the relocated helper copy.
+# Type: tuple[str, ...]. Units: sibling directory names. Scope: staged runtimes.
+# Consumers: stage_update_helper_runtime, _installed_runtime_fingerprint.
+# Rationale: preserve the complete canonical installation layout.
+UPDATE_RUNTIME_SIBLING_DIRECTORIES = (PYINSTALLER_INTERNAL_DIRECTORY, "licenses")
 
 
 @dataclass(frozen=True)
@@ -104,6 +132,20 @@ Progress = Callable[[tuple[int, int] | None], None]
 
 # Load native Windows libraries only from System32, never the helper extraction directory.
 LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
+# Purpose: Recognize Windows cancelling the setup elevation request.
+# Type: int. Units: Win32 error code. Scope: ShellExecuteExW failure.
+# Consumers: WindowsBackend.install. Rationale: ERROR_CANCELLED (1223) retains
+# the distinct operator cancellation outcome for the guarded restart.
+ERROR_CANCELLED = 1223
+# Purpose: Wait on the actual elevated installer process.
+# Type: int. Units: Win32 ShellExecute flag. Scope: one setup launch.
+# Consumers: WindowsBackend.install. Rationale: 0x40 requests the process handle.
+SEE_MASK_NOCLOSEPROCESS = 0x00000040
+# Purpose: Route ordinary Shell launch errors to the update helper's feedback.
+# Type: int. Units: Win32 ShellExecute flag. Scope: one setup launch.
+# Consumers: WindowsBackend.install. Rationale: 0x400 avoids a separate Shell
+# error dialog holding the handoff open. Windows still owns security prompts.
+SEE_MASK_FLAG_NO_UI = 0x00000400
 
 
 class Backend(Protocol):
@@ -133,6 +175,10 @@ class Backend(Protocol):
         ...
 
 
+class SetupLaunchError(OSError):
+    """Identify a ShellExecute refusal that proves setup never started."""
+
+
 def updates_root() -> Path:
     """Return the current user's fixed helper storage owner."""
     return Path(os.environ["LOCALAPPDATA"]) / "PHPGalleryUploader" / "updates"
@@ -153,7 +199,7 @@ def installed_identity(executable_path: Path | None = None) -> Path:
     """
     if sys.platform != "win32" or winreg is None or not getattr(sys, "frozen", False):
         raise RuntimeError("Self-update requires the installed Windows application")
-    executable = (executable_path or Path(sys.executable)).resolve()
+    executable = (executable_path or public_executable()).resolve()
     if executable.name != "PHPGalleryUploader.exe":
         raise RuntimeError("Self-update requires the registered installed executable")
     key_name = (r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -478,9 +524,225 @@ def verify_ticket_installer(ticket: UpdateTicket) -> None:
         raise ValueError("Installer verification failed")
 
 
+def _remove_staged_runtime_entry(path: Path) -> None:
+    """Remove one bounded helper-owned file or directory without following links.
+
+    Args:
+        path (Path): Exact helper runtime entry beneath a completed session.
+    Returns:
+        None: Removes only regular files and ordinary directories.
+    Raises:
+        OSError: The entry cannot be safely removed or exceeds the cleanup bound.
+        ValueError: A redirected, linked or special entry is encountered.
+    """
+    if not path.exists() and not path.is_symlink():
+        return
+    pending: list[tuple[Path, bool]] = [(path, False)]
+    entries = 0
+    while pending:
+        current, visited = pending.pop()
+        reject_reparse_path(current)
+        info = current.lstat()
+        if visited:
+            current.rmdir()
+            continue
+        entries += 1
+        if entries > UPDATE_RUNTIME_PROOF_MAX_ENTRIES:
+            raise OSError("Staged helper cleanup exceeds its entry limit.")
+        if stat.S_ISDIR(info.st_mode):
+            children = sorted(current.iterdir(), reverse=True)
+            if entries + len(pending) + len(children) > UPDATE_RUNTIME_PROOF_MAX_ENTRIES:
+                raise OSError("Staged helper cleanup exceeds its entry limit.")
+            pending.append((current, True))
+            pending.extend((child, False) for child in children)
+            continue
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError("Staged helper cleanup refused a non-owned file.")
+        current.unlink()
+
+
+def _cleanup_staged_helper_runtime(helper: Path) -> None:
+    """Remove only the known copied helper executable and runtime siblings.
+
+    Args:
+        helper (Path): Exact staged ``helper.exe`` in its owned session.
+    Returns:
+        None: Removes the executable, _internal tree and optional licenses tree.
+    Raises:
+        OSError: Windows cannot remove a copied runtime file still in use.
+        ValueError: A staged entry was redirected or is not an ordinary file.
+    """
+    for name in (helper.name, *UPDATE_RUNTIME_SIBLING_DIRECTORIES):
+        _remove_staged_runtime_entry(helper.parent / name)
+
+
+def stage_update_helper_runtime(
+    installed_exe: Path, helper: Path, *, allow_legacy_onefile: bool = False,
+) -> dict[str, int]:
+    """Copy an installed PyInstaller runtime into one private helper session.
+
+    The normal onedir layout copies the executable, its adjacent ``_internal``
+    tree, and optional app-local licenses. The onefile exception is solely for
+    the explicitly pinned historical 1.7.1 public installer qualification.
+    Copies are independent files; no installed runtime file is linked or moved.
+
+    Args:
+        installed_exe (Path): Exact installed or staged canonical launcher.
+        helper (Path): New session path named ``helper.exe``.
+        allow_legacy_onefile (bool): Permit a missing ``_internal`` for the
+            verified historical onefile source only.
+    Returns:
+        dict[str, int]: Copied byte count, entry count and monotonic duration.
+    Raises:
+        OSError: Copying is unavailable or any byte/entry bound is exceeded.
+        ValueError: A source or destination is redirected, linked or special.
+        RuntimeError: The canonical onedir runtime is incomplete or occupied.
+    """
+    source = Path(installed_exe)
+    target = Path(helper)
+    if (type(allow_legacy_onefile) is not bool
+            or target.name != "helper.exe"
+            or not target.parent.is_dir()):
+        raise ValueError("Helper runtime paths or compatibility mode are invalid.")
+    started_at = time.monotonic()
+    reject_reparse_path(source)
+    reject_reparse_path(target.parent)
+    try:
+        if target.parent.resolve().is_relative_to(source.parent.resolve()):
+            raise ValueError("Helper runtime destination cannot be inside the installed runtime.")
+    except OSError as error:
+        raise ValueError("Helper runtime roots cannot be resolved safely.") from error
+    source_info = source.lstat()
+    if (source.name != "PHPGalleryUploader.exe"
+            or not stat.S_ISREG(source_info.st_mode) or source_info.st_nlink != 1
+            or getattr(source_info, "st_file_attributes", 0)
+            & UPDATE_REPARSE_POINT_ATTRIBUTE):
+        raise ValueError("Installed launcher is not an ordinary owned file.")
+    internal = source.parent / PYINSTALLER_INTERNAL_DIRECTORY
+    internal_present = internal.exists() or internal.is_symlink()
+    if not internal_present and not allow_legacy_onefile:
+        raise RuntimeError("Installed onedir runtime is missing _internal.")
+    if internal_present and not internal.is_dir():
+        raise ValueError("Installed _internal runtime is not an ordinary directory.")
+    sources = [(source, target)]
+    if internal_present:
+        sources.append((internal, target.parent / PYINSTALLER_INTERNAL_DIRECTORY))
+    license_source = source.parent / "licenses"
+    if license_source.exists() or license_source.is_symlink():
+        if not license_source.is_dir():
+            raise ValueError("Installed licenses runtime is not an ordinary directory.")
+        sources.append((license_source, target.parent / "licenses"))
+    destinations = (
+        target,
+        target.parent / PYINSTALLER_INTERNAL_DIRECTORY,
+        target.parent / "licenses",
+    )
+    if any(destination.exists() or destination.is_symlink() for destination in destinations):
+        raise RuntimeError("Helper runtime destination is already occupied.")
+
+    copied_bytes = 0
+    copied_entries = 0
+    directory_snapshots: dict[Path, os.stat_result] = {}
+    try:
+        for source_root, destination_root in sources:
+            pending = [(source_root, destination_root)]
+            while pending:
+                current_source, current_destination = pending.pop()
+                reject_reparse_path(current_source)
+                info = current_source.lstat()
+                copied_entries += 1
+                if copied_entries > UPDATE_RUNTIME_PROOF_MAX_ENTRIES:
+                    raise OSError("Helper runtime exceeds its entry limit.")
+                if stat.S_ISDIR(info.st_mode):
+                    if (getattr(info, "st_file_attributes", 0)
+                            & UPDATE_REPARSE_POINT_ATTRIBUTE):
+                        raise ValueError("Helper runtime contains a redirected directory.")
+                    directory_snapshots[current_source] = info
+                    current_destination.mkdir()
+                    children = sorted(current_source.iterdir(), reverse=True)
+                    if (copied_entries + len(pending) + len(children)
+                            > UPDATE_RUNTIME_PROOF_MAX_ENTRIES):
+                        raise OSError("Helper runtime exceeds its entry limit.")
+                    pending.extend(
+                        (child, current_destination / child.name)
+                        for child in children
+                    )
+                    continue
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or getattr(info, "st_file_attributes", 0)
+                        & UPDATE_REPARSE_POINT_ATTRIBUTE):
+                    raise ValueError("Helper runtime contains a linked or special file.")
+                if info.st_size > UPDATE_RUNTIME_PROOF_MAX_BYTES - copied_bytes:
+                    raise OSError("Helper runtime exceeds its byte limit.")
+                current_destination.parent.mkdir(parents=True, exist_ok=True)
+                reject_reparse_path(current_destination.parent)
+                digest = hashlib.sha256()
+                counted = 0
+                with current_source.open("rb") as reader:
+                    opened = os.fstat(reader.fileno())
+                    if not os.path.samestat(info, opened):
+                        raise ValueError("Helper runtime source changed before copy.")
+                    with current_destination.open("xb") as writer:
+                        for chunk in iter(
+                            lambda: reader.read(UPDATE_RUNTIME_PROOF_CHUNK_BYTES), b"",
+                        ):
+                            counted += len(chunk)
+                            copied_bytes += len(chunk)
+                            if (counted > info.st_size
+                                    or copied_bytes > UPDATE_RUNTIME_PROOF_MAX_BYTES):
+                                raise OSError("Helper runtime exceeds its byte limit.")
+                            digest.update(chunk)
+                            writer.write(chunk)
+                    opened_after = os.fstat(reader.fileno())
+                latest = current_source.lstat()
+                if (counted != info.st_size or opened_after.st_size != info.st_size
+                        or opened_after.st_mtime_ns != info.st_mtime_ns
+                        or not os.path.samestat(info, latest)):
+                    raise ValueError("Helper runtime source changed during copy.")
+                copied_info = current_destination.lstat()
+                if (not stat.S_ISREG(copied_info.st_mode)
+                        or copied_info.st_nlink != 1
+                        or copied_info.st_size != info.st_size):
+                    raise ValueError("Staged helper file identity is invalid.")
+                copied_digest = hashlib.sha256()
+                with current_destination.open("rb") as staged:
+                    for chunk in iter(
+                        lambda: staged.read(UPDATE_RUNTIME_PROOF_CHUNK_BYTES), b"",
+                    ):
+                        copied_digest.update(chunk)
+                if copied_digest.digest() != digest.digest():
+                    raise OSError("Staged helper file did not preserve source bytes.")
+        for directory, before in directory_snapshots.items():
+            after = directory.lstat()
+            if (not os.path.samestat(before, after)
+                    or before.st_mtime_ns != after.st_mtime_ns):
+                raise ValueError("Helper runtime directory changed during copy.")
+    except BaseException:
+        try:
+            _cleanup_staged_helper_runtime(target)
+        except (OSError, ValueError):
+            pass
+        raise
+    return {
+        "runtime_bytes": copied_bytes,
+        "runtime_entries": copied_entries,
+        "duration_ms": max(0, int((time.monotonic() - started_at) * 1000)),
+    }
+
+
 def prepare_helper(installer_path: Path, target_version: str, expected_sha256: str,
                    expected_size: int, installed_executable: Path | None = None) -> Path:
-    """Copy the verified setup and frozen helper outside the installation."""
+    """Copy the verified setup and stable launcher to the private helper session.
+
+    Args:
+        installer_path (Path): Current verified download.
+        target_version (str): Exact published next WinApp version.
+        expected_sha256 (str): Published lowercase installer digest.
+        expected_size (int): Published installer length in bytes.
+        installed_executable (Path | None): Verified stable launcher when supplied.
+    Returns:
+        Path: Prepared ticket outside both installed desktop runtimes.
+    """
     if not getattr(sys, "frozen", False):
         raise RuntimeError("Self-update requires the installed standalone application")
     executable = installed_identity(installed_executable)
@@ -495,7 +757,7 @@ def prepare_helper(installer_path: Path, target_version: str, expected_sha256: s
         validate_ticket(ticket, path)
         shutil.copyfile(installer_path, ticket.installer_path)
         verify_ticket_installer(ticket)
-        shutil.copyfile(sys.executable, session / "helper.exe")
+        stage_update_helper_runtime(executable, session / "helper.exe")
         path.write_text(json.dumps(asdict(ticket)), encoding="utf-8")
     except Exception:
         (session / "completed").write_text("1", encoding="ascii")
@@ -505,7 +767,11 @@ def prepare_helper(installer_path: Path, target_version: str, expected_sha256: s
 
 
 def clean_completed_sessions() -> None:
-    """Remove only known files in explicitly completed updater-owned sessions."""
+    """Remove only known files in explicitly completed updater-owned sessions.
+
+    Returns:
+        None: Removes owned unlocked sessions. Active or unknown entries remain.
+    """
     root = updates_root()
     reject_reparse_path(root)
     if not root.exists():
@@ -517,10 +783,14 @@ def clean_completed_sessions() -> None:
             reject_reparse_path(session)
             if not (session / "completed").is_file():
                 continue
-            for name in ("setup.exe", "setup.log", "ready", "proceed", "cancel", "helper.exe", "ticket.json", "completed"):
+            for name in ("setup.exe", "setup.log", "ready", "proceed", "cancel", "ticket.json"):
                 candidate = session / name
                 reject_reparse_path(candidate)
                 candidate.unlink(missing_ok=True)
+            _cleanup_staged_helper_runtime(session / "helper.exe")
+            completed = session / "completed"
+            reject_reparse_path(completed)
+            completed.unlink(missing_ok=True)
             session.rmdir()
         except (OSError, ValueError):
             # A still-running copied helper is locked on Windows; a later
@@ -528,9 +798,26 @@ def clean_completed_sessions() -> None:
             continue
 
 
-def launch_helper(ticket_path: Path, timeout: float = 20) -> subprocess.Popen:
-    """Wait for helper readiness before the uploader begins graceful shutdown."""
-    process = subprocess.Popen([str(ticket_path.parent / "helper.exe"), "--self-update-helper", str(ticket_path)])
+def launch_helper(
+    ticket_path: Path, timeout: float = HELPER_READY_TIMEOUT_SECONDS,
+) -> subprocess.Popen[bytes]:
+    """Wait for helper readiness before the uploader begins graceful shutdown.
+
+    Args:
+        ticket_path (Path): Exact validation ticket under a private helper session.
+        timeout (float): Seconds the uploader can wait for the ready marker.
+    Returns:
+        subprocess.Popen[bytes]: The running update helper admitted to proceed.
+    Raises:
+        RuntimeError: The helper timed out or exited without publishing readiness.
+        OSError: Process startup or session marker publication failed.
+    """
+    environment = os.environ.copy()
+    environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    process = subprocess.Popen(
+        [str(ticket_path.parent / "helper.exe"), "--self-update-helper", str(ticket_path)],
+        env=environment,
+    )
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if (ticket_path.parent / "ready").is_file():
@@ -538,7 +825,7 @@ def launch_helper(ticket_path: Path, timeout: float = 20) -> subprocess.Popen:
             return process
         if process.poll() is not None:
             break
-        time.sleep(0.05)
+        time.sleep(HANDSHAKE_POLL_SECONDS)
     (ticket_path.parent / "cancel").write_text("1", encoding="ascii")
     # The helper waits for proceed before it can launch setup. A timeout cannot
     # leave an autonomous installation pending after the uploader resumes.
@@ -583,7 +870,14 @@ class WindowsBackend:
         self.kernel.GetExitCodeProcess.restype = wintypes.BOOL
 
     def target_running(self, executable: str) -> bool:
-        """Enumerate exact executable identities including both onefile processes."""
+        """Check the exact single installed launcher process path.
+
+        Args:
+            executable (str): Verified registered stable launcher path.
+        Returns:
+            bool: A process belonging to this installation still holds its runtime.
+        """
+        target = os.path.normcase(os.path.abspath(executable))
         class Entry(ctypes.Structure):
             """Native PROCESSENTRY32W with pointer-width heap identity."""
             _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
@@ -612,7 +906,7 @@ class WindowsBackend:
                         length = wintypes.DWORD(len(buffer))
                         if not self.kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(length)):
                             raise OSError("Cannot verify uploader executable path")
-                        if os.path.normcase(os.path.abspath(buffer.value)) == os.path.normcase(os.path.abspath(executable)):
+                        if os.path.normcase(os.path.abspath(buffer.value)) == target:
                             return True
                     finally:
                         self.kernel.CloseHandle(handle)
@@ -624,7 +918,18 @@ class WindowsBackend:
             self.kernel.CloseHandle(snapshot)
 
     def install(self, ticket: UpdateTicket, progress: Progress) -> int:
-        """Elevate setup alone and observe its actual process exit status."""
+        """Elevate setup alone and observe its actual process exit status.
+
+        Args:
+            ticket (UpdateTicket): Verified setup identity and continuation.
+            progress (Progress): Safe installer progress sink.
+        Returns:
+            int: Exit code from the setup process Windows launched.
+        Raises:
+            InterruptedError: Administrator approval was cancelled.
+            SetupLaunchError: Windows rejected the setup launch.
+            OSError: The launched process result could not be observed.
+        """
         class ShellInfo(ctypes.Structure):
             """Native SHELLEXECUTEINFOW including the returned process handle."""
             _fields_ = [("cbSize", wintypes.DWORD), ("fMask", wintypes.ULONG), ("hwnd", wintypes.HWND),
@@ -634,7 +939,7 @@ class WindowsBackend:
                         ("dwHotKey", wintypes.DWORD), ("hIcon", wintypes.HANDLE), ("hProcess", wintypes.HANDLE)]
         info = ShellInfo()
         info.cbSize = ctypes.sizeof(info)
-        info.fMask = 0x40
+        info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
         info.lpVerb = "runas"
         info.lpFile = ticket.installer_path
         info.lpParameters = subprocess.list2cmdline(installer_arguments(ticket))
@@ -647,9 +952,9 @@ class WindowsBackend:
             error = ctypes.get_last_error()
             if pipe:
                 self.kernel.CloseHandle(pipe)
-            if error == 1223:
+            if error == ERROR_CANCELLED:
                 raise InterruptedError("Administrator permission was cancelled")
-            raise OSError("Unable to start setup")
+            raise SetupLaunchError("Unable to start setup")
         try:
             while True:
                 wait = self.kernel.WaitForSingleObject(info.hProcess, 200)
@@ -744,11 +1049,15 @@ class WindowsBackend:
         ticket = load_ticket(updates_root() / update_session / 'ticket.json')
         if Path(ticket.installed_executable) != Path(executable):
             raise ValueError('Update restart target changed.')
+        installed_identity(Path(executable))
         arguments = ([executable, '--after-update', update_session]
                      if ticket.resume_capture else [executable])
+        environment = os.environ.copy()
+        environment['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
         subprocess.Popen(
             arguments,
             cwd=str(Path(executable).parent),
+            env=environment,
         )
 
 
@@ -758,6 +1067,102 @@ class UpdateOutcome:
 
     message: str
     verified: bool
+
+
+def _installed_runtime_fingerprint(executable: Path) -> bytes | None:
+    """Fingerprint the locally installed executable and onedir runtime trees.
+
+    Args:
+        executable (Path): Exact registered launcher validated by the updater.
+    Returns:
+        bytes | None: Digest of executable, _internal and license path bytes, or None when
+            the bounded local installation cannot be verified safely.
+    """
+    digest = hashlib.sha256()
+    pending = [executable]
+    remaining = UPDATE_RUNTIME_PROOF_MAX_BYTES
+    entries = 0
+    try:
+        reject_reparse_path(executable)
+        for name in UPDATE_RUNTIME_SIBLING_DIRECTORIES:
+            runtime = executable.parent / name
+            # Include broken or redirected runtimes so they cannot appear absent.
+            if runtime.exists() or runtime.is_symlink():
+                pending.append(runtime)
+        while pending:
+            path = pending.pop()
+            entries += 1
+            if entries > UPDATE_RUNTIME_PROOF_MAX_ENTRIES:
+                return None
+            info = path.lstat()
+            if (stat.S_ISLNK(info.st_mode)
+                    or getattr(info, 'st_file_attributes', 0) & UPDATE_REPARSE_POINT_ATTRIBUTE):
+                return None
+            relative = path.relative_to(executable.parent).as_posix()
+            digest.update(relative.encode('utf-8') + b'\0')
+            if stat.S_ISDIR(info.st_mode):
+                digest.update(b'd')
+                children = []
+                for child in path.iterdir():
+                    if entries + len(pending) + len(children) >= UPDATE_RUNTIME_PROOF_MAX_ENTRIES:
+                        return None
+                    children.append(child)
+                pending.extend(sorted(children, reverse=True))
+                continue
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                    or info.st_size > remaining):
+                return None
+            part = hashlib.sha256()
+            counted = 0
+            with path.open('rb') as source:
+                for chunk in iter(lambda: source.read(UPDATE_RUNTIME_PROOF_CHUNK_BYTES), b''):
+                    counted += len(chunk)
+                    if counted > info.st_size:
+                        return None
+                    part.update(chunk)
+                opened = os.fstat(source.fileno())
+            latest = path.lstat()
+            for name in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_mode'):
+                if getattr(latest, name) != getattr(info, name):
+                    return None
+            # Windows derives pathname execute bits from the extension. Its
+            # descriptor stat need not repeat those pathname permission bits.
+            if (counted != info.st_size or opened.st_size != info.st_size
+                    or opened.st_mtime_ns != info.st_mtime_ns):
+                return None
+            if (opened.st_ino and info.st_ino
+                    and (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino)):
+                return None
+            remaining -= counted
+            digest.update(b'f' + part.digest())
+        return digest.digest()
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def _restart_unchanged_installation(
+    ticket: UpdateTicket, backend: Backend, original_runtime: bytes | None,
+) -> None:
+    """Recover the original application only after a definitive setup refusal.
+
+    Args:
+        ticket (UpdateTicket): Exact validated session and launcher identity.
+        backend (Backend): Native process and restart adapter.
+        original_runtime (bytes | None): Pre-setup fingerprint or unknown identity.
+    Returns:
+        None: Relaunches an unchanged, closed installation when it is safe.
+            Unknown, changed or busy installations retain their recovery state.
+    """
+    if original_runtime is None:
+        return
+    executable = Path(ticket.installed_executable)
+    try:
+        if (not backend.target_running(ticket.installed_executable)
+                and _installed_runtime_fingerprint(executable) == original_runtime):
+            backend.restart(ticket.installed_executable, update_session=ticket.session_id)
+    except (OSError, RuntimeError, ValueError):
+        # Preserve the original setup result if identity or launch is unavailable.
+        pass
 
 
 def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
@@ -770,11 +1175,15 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
         progress (Progress): Callback receiving phase/percent pairs or None.
         timeout (float): Seconds allowed for the uploader to exit gracefully.
     Returns:
-        UpdateOutcome: Verified success only after matching version and restart;
+        UpdateOutcome: Verified success after matching version and submitting restart;
             a reboot requirement is returned with verified False.
     Raises:
         RuntimeError: Shutdown, installation or resulting version was not verified.
+            An unmodified installed runtime may resume an exact capture after
+            setup has definitively exited with an error.
         InterruptedError: Administrator approval was cancelled.
+        SetupLaunchError: Windows definitively refused to start setup; an unchanged
+            installed runtime may resume its exact capture before the error is shown.
     """
     deadline = time.monotonic() + timeout
     while backend.target_running(ticket.installed_executable):
@@ -782,13 +1191,11 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
             raise RuntimeError("Uploader is still running. No update was started.")
         time.sleep(SHUTDOWN_POLL_SECONDS)
     verify_ticket_installer(ticket)
+    original_runtime = _installed_runtime_fingerprint(Path(ticket.installed_executable))
     try:
         code = backend.install(ticket, progress)
-    except InterruptedError:
-        if Path(ticket.installed_executable).is_file():
-            backend.restart(
-                ticket.installed_executable, update_session=ticket.session_id,
-            )
+    except (InterruptedError, SetupLaunchError):
+        _restart_unchanged_installation(ticket, backend, original_runtime)
         raise
     if code == 3010:
         return UpdateOutcome(
@@ -797,13 +1204,16 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
             ), False,
         )
     if code != 0:
+        # A definite setup exit permits comparison. A failed process wait or
+        # unverified successful setup cannot prove that replacement is over.
+        _restart_unchanged_installation(ticket, backend, original_runtime)
         raise RuntimeError(f"Setup exited with code {code}. The update was not verified.")
     if backend.version(ticket.installed_executable) != ticket.target_version:
         raise RuntimeError("Setup finished, but the installed version does not match. The update was not verified.")
     backend.restart(
         ticket.installed_executable, update_session=ticket.session_id,
     )
-    return UpdateOutcome(f"Version {ticket.target_version} installed. Uploader restarted.", True)
+    return UpdateOutcome(f"Version {ticket.target_version} installed. WinApp launch requested.", True)
 
 
 def main(ticket_path: str) -> int:

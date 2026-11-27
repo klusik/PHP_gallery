@@ -35,6 +35,11 @@ const QUICK_TAG_SUGGESTION_LIMIT = 4;
 // Type: integer. Units: CSS pixels. Scope: quick-tag popup positioning.
 // Consumers: positionPopover(). Rationale: 272px fits the compact input and controls.
 const QUICK_TAG_POPOVER_MAX_WIDTH = 272;
+// Reject transient viewports that cannot fit the popup's 8px edge insets.
+// Type: integer. Units: CSS pixels per edge. Scope: quick-tag popup positioning.
+// Consumers: positionPopover(). Rationale: two 8px insets need a viewport
+// larger than 16px.
+const QUICK_TAG_VIEWPORT_EDGE_GAP = 8;
 const quickPhotoTagRoots = new WeakSet();
 
 /**
@@ -316,26 +321,42 @@ export function setupQuickPhotoTags(root = document) {
     }
 
     /**
-     * Position the anchored popup within the current visual viewport.
+     * Position the popup using stable visual viewport or layout bounds.
      * @param {HTMLElement} trigger Invoking card or viewer icon.
      * @returns {void} Updates fixed popup coordinates without changing layout.
      */
     function positionPopover(trigger) {
         const rect = trigger.getBoundingClientRect();
         const viewport = window.visualViewport;
-        const leftEdge = viewport?.offsetLeft || 0;
-        const topEdge = viewport?.offsetTop || 0;
-        const viewportWidth = viewport?.width || window.innerWidth;
-        const viewportHeight = viewport?.height || window.innerHeight;
-        const width = Math.min(QUICK_TAG_POPOVER_MAX_WIDTH, Math.max(0, viewportWidth - 16));
+        const visualViewportIsUsable = viewport
+            && viewport.width > QUICK_TAG_VIEWPORT_EDGE_GAP * 2
+            && viewport.height > QUICK_TAG_VIEWPORT_EDGE_GAP * 2
+            && viewport.offsetLeft >= 0
+            && viewport.offsetTop >= 0;
+        const leftEdge = visualViewportIsUsable ? viewport.offsetLeft : 0;
+        const topEdge = visualViewportIsUsable ? viewport.offsetTop : 0;
+        const viewportWidth = visualViewportIsUsable
+            ? viewport.width : window.innerWidth;
+        const viewportHeight = visualViewportIsUsable
+            ? viewport.height : window.innerHeight;
+        const width = Math.min(
+            QUICK_TAG_POPOVER_MAX_WIDTH,
+            Math.max(0, viewportWidth - QUICK_TAG_VIEWPORT_EDGE_GAP * 2),
+        );
         const height = popover.offsetHeight;
         const left = Math.min(
-            Math.max(leftEdge + 8, rect.left),
-            leftEdge + viewportWidth - width - 8,
+            Math.max(leftEdge + QUICK_TAG_VIEWPORT_EDGE_GAP, rect.left),
+            Math.max(
+                leftEdge + QUICK_TAG_VIEWPORT_EDGE_GAP,
+                leftEdge + viewportWidth - width - QUICK_TAG_VIEWPORT_EDGE_GAP,
+            ),
         );
-        const below = rect.bottom + 8;
-        const top = below + height <= topEdge + viewportHeight - 8
-            ? below : Math.max(topEdge + 8, rect.top - height - 8);
+        const below = rect.bottom + QUICK_TAG_VIEWPORT_EDGE_GAP;
+        const top = below + height <= viewportHeight + topEdge - QUICK_TAG_VIEWPORT_EDGE_GAP
+            ? below : Math.max(
+                topEdge + QUICK_TAG_VIEWPORT_EDGE_GAP,
+                rect.top - height - QUICK_TAG_VIEWPORT_EDGE_GAP,
+            );
         popover.style.left = `${left}px`;
         popover.style.top = `${top}px`;
     }

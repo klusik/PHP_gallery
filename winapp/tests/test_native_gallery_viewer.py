@@ -4833,29 +4833,39 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Each corner exposes the actual parent without a dark matte;
                 native clipping is active and the detail capture is retained.
         """
-
-        self._wait_until(
-            lambda: card._rounded_region_size == (card.winfo_width(), card.winfo_height()),
-            'The default GlassCard did not acquire its real Windows region.',
-        )
-        self.assertTrue(card._rounded_region_active)
-        # Four pixels around the real HWND expose the surrounding parent surface.
-        margin = TEST_CORNER_CAPTURE_MARGIN
-        x, y = card.winfo_rootx(), card.winfo_rooty()
-        width, height = card.winfo_width(), card.winfo_height()
-        evidence.mkdir(parents=True, exist_ok=True)
-        with ImageGrab.grab(bbox=(x - margin, y - margin,
-                                  x + width + margin, y + height + margin)) as capture:
-            capture.save(evidence / f'{name}.png')
-            for local_x, local_y, outside_x in (
-                (0, 0, -2), (width - 1, 0, width + 1),
-                (0, height - 1, -2), (width - 1, height - 1, width + 1),
-            ):
-                self.assertEqual(
-                    capture.getpixel((margin + outside_x, margin + local_y)),
-                    capture.getpixel((margin + local_x, margin + local_y)),
-                    f'{name}: dark/opaque corner at {(local_x, local_y)}',
-                )
+        owner = card.winfo_toplevel()
+        topmost = bool(owner.attributes('-topmost'))
+        # Desktop capture includes overlapping native windows. A hosted
+        # runner's console covered this fixture in run 45778827456.
+        owner.attributes('-topmost', True)
+        try:
+            owner.lift()
+            owner.update()
+            self._wait_until(
+                lambda: card.winfo_viewable()
+                and card._rounded_region_size == (card.winfo_width(), card.winfo_height()),
+                'The default GlassCard did not acquire its visible Windows region.',
+            )
+            self.assertTrue(card._rounded_region_active)
+            # Four pixels around the real HWND expose the surrounding parent surface.
+            margin = TEST_CORNER_CAPTURE_MARGIN
+            x, y = card.winfo_rootx(), card.winfo_rooty()
+            width, height = card.winfo_width(), card.winfo_height()
+            evidence.mkdir(parents=True, exist_ok=True)
+            with ImageGrab.grab(bbox=(x - margin, y - margin,
+                                      x + width + margin, y + height + margin)) as capture:
+                capture.save(evidence / f'{name}.png')
+                for local_x, local_y, outside_x in (
+                    (0, 0, -2), (width - 1, 0, width + 1),
+                    (0, height - 1, -2), (width - 1, height - 1, width + 1),
+                ):
+                    self.assertEqual(
+                        capture.getpixel((margin + outside_x, margin + local_y)),
+                        capture.getpixel((margin + local_x, margin + local_y)),
+                        f'{name}: dark/opaque corner at {(local_x, local_y)}',
+                    )
+        finally:
+            owner.attributes('-topmost', topmost)
 
     def test_gallery_sections_wrap_and_keep_local_controls_independent(self) -> None:
         """Render all four folder/photo combinations with independent controls.
@@ -9267,6 +9277,19 @@ class NativeGalleryViewerTests(unittest.TestCase):
             viewer._slideshow_delay_ms(),
         )
         viewer.slide_button.invoke()
+        self._wait_until(
+            lambda: viewer._slide_index == 0
+            and viewer._lightbox is not None
+            and viewer._lightbox._photo is not None
+            and viewer._slideshow_id is not None,
+            'The first fallback slide did not schedule the tested pace.',
+        )
+        # The five-second production interval is asserted above. Advance its
+        # exact callback directly to avoid spending the native partition budget
+        # waiting on the real desktop scheduler to reach the same transition.
+        viewer.window.after_cancel(viewer._slideshow_id)
+        viewer._slideshow_id = None
+        viewer._advance_slide()
         self._wait_until(
             lambda: viewer._slide_index == 1
             and viewer._lightbox._photo is not None

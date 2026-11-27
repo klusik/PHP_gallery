@@ -104,6 +104,27 @@ export function verifyFeatureOwners(repository,execution,retained,call) {
     return jobs;
 }
 
+/** Validate the native job list at the feature execution seal or publisher.
+ * @param {Array<{name:string,run_id:number,run_attempt:number,workflow_name:string,status:string,conclusion:string|null}>} jobs Native provider jobs for the current stage.
+ * @param {Set<string>} expected Expected required and control job names.
+ * @param {number} runId Current authenticated integration run ID.
+ * @param {number} attempt Current authenticated integration run attempt.
+ * @returns {void} Admits the known skipped optional job and rejects any other unexpected row.
+ */
+export function verifyFeatureJobInventory(jobs,expected,runId,attempt) {
+    const unexpected=jobs.filter(job=>!expected.has(job.name));
+    if (unexpected.length===0) return;
+
+    // An unselected #445 workflow call leaves one skipped provider row.
+    const [optional]=unexpected;
+    if (unexpected.length!==1 || optional.name!=='Issue 445 exact prepared WinApp evidence'
+        || optional.run_id!==runId || optional.run_attempt!==attempt
+        || optional.workflow_name!=='Integrate into develop'
+        || optional.status!=='completed' || optional.conclusion!=='skipped') {
+        throw new Error('BLOCKED unexpected native feature qualification job.');
+    }
+}
+
 /** Load a sealed exact-candidate execution before scheduling another expensive FULL.
  * @param {string} repository Exact owner/repository.
  * @param {string} runId Explicit original qualification run.

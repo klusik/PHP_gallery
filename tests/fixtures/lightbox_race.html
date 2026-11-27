@@ -55,7 +55,15 @@ License: MIT License (see LICENSE file in repository)
 </section>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox} from '/public/assets/gallery-modules/lightbox-deferred.js?v=20261102-repeat-modes-v1';
-    import {setupQuickPhotoTags} from '/public/assets/gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5';
+    import {setupQuickPhotoTags} from '/public/assets/gallery-modules/quick-photo-tags.js?v=20261127-quick-tag-viewport-guard-v6';
+
+    // Type: integer. Units: CSS pixels.
+    // Scope: transient VisualViewport geometry during the native fullscreen
+    // quick-tag open.
+    // Consumers: the fullscreen popup-bound regression below.
+    // Rationale: 1px cannot fit both 8px edge insets and reproduces a transient
+    // native fullscreen measurement.
+    const TRANSIENT_FULLSCREEN_VIEWPORT_WIDTH = 1;
 
     const result = document.querySelector('#results');
     const errors = [];
@@ -672,8 +680,32 @@ License: MIT License (see LICENSE file in repository)
                 'authorized native viewer requests browser-specific fullscreen key routing');
         }
         const releasesBeforeFullscreenLock = quickTagKeyboardLock.releases;
+        const visualViewport = window.visualViewport;
+        const visualViewportWidthDescriptor = visualViewport
+            ? Object.getOwnPropertyDescriptor(visualViewport, 'width') : null;
+        if (visualViewport) {
+            Object.defineProperty(visualViewport, 'width', {
+                configurable: true,
+                value: TRANSIENT_FULLSCREEN_VIEWPORT_WIDTH,
+            });
+        }
         window.quickTagInputPhase = 'fullscreen-t';
-        await waitFor(() => !quickTagPopover.hidden, 'Shift+T did not open quick tags in fullscreen.');
+        try {
+            await waitFor(() => !quickTagPopover.hidden,
+                'Shift+T did not open quick tags in fullscreen.');
+        } finally {
+            if (visualViewport) {
+                if (visualViewportWidthDescriptor) {
+                    Object.defineProperty(
+                        visualViewport,
+                        'width',
+                        visualViewportWidthDescriptor,
+                    );
+                } else {
+                    delete visualViewport.width;
+                }
+            }
+        }
         if (nativeKeyboardLockActive) {
             await waitFor(() => {
                 const request = quickTagKeyboardLock.requestsByPhase['fullscreen-t'];

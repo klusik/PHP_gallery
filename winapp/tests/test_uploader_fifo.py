@@ -10,6 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Behavioral FIFO regressions with controlled time and simulated transport."""
 
+import gc
 import queue
 import tempfile
 import threading
@@ -47,6 +48,9 @@ class UploaderFifoTests(unittest.TestCase):
         Returns:
             None: Retains the source module for real Watcher construction.
         """
+        # Other canonical cases own native Tk roots. Release any closed roots
+        # on this runner thread before starting the producer/consumer threads.
+        gc.collect()
         cls.main: ModuleType = load_main_module()
 
     def setUp(self) -> None:

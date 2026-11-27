@@ -45,9 +45,11 @@ function release_file_policy_root(string $rootPath): string
  *     companion_files:list<string>,
  *     companion_resource_files:list<string>,
  *     companion_locale_files:list<string>,
+ *     companion_backend_files:list<string>,
  *     updater_files:list<string>,
  *     source_review_files:list<string>
- * } Validated inventory, including optional non-updater companion resources.
+ * } Validated inventory, including optional non-updater companion resources,
+ *     locales, and exact Qt backend files.
  * @throws RuntimeException When the inventory is missing, malformed, unsafe, duplicated, or unsorted.
  */
 function release_file_policy_read(string $rootPath): array
@@ -94,6 +96,10 @@ function release_file_policy_read(string $rootPath): array
             array_key_exists('companion_locale_files', $manifest)
             && !is_array($manifest['companion_locale_files'])
         )
+        || (
+            array_key_exists('companion_backend_files', $manifest)
+            && !is_array($manifest['companion_backend_files'])
+        )
     ) {
         throw new RuntimeException(
             'Production file inventory has an unsupported or invalid schema.',
@@ -117,6 +123,10 @@ function release_file_policy_read(string $rootPath): array
     $companionLocales = release_file_policy_validate_path_list(
         $manifest['companion_locale_files'] ?? [],
     );
+    // Installed validators still apply the original companion field allowlists.
+    $companionBackend = release_file_policy_validate_path_list(
+        $manifest['companion_backend_files'] ?? [],
+    );
     $updaterFiles = release_file_policy_validate_path_list(
         $manifest['updater_files'],
     );
@@ -128,6 +138,7 @@ function release_file_policy_read(string $rootPath): array
         $companionFiles,
         $companionResources,
         $companionLocales,
+        $companionBackend,
         $sourceReviewFiles,
     );
     sort($allPackagePaths, SORT_STRING);
@@ -138,6 +149,7 @@ function release_file_policy_read(string $rootPath): array
         if (
             !release_file_policy_is_production_path($path)
             || release_file_policy_is_winapp_locale_path($path)
+            || release_file_policy_is_winapp_backend_path($path)
         ) {
             throw new RuntimeException(
                 'Production inventory contains a private or unapproved path.',
@@ -172,6 +184,16 @@ function release_file_policy_read(string $rootPath): array
         ) {
             throw new RuntimeException(
                 'Companion locale inventory contains an unapproved or updater-owned path.',
+            );
+        }
+    }
+    foreach ($companionBackend as $path) {
+        if (
+            !release_file_policy_is_winapp_backend_path($path)
+            || release_file_policy_is_updater_path($path)
+        ) {
+            throw new RuntimeException(
+                'Companion backend inventory contains an unapproved or updater-owned path.',
             );
         }
     }
@@ -212,6 +234,7 @@ function release_file_policy_read(string $rootPath): array
         'companion_files' => $companionFiles,
         'companion_resource_files' => $companionResources,
         'companion_locale_files' => $companionLocales,
+        'companion_backend_files' => $companionBackend,
         'updater_files' => $updaterFiles,
         'source_review_files' => $sourceReviewFiles,
     ];
@@ -287,6 +310,7 @@ function release_file_policy_is_production_path(string $relativePath): bool
             || str_starts_with($relativePath, 'database/migrations/')
             || release_file_policy_is_winapp_source_path($relativePath)
             || release_file_policy_is_winapp_locale_path($relativePath)
+            || release_file_policy_is_winapp_backend_path($relativePath)
             || (
                 str_starts_with($relativePath, 'custom_css/')
                 && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION))
@@ -367,6 +391,32 @@ function release_file_policy_is_winapp_locale_path(string $relativePath): bool
             'winapp/uploader/resources/locale/cs/LC_MESSAGES/winapp.po',
             'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
             'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
+        ],
+        true,
+    );
+}
+
+/**
+ * Identify the source files needed by the shared WinApp build and Qt runtime.
+ *
+ * @param string $relativePath Project-relative candidate using forward slashes.
+ * @return bool True only for the reviewed non-updater build and runtime paths.
+ */
+function release_file_policy_is_winapp_backend_path(string $relativePath): bool
+{
+    return in_array(
+        $relativePath,
+        [
+            'winapp/constraints.txt',
+            'winapp/requirements-core.txt',
+            'winapp/requirements-qt.txt',
+            'winapp/uploader.spec',
+            'winapp/qt_installer_tools.py',
+            'winapp/frozen_windows_libraries.py',
+            'winapp/QT-LICENSE.txt',
+            'winapp/licenses/qt/GPL-3.0-only.txt',
+            'winapp/licenses/qt/LGPL-3.0-only.txt',
+            'winapp/uploader/resources/qml/Photos.qml',
         ],
         true,
     );
@@ -537,8 +587,8 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
  *
  * @param string $rootPath Application root containing the inventory.
  * @param string $profile Production distribution or updater activation profile.
- * @return list<string> Sorted CMS and companion/resource production paths,
- *     or only CMS activation paths for the updater profile.
+ * @return list<string> Sorted CMS and companion/resource/backend production
+ *     paths, or only CMS activation paths for the updater profile.
  * @throws RuntimeException When the profile is invalid or an inventory path is missing or unsafe.
  */
 function release_file_policy_paths(
@@ -552,6 +602,7 @@ function release_file_policy_paths(
             $inventory['companion_files'],
             $inventory['companion_resource_files'],
             $inventory['companion_locale_files'],
+            $inventory['companion_backend_files'],
         );
         sort($paths, SORT_STRING);
     } elseif ($profile === 'updater') {

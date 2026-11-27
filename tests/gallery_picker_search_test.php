@@ -297,9 +297,12 @@ namespace {
         exit(0);
     }
     if (($argv[1] ?? '') === '--render-browser-fixture') {
+        require_once dirname(__DIR__) . '/app/views/public_gallery_controls.php';
         picker_seed(10000);
         echo
-            '<!doctype html><html><head><meta charset="utf-8"><title>Picker browser fixture</title></head><body>';
+            '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<link rel="stylesheet" href="/base.css"><link rel="stylesheet" href="/public.css">'
+            . '<title>Picker browser fixture</title></head><body>';
         echo
             '<div id="panel"><form id="parent-form"><input type="hidden" name="parent_id" value="666" disabled>';
         echo
@@ -311,8 +314,20 @@ namespace {
             '<button id="save" type="submit">Save fixture</button></form></div>';
         echo '<form id="bulk-form">';
         Gallery\Controllers\render_admin_image_bulk_toolbar(['id' => 10000]);
+        echo '</form><main class="site-main" id="manager-fixture" hidden>';
+        echo '<div class="hero" data-public-gallery-id="1" data-public-subgallery-count="1"><h1>Gallery manager fixture</h1></div>';
+        Gallery\Views\view_render_picture_manager_toolbar([
+            'gallery_id' => 1, 'can_move_galleries' => true,
+            'csrf_token' => 'synthetic-token', 'move_url' => '/manager-move',
+            'destination_picker_html' => Gallery\Controllers\render_gallery_search_picker('', 0, 1, [
+                'id' => 'picture-manager-destination-1', 'disable_prefill' => true,
+                'hidden_attributes' => ['data-picture-manager-destination' => ''],
+            ]),
+        ]);
+        echo '<section data-public-subgallery-section><article data-gallery-id="2" data-picture-manager-gallery data-picture-manager-gallery-id="2">'
+            . '<button data-picture-manager-select type="button">Select gallery</button>Unpublished child</article></section></main>';
         echo
-            '</form><pre id="results">BROWSER PENDING</pre><script type="module" src="/fixture.js"></script></body></html>';
+            '<pre id="results">BROWSER PENDING</pre><script type="module" src="/fixture.js"></script></body></html>';
         exit(0);
     }
     $measurements = [];

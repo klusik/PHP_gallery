@@ -10,10 +10,14 @@
 # License: MIT License (see LICENSE file in repository)
 """Local-only gallery presentation preferences for verified identities."""
 
+from dataclasses import dataclass, field
 import json
+from hashlib import sha256
 from pathlib import Path
 
 from .app_linking import LINKING_GALLERY_ID_MAX
+from .flight_jobs import read_document
+from .gallery_image_policy import MEDIA_THUMBNAIL_SIZE
 from .state_store import atomic_write_json
 
 
@@ -24,6 +28,25 @@ from .state_store import atomic_write_json
 PHOTO_CARD_FORMATS = (
     "default", "16:9", "21:9", "4:3", "1:1", "4:5", "9:16",
 )
+
+
+def gallery_card_dimensions(card_format: str) -> tuple[int, int]:
+    """Fit a selected card ratio within the original Tk thumbnail square.
+
+    Args:
+        card_format (str): Shared presentation key or an invalid saved value.
+    Returns:
+        tuple[int, int]: Logical image width and height, with a positive edge.
+    """
+    normalized = normalize_card_format(card_format)
+    if normalized == "default":
+        return MEDIA_THUMBNAIL_SIZE
+    numerator, denominator = normalized.split(":", 1)
+    ratio = int(numerator) / int(denominator)
+    width, height = MEDIA_THUMBNAIL_SIZE
+    if ratio >= 1:
+        return width, max(1, round(width / ratio))
+    return max(1, round(height * ratio)), height
 
 # Purpose: Bound the local file while retaining independent gallery choices.
 # Type: int. Units: gallery preferences. Scope: one verified site/account.
@@ -49,6 +72,94 @@ GALLERY_FOLDER_SHARE_BOUNDS = (100, 800)
 # Consumers: folder shelf, divider drag and preference serialization.
 # Rationale: 1000 gives subpixel precision at ordinary desktop window heights.
 GALLERY_FOLDER_SHARE_SCALE = 1000
+
+
+@dataclass(frozen=True)
+class PhotosTreePreferences:
+    """Carry one verified account's tree expansion and explicit selection."""
+
+    opened: dict[int, bool] = field(default_factory=dict)
+    selected: int | None = None
+
+
+def load_photos_tree_preferences(path: Path) -> PhotosTreePreferences:
+    """Read the existing version-one or version-two account tree preference.
+
+    Args:
+        path (Path): Credential-free path for the exact verified account.
+    Returns:
+        PhotosTreePreferences: Validated expansion and selection, or defaults
+            when local data is missing or damaged. No catalogue is implied.
+    """
+    try:
+        payload = read_document(path)
+        version = payload.get('version')
+        if version not in (1, 2):  # Existing private-preference wire versions.
+            return PhotosTreePreferences()
+        selected = payload.get('selected_gallery_id')
+        opened: dict[int, bool] = {}
+        rows = payload.get('open')
+        if isinstance(rows, dict):
+            for raw_id, value in rows.items():
+                if len(opened) >= GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
+                    break
+                if isinstance(raw_id, str) and raw_id.isdecimal() and type(value) is bool:
+                    gallery_id = int(raw_id)
+                    if 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
+                        opened[gallery_id] = value
+        if version != 2 or type(selected) is not int or not 0 < selected <= LINKING_GALLERY_ID_MAX:
+            selected = None
+        return PhotosTreePreferences(opened, selected)
+    except (OSError, ValueError, TypeError):
+        return PhotosTreePreferences()
+
+
+def save_photos_tree_preferences(
+    path: Path, *, opened: dict[int, bool] | None = None, selected: int | None = None,
+) -> bool:
+    """Publish one explicit tree change while retaining the other setting.
+
+    Args:
+        path (Path): Preference path from the current verified account.
+        opened (dict[int, bool] | None): Complete bounded expansion mapping,
+            or None to keep the current saved expansion state.
+        selected (int | None): Fresh explicit gallery, or None to keep selection.
+    Returns:
+        bool: True if the shared account preference was written.
+    """
+    if selected is not None and (type(selected) is not int or not 0 < selected <= LINKING_GALLERY_ID_MAX):
+        return False
+    previous = load_photos_tree_preferences(path)
+    expanded = previous.opened if opened is None else opened
+    bounded = {
+        str(gallery_id): value for gallery_id, value in expanded.items()
+        if type(gallery_id) is int and 0 < gallery_id <= LINKING_GALLERY_ID_MAX and type(value) is bool
+    }
+    if len(bounded) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
+        return False
+    try:
+        atomic_write_json(path, {
+            'version': 2,  # Compatible tree schema with explicit selection.
+            'open': bounded,
+            'selected_gallery_id': previous.selected if selected is None else selected,
+        })
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def photos_account_tree_path(profile: Path, issuer: str, user_id: int) -> Path:
+    """Resolve the existing per-account preference identity in either frontend.
+
+    Args:
+        profile (Path): Current local WinApp profile.
+        issuer (str): Canonical issuer verified by the current Photos grant.
+        user_id (int): Positive account ID confirmed by that grant's identity.
+    Returns:
+        Path: Existing hashed preference key for this site and account.
+    """
+    key = sha256(f"{issuer}\0{user_id}".encode("utf-8")).hexdigest()
+    return profile / "photos-tree" / f"{key}.json"
 
 
 def normalize_card_format(value: str) -> str:

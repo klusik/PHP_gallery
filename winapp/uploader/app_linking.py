@@ -1505,6 +1505,87 @@ def scope_base(scope: str) -> str | None:
     }.get(underlying)
 
 
+def requested_linking_scope(
+    *, list_galleries: bool, upload: bool, read_details: bool,
+    create_galleries: bool, change_visibility: bool, read_media: bool,
+    remember_securely: bool, capabilities: frozenset[str],
+    visibility_ready: bool, native_media_ready: bool,
+    offline_storage_ready: bool,
+) -> str:
+    """Build the exact consent scope represented by the linking controls.
+
+    Args:
+        list_galleries (bool): Request access to the gallery listing.
+        upload (bool): Request gallery-scoped upload permission.
+        read_details (bool): Request gallery detail access.
+        create_galleries (bool): Request child-gallery creation permission.
+        change_visibility (bool): Request gallery visibility mutation permission.
+        read_media (bool): Request temporary approved native media access.
+        remember_securely (bool): Request optional native refresh storage.
+        capabilities (frozenset[str]): Exact current discovery capability set.
+        visibility_ready (bool): Whether the client enables visibility changes.
+        native_media_ready (bool): Whether the client enables native media reads.
+        offline_storage_ready (bool): Whether native storage and scope are available.
+    Returns:
+        str: Canonically ordered scope bundle for one browser approval request.
+    Raises:
+        LinkingError: A selected permission is unavailable or its dependency is absent.
+    """
+    list_galleries = bool(
+        list_galleries or upload or read_details or create_galleries
+        or change_visibility or read_media
+    )
+    read_details = bool(read_details or change_visibility)
+    if upload and 'gallery:upload' not in capabilities:
+        raise LinkingError('Gallery uploads are unavailable.')
+    if list_galleries and 'galleries:list' not in capabilities:
+        raise LinkingError('Gallery listing is unavailable.')
+    if read_details and 'gallery:read' not in capabilities:
+        raise LinkingError('Gallery details are unavailable.')
+    if create_galleries and 'galleries:create' not in capabilities:
+        raise LinkingError('Gallery creation is unavailable.')
+    if change_visibility and (
+        not visibility_ready or 'gallery:visibility' not in capabilities
+    ):
+        raise LinkingError('Gallery visibility changes are unavailable.')
+    if read_media and (
+        not native_media_ready or 'media:read' not in capabilities
+        or remember_securely
+    ):
+        raise LinkingError('Gallery media is unavailable.')
+    if remember_securely and (
+        not offline_storage_ready or 'offline_access' not in capabilities
+    ):
+        raise LinkingError('Secure offline storage is unavailable.')
+    scope = (
+        READ_UPLOAD_SCOPE if read_details and upload else
+        READ_SCOPE if read_details else
+        UPLOAD_SCOPE if upload else
+        GALLERIES_SCOPE if list_galleries else IDENTITY_SCOPE
+    )
+    if create_galleries:
+        scope += ' galleries:create'
+    if change_visibility:
+        scope += ' gallery:visibility'
+    if read_media:
+        if 'media:admin' in capabilities:
+            scope += (
+                ADMIN_PRESENTATION_SCOPE_SUFFIX
+                if 'presentation:read' in capabilities
+                else ADMIN_MEDIA_SCOPE_SUFFIX
+            )
+        else:
+            scope += (
+                PRESENTATION_SCOPE_SUFFIX
+                if 'presentation:read' in capabilities else MEDIA_SCOPE_SUFFIX
+            )
+    if remember_securely:
+        scope += ' offline_access'
+    if scope_base(scope) is None:
+        raise LinkingError('The selected gallery permissions are unavailable.')
+    return scope
+
+
 def scope_allows_gallery_search(scope: str) -> bool:
     """Check the registered bundles granting metadata search.
 
@@ -1708,6 +1789,33 @@ def linking_issuer(value: str) -> str:
         authority = authority[:-len(default_suffix)]
     issuer = f'{parsed.scheme}://{authority}' + parsed.path[:-len(suffix)]
     return issuer if _issuer_valid(issuer) else ''
+
+
+def linking_prompt_issuer(value: str) -> str:
+    """Resolve the website typed in either desktop authorization dialog.
+
+    Args:
+        value (str): User-entered address or unambiguous hostname and mount.
+    Returns:
+        str: Canonical issuer, or empty when the prompt should retain the draft.
+    """
+    value = value.strip()
+    issuer = linking_issuer(value)
+    if issuer:
+        return issuer
+    if value.lower().startswith('http://'):
+        return linking_issuer('https://' + value[len('http://'):])
+    if not value or value.startswith('//') or '://' in value:
+        return ''
+    authority = value.split('/', 1)[0]
+    looks_like_host = (
+        '.' in authority or ':' in authority or authority.startswith('[')
+        or authority.lower() == 'localhost'
+    )
+    # A local-looking path must never become a different remote installation.
+    if not looks_like_host or any(character.isspace() for character in value):
+        return ''
+    return linking_issuer('https://' + value)
 
 
 # Purpose: Bound a refresh credential by the server's inactivity policy.
@@ -4218,6 +4326,25 @@ def _observe_thumbnail_mime(timings: MediaReadTimings, mime: str | None) -> None
         timings.webp_responses += 1
 
 
+def _observe_active_thumbnails(
+    observer: Callable[[tuple[int, ...]], None] | None, identities: tuple[int, ...],
+) -> None:
+    """Publish a physical thumbnail read without granting control to the observer.
+
+    Args:
+        observer (Callable[[tuple[int, ...]], None] | None): Optional display receiver.
+        identities (tuple[int, ...]): Exact IDs in this read, or empty when it ends.
+    Returns:
+        None: Observer errors leave transport and publication policy intact.
+    """
+    if observer is None:
+        return
+    try:
+        observer(identities)
+    except Exception:
+        pass
+
+
 def _linked_thumbnail_etag(value: JsonValue) -> str | None:
     """Validate the optional public thumbnail proof from a catalogue row.
 
@@ -5867,6 +5994,7 @@ class LinkingSession:
         proof_generation_out: list[int] | None = None,
         operation_deadline: float | None = None,
         cover_only: bool = False,
+        active_photos: Callable[[tuple[int, ...]], None] | None = None,
     ) -> _NativeMediaResponse:
         """Serialize one exact media read under the shared session and HTTPS gates.
 
@@ -5887,6 +6015,10 @@ class LinkingSession:
                 existing independent admission and transport limits.
             cover_only (bool): Request one first-page cover descriptor without
                 changing the route, authorization or legacy-server fallback.
+            active_photos (Callable[[tuple[int, ...]], None] | None): Optional
+                informational observer for the exact active thumbnail GET. It
+                receives the singleton ID immediately around transport only;
+                observer errors never affect authorization or delivery.
 
         Returns:
             _NativeMediaResponse: Body/304 status, media type, validator, and
@@ -6011,19 +6143,27 @@ class LinkingSession:
                             )
                             if transport_timeout <= 0:
                                 raise LinkingError('Gallery media deadline expired.')
-                        result = _run_linking_transport(
-                            lambda control: _native_media_read_once(
-                                self._issuer, encoded, token, accepted, control,
-                                if_none_match, allow_restricted=admin_media,
-                                admin_preload=admin_preload,
-                                pool=self._media_connection_pool,
+                        active_ids = ((selector,) if active_photos is not None
+                                      and kind == 'thumbnail' and type(selector) is int else ())
+                        if active_ids:
+                            _observe_active_thumbnails(active_photos, active_ids)
+                        try:
+                            result = _run_linking_transport(
+                                lambda control: _native_media_read_once(
+                                    self._issuer, encoded, token, accepted, control,
+                                    if_none_match, allow_restricted=admin_media,
+                                    admin_preload=admin_preload,
+                                    pool=self._media_connection_pool,
+                                    timings=timings,
+                                    **({'cover_only': True} if cover_only else {}),
+                                ), cancel, transport_timeout,
+                                LINKING_SOCKET_TIMEOUT_SECONDS,
+                                phase='media', route='app_linking_media',
                                 timings=timings,
-                                **({'cover_only': True} if cover_only else {}),
-                            ), cancel, transport_timeout,
-                            LINKING_SOCKET_TIMEOUT_SECONDS,
-                            phase='media', route='app_linking_media',
-                            timings=timings,
-                        )
+                            )
+                        finally:
+                            if active_ids:
+                                _observe_active_thumbnails(active_photos, ())
                         diagnostic_status = 304 if result[0] is None else 200
                         diagnostic_reason = 'ok'
                         self._access_used(diagnostic_started)
@@ -7474,6 +7614,7 @@ class LinkingSession:
         stats: ThumbnailBatchStats, operation_started: float,
         frame_count: list[int], exceptional: list[ThumbnailBatchWitness],
         item_metrics: dict[int, MediaReadTimings],
+        active_photos: Callable[[tuple[int, ...]], None] | None = None,
     ) -> None:
         """Run one homogeneous group on the existing serialized worker.
 
@@ -7491,6 +7632,8 @@ class LinkingSession:
             exceptional (list[ThumbnailBatchWitness]): Nonbinary rows needing GET.
             item_metrics (dict[int, MediaReadTimings]): Candidate ID to the
                 existing per-item cache lookup and publication observations.
+            active_photos (Callable[[tuple[int, ...]], None] | None): Optional
+                informational observer for this exact physical framed group.
 
         Returns:
             None: Validated ordinary frames are delivered during the request.
@@ -7546,6 +7689,9 @@ class LinkingSession:
                     Returns:
                         dict[str, JsonValue]: Nonempty transport completion sentinel.
                     """
+                    active_ids = (tuple(row.photo.image_id for row in witnesses)
+                                  if active_photos is not None else ())
+
                     def receive(item: ValidatedItem) -> None:
                         """Validate one complete frame before delivering its result.
 
@@ -7555,6 +7701,7 @@ class LinkingSession:
                         Returns:
                             None: Publishes or defers the exact indexed candidate.
                         """
+                        nonlocal active_ids
                         control.remaining()
                         frame_count[0] += 1
                         stats.wire_items += 1
@@ -7578,7 +7725,11 @@ class LinkingSession:
                             raise LinkingThumbnailProofChanged(
                                 'Gallery thumbnail proof is unavailable.',
                             ) from None
+                        if active_ids:
+                            active_ids = tuple(identity for identity in active_ids
+                                               if identity != witness.photo.image_id)
                         if item.status != 'ok':
+                            _observe_active_thumbnails(active_photos, active_ids)
                             exceptional.append(witness)
                             return
                         publish_started = time.perf_counter()
@@ -7591,12 +7742,16 @@ class LinkingSession:
                         finally:
                             stats.publish_ms += (time.perf_counter() - publish_started) * 1000.0
 
-                    _native_thumbnail_batch_read_once(
-                        self._issuer, token,
-                        tuple(str(row.photo.image_id) for row in witnesses),
-                        gallery_id, control, receive,
-                        admin_preload=witnesses[0].kind == 'private', timings=timings,
-                    )
+                    _observe_active_thumbnails(active_photos, active_ids)
+                    try:
+                        _native_thumbnail_batch_read_once(
+                            self._issuer, token,
+                            tuple(str(row.photo.image_id) for row in witnesses),
+                            gallery_id, control, receive,
+                            admin_preload=witnesses[0].kind == 'private', timings=timings,
+                        )
+                    finally:
+                        _observe_active_thumbnails(active_photos, ())
                     return {'completed': True}
 
                 remaining = deadline - time.monotonic()
@@ -7688,6 +7843,7 @@ class LinkingSession:
         timings: MediaReadTimings | None = None,
         stats: ThumbnailBatchStats | None = None,
         retry_wait: Callable[[int], None] | None = None,
+        active_photos: Callable[[tuple[int, ...]], None] | None = None,
     ) -> None:
         """Read a bounded current photo group with one serialized transport.
 
@@ -7705,6 +7861,10 @@ class LinkingSession:
                 validated whole seconds announce its wait; zero means that
                 notified cooldown elapsed and retry is proceeding. Observer
                 failures are ignored and do not affect request policy.
+            active_photos (Callable[[tuple[int, ...]], None] | None): Optional
+                informational observer for an exact active framed group, one
+                legacy GET, or a verified disk hit being handed to decode.
+                Empty tuples clear activity. Observer failures are ignored.
 
         Returns:
             None: Authorized hits and complete network results were delivered.
@@ -7752,7 +7912,7 @@ class LinkingSession:
             """
             check_active()
             if not self.thumbnail_publication_current(result, cancel):
-                raise LinkingError('Gallery thumbnail proof is unavailable.')
+                raise LinkingThumbnailProofChanged('Gallery thumbnail proof is unavailable.')
             began = time.perf_counter()
             try:
                 publish(result, item_timings, check_active)
@@ -7835,7 +7995,7 @@ class LinkingSession:
             check_active()
             wait_cooldown()
             if witness is not None and not self._thumbnail_batch_witness_current(witness, cancel):
-                raise LinkingError('Gallery thumbnail proof is unavailable.')
+                raise LinkingThumbnailProofChanged('Gallery thumbnail proof is unavailable.')
             generation_out: list[int] = []
             try:
                 body, mime, etag, _cacheable = self._media_read(
@@ -7843,6 +8003,7 @@ class LinkingSession:
                     admin_preload=bool(witness is not None and witness.kind == 'private'),
                     timings=physical, proof_generation_out=generation_out,
                     operation_deadline=deadline,
+                    **({'active_photos': active_photos} if active_photos is not None else {}),
                 )
             except LinkingMediaThrottled as error:
                 if error.retry_after_seconds is not None:
@@ -7872,7 +8033,7 @@ class LinkingSession:
                             if witness.private_identity is not None else None)
                 if expected is not None and etag != expected:
                     self._invalidate_thumbnail_batch_witness(witness)
-                    raise LinkingError('Gallery thumbnail descriptor requires refresh.')
+                    raise LinkingThumbnailProofChanged('Gallery thumbnail descriptor requires refresh.')
             result = LegacyThumbnailPublication(
                 self, self._issuer, gallery_id, photo, 'ok', body, mime, etag,
                 witness, generation_out[0],
@@ -7920,7 +8081,11 @@ class LinkingSession:
                     witness, photo, 'ok', body, mime, expected, expected is not None,
                 )
                 _observe_thumbnail_mime(item_timings, mime)
-                deliver(result, item_timings)
+                _observe_active_thumbnails(active_photos, (photo.image_id,))
+                try:
+                    deliver(result, item_timings)
+                finally:
+                    _observe_active_thumbnails(active_photos, ())
                 counters.cache_hits += 1
             while candidates:
                 check_active()
@@ -7960,6 +8125,7 @@ class LinkingSession:
                         self._thumbnail_batch_attempt(
                             gallery_id, group, publish, cancel, deadline, physical,
                             counters, started, frames, exceptional, item_metrics,
+                            active_photos=active_photos,
                         )
                         break
                     except LinkingThumbnailBatchUnsupported:

@@ -1577,13 +1577,19 @@ $partitionedWinappReport['tests'] = [
     array_replace($winappReport['tests'][0], ['id' => 'suite.Complement.test_six']),
     array_replace($winappReport['tests'][0], ['id' => 'suite.OtherComplement.test_seven']),
     array_replace($winappReport['tests'][0], ['id' => 'suite.LastComplement.test_eight']),
+    array_replace($winappReport['tests'][0], [
+        'id' => 'test_ui_shell.EmbeddedShellTests.test_nine',
+    ]),
+    array_replace($winappReport['tests'][0], [
+        'id' => 'test_gui_visual_parity.VisualParityTests.test_ten',
+    ]),
 ];
 $partitionedWinappReport['counts'] = array_fill_keys(
     array_keys($winappReport['counts']),
     0,
 );
-$partitionedWinappReport['counts']['total'] = 8;
-$partitionedWinappReport['counts']['passed'] = 8;
+$partitionedWinappReport['counts']['total'] = 10;
+$partitionedWinappReport['counts']['passed'] = 10;
 $partitionedIds = array_column($partitionedWinappReport['tests'], 'id');
 $partitionedWinappReport['partition_processes'] = [
     [
@@ -1658,25 +1664,114 @@ $partitionedWinappReport['partition_processes'] = [
         'expected_test_ids' => [$partitionedIds[7]],
         'observed_test_ids' => [$partitionedIds[7]],
     ],
+    [
+        'partition' => 9, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[8]],
+        'observed_test_ids' => [$partitionedIds[8]],
+    ],
+    [
+        'partition' => 10, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[9]],
+        'observed_test_ids' => [$partitionedIds[9]],
+    ],
 ];
-// Eight synthetic 0.1-second children sum to 0.8 seconds. These structural
+// Ten synthetic 0.1-second children sum to 1.0 seconds. These structural
 // evidence values exercise report consistency and do not set execution limits.
 $partitionedWinappReport['partition_proof'] = [
-    'partition_count' => 8, 'complete' => true, 'exact_union' => true,
+    'partition_count' => 10, 'complete' => true, 'exact_union' => true,
     'expected_test_ids' => $partitionedIds,
     'observed_test_ids' => $partitionedIds,
-    'total_duration_seconds' => 0.8,
+    'total_duration_seconds' => 1.0,
 ];
 $partitionedWinappSuccess = audit_evaluate_winapp_report(
     json_encode($partitionedWinappReport),
-    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.8],
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 1.0],
     false,
     true,
 );
 audit_test_assert(
     $partitionedWinappSuccess['status'] === 'PASS'
-        && count($partitionedWinappSuccess['partition_processes']) === 8,
-    'Only exact, disjoint and successful eight-way partitions may qualify full discovery.',
+        && count($partitionedWinappSuccess['partition_processes']) === 10,
+    'Only exact, disjoint and successful ten-way partitions may qualify full discovery.',
+);
+$splitVisualReport = $partitionedWinappReport;
+$delegatedVisualId = $partitionedIds[9];
+array_pop($splitVisualReport['tests']);
+array_pop($splitVisualReport['partition_processes']);
+$splitVisualReport['counts']['total'] = 9;
+$splitVisualReport['counts']['passed'] = 9;
+$splitVisualReport['partition_proof'] = [
+    'partition_count' => 9,
+    'complete' => true,
+    'exact_union' => true,
+    'expected_test_ids' => array_slice($partitionedIds, 0, 9),
+    'observed_test_ids' => array_slice($partitionedIds, 0, 9),
+    'delegated_test_ids' => [$delegatedVisualId],
+    'canonical_test_ids' => $partitionedIds,
+    'total_duration_seconds' => 0.9,
+];
+foreach ($splitVisualReport['partition_processes'] as $index => &$processRecord) {
+    $processRecord['partition'] = $index + 1;
+}
+unset($processRecord);
+$splitVisualResult = audit_evaluate_winapp_report(
+    json_encode($splitVisualReport),
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.9],
+    false,
+    true,
+    true,
+);
+audit_test_assert(
+    $splitVisualResult['status'] === 'PASS'
+        && count($splitVisualResult['partition_processes']) === 9
+        && $splitVisualResult['partition_proof']['delegated_test_ids']
+            === [$delegatedVisualId],
+    'The split ordinary report must bind nine exact shards to its sole delegated visual identity.',
+);
+$misdelegatedVisual = $splitVisualReport;
+$misdelegatedVisual['partition_proof']['delegated_test_ids'] = [$partitionedIds[0]];
+$misdelegatedResult = audit_evaluate_winapp_report(
+    json_encode($misdelegatedVisual),
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.9],
+    false,
+    true,
+    true,
+);
+audit_test_assert(
+    $misdelegatedResult['status'] !== 'PASS',
+    'The split validator must refuse IDs delegated from any class except VisualParityTests.',
+);
+$visualChildReport = $winappReport;
+$visualChildReport['tests'] = [
+    array_replace($visualChildReport['tests'][0], ['id' => $delegatedVisualId]),
+];
+$visualChildReport['counts'] = array_fill_keys(
+    array_keys($visualChildReport['counts']), 0,
+);
+$visualChildReport['counts']['total'] = 1;
+$visualChildReport['counts']['passed'] = 1;
+$visualChildReport['runtime']['suite_settings']['partition_selection'] =
+    'selected-id-subset';
+$visualChildResult = audit_evaluate_winapp_report(
+    json_encode($visualChildReport),
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1],
+    false,
+    false,
+    false,
+    [$delegatedVisualId],
+);
+audit_test_assert(
+    $visualChildResult['status'] === 'PASS'
+        && array_column($visualChildResult['tests'], 'id') === [$delegatedVisualId],
+    'The delegated visual suite must pass only for the exact selected child ID list.',
 );
 $partitionCorruptions = [
     'null child success' => static function (array &$report): void {

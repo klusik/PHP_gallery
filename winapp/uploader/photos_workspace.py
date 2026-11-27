@@ -44,7 +44,14 @@ from .diagnostics import (
 )
 from .flight_report_translations import tr
 from .gallery_folders import GalleryFolderShelf
-from .gallery_preload import GalleryPreloadWorker, PreloadProgress
+from .gallery_information import (
+    PHOTOS_INFO_CACHE_ENTRY_LIMIT, PHOTOS_INFO_CACHE_FRESH_SECONDS,
+    photo_information_groups, thumbnail_quality_caption,
+)
+from .gallery_preload import (
+    GalleryCacheProbeRow, GalleryPreloadWorker, PreloadProgress,
+    probe_gallery_cache_status,
+)
 from .gallery_media_cache import (
     GalleryMediaCache,
     MEDIA_THUMBNAIL_CACHE_MAX_BYTES as THUMBNAIL_DISK_DEFAULT_BYTES,
@@ -66,6 +73,11 @@ from .native_gallery_viewer import (
     mount_native_gallery_view,
 )
 from .tk_scroll_input import vertical_scroll_delta
+from .ui_layout import (
+    PHOTOS_HEADING_STACK_WIDTH, PHOTOS_HEADING_TITLE_MINIMUM,
+    PHOTOS_INFO_PANE_WIDTH, PHOTOS_TREE_WIDTH,
+)
+from .ui_palette import PHOTOS_CARD_FORMAT_ICON_SIZE
 from .ui_theme import (
     Button,
     GlassCard, MetricCard, METRIC_ICON_SIZE, RaisedDialogSurface, ThemeImage,
@@ -91,12 +103,6 @@ FOLDER_DIVIDER_KEY_STEP = 20
 # Consumers: PhotosWorkspace._poll_events, PhotosWorkspace._begin_gallery_edit.
 # Rationale: 80 ms gives quick feedback without a busy UI polling loop.
 PHOTOS_CATALOG_POLL_MS = 80
-
-# Purpose: Start with a compact hierarchy and leave room for photos.
-# Type: int. Units: pixels. Scope: the left gallery-tree pane.
-# Consumers: PhotosWorkspace._build_widgets.
-# Rationale: 210 px keeps common names visible and the splitter adjustable.
-PHOTOS_TREE_WIDTH = 210
 
 # Purpose: Bound implicit attempts to find a gallery with visible photos.
 # Type: int. Units: gallery candidates. Scope: one session auto-selection.
@@ -170,30 +176,11 @@ PHOTOS_INFO_CARD_MAX_HEIGHT = 480
 # Rationale: 420 px fits two wrapped label/value lines at narrow widths.
 PHOTOS_INFO_CARD_MAX_WIDTH = 420
 
-# Purpose: Retain recent authorized media-info responses for quick revisit.
-# Type: int. Units: photo metadata rows. Scope: one live LinkingSession.
-# Consumers: PhotosWorkspace._photo_info and _inspect_photo.
-# Rationale: 32 entries cover nearby browsing without retaining a catalogue.
-PHOTOS_INFO_CACHE_ENTRY_LIMIT = 32
-
-# Purpose: Revalidate photo metadata after a short same-session reuse interval.
-# Type: float. Units: monotonic seconds. Scope: one metadata LRU entry.
-# Consumers: PhotosWorkspace._cached_photo_info.
-# Rationale: One minute matches media freshness without retaining changed
-# descriptions, access information or location indefinitely.
-PHOTOS_INFO_CACHE_FRESH_SECONDS = 60.0
-
 # Purpose: Keep inspector labels readable after the pane is collapsed.
 # Type: int. Units: pixels. Scope: minimum width of the optional info pane.
 # Consumers: PhotosWorkspace._show_photo_inspector_pane.
 # Rationale: 128 px leaves space for a short label and one scrollbar.
 PHOTOS_INFO_PANE_MIN_WIDTH = 128
-
-# Purpose: Keep one safe metadata-inspector column compact and adjustable.
-# Type: int. Units: pixels. Scope: optional right Photos pane.
-# Consumers: PhotosWorkspace._build_widgets.
-# Rationale: 250 px fits common localized labels and remains collapsible.
-PHOTOS_INFO_PANE_WIDTH = 250
 
 # Purpose: Keep a thumbnail column usable when the inspector first opens.
 # Type: int. Units: pixels. Scope: initial grid/inspector width allocation.
@@ -213,26 +200,6 @@ PHOTOS_INFO_PANE_HEADER_INSET = 16
 # Consumers: PhotosWorkspace._resize_photo_inspector_viewport.
 # Rationale: 24 px leaves inner frame padding on both sides.
 PHOTOS_INFO_PANE_ROW_INSET = 24
-
-# Purpose: Move Photos heading controls below the title in a narrow pane.
-# Type: int. Units: pixels. Scope: the selected-gallery heading.
-# Consumers: PhotosWorkspace._on_heading_resize.
-# Rationale: 440 pixels gives the localized switch and title useful space.
-PHOTOS_HEADING_STACK_WIDTH = 440
-
-# Purpose: Reserve readable title space beside both desktop toolbar groups.
-# Type: int. Units: pixels. Scope: selected-gallery heading.
-# Consumers: PhotosWorkspace._on_heading_resize.
-# Rationale: 240 pixels avoids a three-line title beside one thin control row;
-# smaller panes give the title its own full-width line instead.
-PHOTOS_HEADING_TITLE_MINIMUM = 240
-
-# Purpose: Size compact photo-format silhouettes in the gallery heading.
-# Type: tuple[int, int]. Units: logical pixels. Scope: one format button.
-# Consumers: PhotosWorkspace._build_widgets.
-# Rationale: 28 by 18 keeps portrait silhouettes legible while the icon and
-# short ratio label still fit together in one compact toolbar control.
-PHOTOS_CARD_FORMAT_ICON_SIZE = (28, 18)
 
 # Purpose: Keep the recording dot compact beside a gallery name.
 # Type: int. Units: pixels. Scope: one tree or heading indicator.
@@ -392,7 +359,7 @@ _PhotoInfoResult: TypeAlias = tuple[
 ]
 # Each row contains state, complete-photo count, observed-photo count,
 # catalogue completeness and the locally persisted pin (None if unavailable).
-_CacheRow: TypeAlias = tuple[str | None, int, int, bool, bool | None]
+_CacheRow: TypeAlias = GalleryCacheProbeRow
 # Ordinary totals, retained totals, process RAM bytes and completed-scan flag.
 _StorageObservation: TypeAlias = tuple[
     tuple[int | None, int | None, int | None, bool, str | None],
@@ -5604,34 +5571,12 @@ class PhotosWorkspace(ttk.Frame):
             """
             rows: dict[int, _CacheRow] = {}
             for gallery_id, (photos, complete) in requests.items():
-                if cancel.is_set():
+                row = probe_gallery_cache_status(
+                    session, gallery_id, photos, complete, cancel,
+                )
+                if row is None:
                     return
-                try:
-                    pin_method = getattr(session, 'gallery_pinned', None)
-                    pinned = pin_method(gallery_id) is True if callable(pin_method) else False
-                    state: str | None = None
-                    cached = 0
-                    any_cached = False
-                    if photos is not None:
-                        for photo in photos:
-                            if cancel.is_set():
-                                return
-                            thumb = session.has_cached_photo(
-                                gallery_id, photo, thumbnail=True,
-                            )
-                            detail = session.has_cached_photo(gallery_id, photo)
-                            cached += int(bool(thumb and detail))
-                            any_cached |= bool(thumb or detail)
-                        state = (
-                            'local' if complete and photos and cached == len(photos)
-                            else 'partial' if any_cached
-                            else 'cloud' if complete else 'unknown'
-                        )
-                    rows[gallery_id] = (
-                        state, cached, len(photos or ()), complete, pinned,
-                    )
-                except Exception:
-                    rows[gallery_id] = ('unknown', 0, 0, False, None)
+                rows[gallery_id] = row
             self._cache_results.put((generation, rows))
 
         self._cache_worker = threading.Thread(
@@ -6923,7 +6868,7 @@ class PhotosWorkspace(ttk.Frame):
             ]),
             ("photos_workspace_group_thumbnail", [
                 ("photos_workspace_field_thumbnail_settings",
-                 self._thumbnail_settings(fields)),
+                 thumbnail_quality_caption(fields)),
             ]),
         ]
         suffix = (self._text("cache_status") + ": "
@@ -7006,71 +6951,9 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             list[_InfoGroup]: Ordered localized group keys and typed field rows.
         """
-        file_rows: list[_InfoRow] = []
-        description_rows: list[_InfoRow] = []
-        date_rows: list[_InfoRow] = []
-        camera_rows: list[_InfoRow] = []
-        location_rows: list[_InfoRow] = []
-        access_rows: list[_InfoRow] = []
-        mapping: tuple[tuple[list[_InfoRow], str], ...] = (
-            (file_rows, "title"), (file_rows, "filename"),
-            (file_rows, "mime_type"), (file_rows, "size"),
-            (file_rows, "width"), (file_rows, "height"),
-            (file_rows, "display_width"), (file_rows, "display_height"),
-            (file_rows, "exif_orientation"),
-            (date_rows, "created_at"), (date_rows, "modified_at"),
-            (date_rows, "exif_taken_at"),
-            (camera_rows, "exif_camera_make"),
-            (camera_rows, "exif_camera_model"),
-            (camera_rows, "exif_lens_model"),
-            (camera_rows, "exif_focal_length"),
-            (camera_rows, "exif_aperture"),
-            (camera_rows, "exif_exposure_time"), (camera_rows, "exif_iso"),
-            (description_rows, "description"),
-            (location_rows, "gps_lat"), (location_rows, "gps_lng"),
-            (location_rows, "gps_altitude"),
-            (access_rows, "visibility"), (access_rows, "nsfw"),
+        return photo_information_groups(
+            fields, include_location=session.can_read_admin_media(),
         )
-        for rows, key in mapping:
-            value = fields.get(key)
-            if value is not None:
-                rows.append(("photos_workspace_field_" + key, value))
-        derivative = self._thumbnail_settings(fields)
-        if derivative is not None:
-            file_rows.append((
-                "photos_workspace_field_thumbnail_settings", derivative,
-            ))
-        groups = [
-            ("photos_workspace_group_file", file_rows),
-            ("photos_workspace_group_description", description_rows),
-            ("photos_workspace_group_dates", date_rows),
-            ("photos_workspace_group_camera", camera_rows),
-        ]
-        if session.can_read_admin_media():
-            groups.append(("photos_workspace_group_location", location_rows))
-        groups.append(("photos_workspace_group_access", access_rows))
-        return groups
-
-    def _thumbnail_settings(
-        self, fields: LinkedMediaDetails,
-    ) -> str | None:
-        """Describe configured quality for future generated thumbnails.
-
-        Args:
-            fields (LinkedMediaDetails): Detail response with optional qualities.
-
-        Returns:
-            str | None: Explicit JPEG/WebP settings, or None when absent.
-        """
-        jpeg, webp = fields.get("jpeg_quality"), fields.get("webp_quality")
-        if jpeg is None and webp is None:
-            return None
-        qualities = []
-        if jpeg is not None:
-            qualities.append("JPEG " + str(jpeg))
-        if webp is not None:
-            qualities.append("WebP " + str(webp))
-        return " · ".join(qualities)
 
     def _render_info_card(
         self, card: GlassCard, title: str, groups: list[_InfoGroup], *,

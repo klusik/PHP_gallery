@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.7.1}
-\newcommand{\manualdate}{25 November 2026}
+\newcommand{\version}{1.8.0}
+\newcommand{\manualdate}{27 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -409,8 +409,10 @@ and~FTP deployment scripts have been removed. See
 
 The~optional \codeword{companion_resource_files} field holds the~companion font
 and~license. WinApp gettext catalogs use \codeword{companion_locale_files}.
+The~dependency files, Qt Quick scene, notices and common onedir build inputs
+use \codeword{companion_backend_files}.
 Installed readers process the~fields they recognize. The~current package
-policy validates exact paths for~both lists. CMS replacement ownership comes
+policy validates the~exact paths in each list. CMS replacement ownership comes
 from the~updater inventory. Direct updates use a~complete
 newer package and~all pending migrations, without requiring each intermediate
 release. This does~not~qualify arbitrary historical hosting or~database states.
@@ -1772,6 +1774,67 @@ Choose \ui{Later} to~use it~the~next time WinApp opens.
 \ui{Restart WinApp} remains available in~\ui{Settings} while the~choice is~pending.
 The~website language and~flight report PDF editions have separate settings.
 
+Under \ui{Settings} and~\ui{Interface}, \ui{GUI backend} selects the~next
+desktop frontend. WinApp 2.0.0 uses \ui{Qt / PySide6} by~default.
+The~complete source requirements install the~Qt packages together with the~core.
+The~standard Windows setup includes both Qt and~\ui{Legacy Tk}.
+The~ordinary updater migrates an existing installation and~keeps saved choices.
+Flights explicitly closed by~older versions remain available as~local history.
+Their retained photo queues stay inactive across a~backend switch.
+Both frontends use the~left icon rail and~the~compact connection header.
+Flight controls and~saved flights are in~\ui{Watcher}.
+Capture progress and~saved reports open separately. The~\ui{AI} panel
+holds worker settings and~optional dependency actions in~both frontends.
+In~Qt Photos, the~gallery menu provides authorized details, preload and~local
+retention. The~photo menu provides details and, with Admin approval, a~visibility
+action and~confirmed deletion of~the~selected photo or~batch.
+The~deletion confirmation opens beside the~photo that opened the~menu.
+In~Qt, a~rotating arrow marks each thumbnail being loaded. Waiting thumbnails
+show a~static symbol. The~Watcher progress card groups the~available actions
+in~a~separate surface with a~visible shadow.
+For SDR photos, the~Lightbox can switch between detected content bounds
+and~the~original frame. The~native HDR view keeps the~entire frame.
+If~you approve renewable upload access in~your browser, WinApp stores its
+credential in~Windows Credential Manager and~can verify the~same gallery
+again after a~restart.
+The~gallery menu can start Watcher with a~temporary key for~that gallery.
+Open the~linked gallery picker from \ui{Tools} or with \codeword{Ctrl+Shift+G}.
+A~safe restart closes that key and~revalidates temporary access before
+continuing the~same capture.
+The~Import review shows accepted bytes, skipped formats, rejected ZIP entries
+and~local decoder availability. Expand \ui{Import options and item details}
+to inspect individual files and~choose where thumbnails are generated.
+A~verified interrupted import can open in~Qt for~review while unconfirmed
+uploads stay held. From a~stopped flight, you can render a~new local PDF
+edition after an~interrupted render.
+With an~active Watcher, \ui{Create and upload} can send a~new PDF revision
+for a~stopped flight to~the~currently watched gallery.
+An~approved gallery presentation supplies the~interval for a~manual Qt
+slideshow. On~Windows and~macOS, an~approved playlist can play MP3 and~WAV.
+In~Qt Settings, \ui{Photo storage} shows ordinary and~retained cache use
+and~sets the~shared thumbnail quota.
+The~API-key connection can be tested through \ui{Save \& Test}.
+Revoking a~saved key requires confirmation and~completion of~its verified
+Watcher queue. The~local key is~cleared after server acknowledgement.
+The~installed Qt~updater verifies its~matching setup and~waits for~current
+work to~stop or safely checkpoints an~eligible active capture.
+It~supports gallery and~history viewing and~local PDF creation for~saved flights.
+Both frontends share the~saved gallery tree and~selection.
+With a~verified saved API key on~Windows,
+it~can run manual imports, Watcher capture, SimConnect recording,
+and~the~configured AI worker. Finish drains the~original queue and~delivers
+configured reports. A~matching retained Watcher queue opens for~explicit review.
+You can close a~retained capture locally or~attach a~SimBrief plan to a~flight.
+Restart WinApp can resume the~same active capture after verification.
+Watcher factory reset restores its~defaults. Selected saved PDFs can be
+uploaded to~the~running Watcher's gallery.
+On~Windows you can also link for~uploads and~select a~gallery in~Photos.
+Authorized gallery tools create galleries and~edit their metadata.
+On~restart a~verified
+unfinished import opens for~review and~explicit retry. WinApp opens Tkinter
+if~Qt startup fails or~pending work requires Tkinter. Use \codeword{--gui-backend tkinter} for~one launch
+or~cancel the~pending selection in~\ui{Settings}.
+
 \subsection{Durable capture queue and~recovery}
 
 Connect once, start capture and~press \ui{Finish} once at~the~end.
@@ -1986,6 +2049,7 @@ durability have not~yet been qualified.
 Click \ui{Connect website} in~the~main window. Confirm the~suggested address
 from the~saved API connection or~enter the~PHP Gallery website address,
 including the~installation folder when present. Choose a~gallery after connecting.
+For~a~site with a~live connection, choose \ui{Switch to website}.
 You can also enter a~host and~installation path without a~scheme.
 On~confirmation, WinApp adds \texttt{https://} and~shows the~normalized
 address before checking the~gallery.
@@ -2036,6 +2100,12 @@ ends the~current link.
 After restart, reconnect to~the~same account and~select the~gallery again.
 Use \ui{Manage link…} in~Settings for~advanced access. API-key uploads use
 their own \ui{Gallery URL} and~gallery-scoped key.
+The~management view offers only permissions supported by~the~gallery server
+and~current platform. An~active grant is shown read-only until disconnected.
+Remembering it securely requires separate browser consent and~a~supported
+native vault. Granting upload permission does not select an~upload destination;
+choose and~verify that destination separately. Server-side grants can~be~reviewed
+or~revoked from \ui{Manage gallery links}.
 
 Separately select \ui{Read gallery details} and~approve the~read permission
 to~use \ui{Read selected details} for~a~selected gallery. It~shows its~ID,
@@ -2064,6 +2134,8 @@ reparse and~power-loss behavior remain unqualified.
 Original ZIPs and~extracted staging directories remain retained regardless
 of~age or~upload confirmation for~manual review; automatic age-based staging
 cleanup is~disabled because visible job IDs do~not prove complete history.
+Both desktop backends offer linked upload recovery in~\ui{Choose gallery}
+after reconnecting the~original upload destination.
 For~exactly one uncertain linked upload, \ui{Check uncertain upload} asks
 for~the~file size in~bytes, up~to~64~MiB, and~checks its~stored hash once
 without opening the~local file. A~match reports
@@ -2108,11 +2180,17 @@ the~rejected reply never grants access to~stale image bytes.
 The~responsive grid scrolls continuously and~requests only visible thumbnails;
 it~does not request detail photos while browsing. Explicit \ui{Preload gallery}
 downloads both thumbnails and~lightbox renditions. Click a~photo to~select it
-and~show its~metadata in~the~adjustable right pane. Close it~with the~top-right
+and~show its~metadata in~the~adjustable right pane. Hover over a~gallery icon
+in~the~Qt tree to~see its~cache state, pin and~Watcher status.
+In~Qt, a~long title may be
+shortened in~the~heading. Hover over it~or~read the~metadata for the~full title.
+Close the~pane with the~top-right
 cross to~return space to~the~gallery without changing the~selection or~reloading
 the~album. Click the~same photo again to~reopen its~information. A~late metadata
 reply cannot reopen a~dismissed pane. Double-click or~press Enter
 to~open the~lightbox. Arrows navigate the~grid; Space toggles a~photo.
+Opening a~photo selects it if it was outside the~selection. Browsing inside
+the~lightbox preserves the~grid selection.
 Control-click (Command-click on~macOS) toggles individual selections;
 Shift-click or~Shift-arrow selects an~anchored range within the~64-photo limit.
 Control-arrow (Command-arrow on~macOS) moves focus without clearing selection.
@@ -2124,9 +2202,10 @@ stable natural-preview row reservation.
 Filename hints use a~compact
 contrasting tooltip. The~pane and~context information share authorized metadata
 and~formatting, with a~short bounded session cache. Left/Right loops through
-the~whole album. Close the
-lightbox or~press Escape to~restore the~tree and~grid, including after an~image
-error. By~default, thumbnails trim detected black bands and~fit the~whole
+the~whole album. Escape first closes an~open location panel or~image menu,
+then leaves fullscreen while keeping the~photo open. In~the windowed
+lightbox, Escape restores the~tree and~grid, including after an~image error.
+By~default, thumbnails trim detected black bands and~fit the~whole
 remaining scene. Seven visible shape buttons in~the~album toolbar apply
 Default, 16:9, 21:9, 4:3, 1:1, 4:5 or~9:16 immediately, without a~Save step.
 Each rectangle illustrates its~ratio; a~quiet accent marks the~active choice.
@@ -2559,6 +2638,10 @@ seven days after the~last successful authenticated use or~refresh. WinApp
 renews the~15-minute access token using macOS Keychain or~Windows Credential
 Manager. Verified HTTPS and~direct \texttt{http://localhost} are~supported. Older
 servers use a~temporary link lasting up~to 15~minutes.
+WinApp accesses macOS Keychain without requesting its password. If~it cannot
+read the~saved credential before renewal, \ui{Connect website} can obtain a
+temporary approval in~the~browser and~keeps the~saved link.
+If connecting fails, the~Photos dialog identifies the~failed step.
 The~owner can revoke grants in~Connected
 applications. Unexchanged codes expire within 120~seconds. See
 \filepath{docs/APP_LINKING_PHASE_0.md}.
@@ -2744,6 +2827,20 @@ diagnostics with \texttt{Ctrl+Shift+D}, and~About. The~navigation tabs remain
 available. A~panel owning input suppresses menu commands and~these shortcuts
 until it closes.
 
+In~\ui{Settings > Interface > GUI backend}, \ui{Qt / PySide6} is~the~default
+for a~profile without a~saved choice. \ui{Legacy Tk} is~also available.
+The~standard Windows setup includes Qt. Source launches use the~Qt dependencies
+from the~complete requirements.
+Apply the~choice with \ui{Restart WinApp}. Active work must settle or~have
+a~verified continuation before restart. Both frontends use the~same profile.
+If~Qt startup fails, Legacy Tk opens. You can select Legacy Tk to~keep it
+for~subsequent launches. On~macOS the~Qt Lightbox uses EDR when the~image and
+current display support it and~shows the~SDR rendition otherwise.
+
+The~Qt photo inspector slides open briefly and~shows a~larger preview above
+the~details. Compact groups share a~value column. Select the~arrow on~a~long
+name to~show and~copy the~full value.
+
 Settings, help, connection prompts and~notices appear inside the~main window.
 Informational notices use a~dismissible, scrollable, nonblocking strip. It~queues
 up~to 32~notices and~shows how many oldest notices were omitted; it~does not
@@ -2774,7 +2871,9 @@ fixed footer with \ui{Continue} and~\ui{Interrupt} when applicable.
 
 \ui{Support diagnostics…} opens a~local preview with \ui{Refresh}, \ui{Copy}
 and~\ui{Save}. The~report includes allowlisted settings/runtime facts, the~current
-diagnostic snapshot and~up~to the~last 64~KiB of~the~existing app log. Missing
+diagnostic snapshot and~up~to the~last 64~KiB of~the~existing app log.
+Qt~runtime messages use the~same rotating log. Preload outcomes group refused
+photos by the~first failed cache rule. Missing
 or~unreadable log sections, a~truncated tail and~a~dropped partial first line
 are identified. It~does not
 access the~network. Filtering removes credential-like values, URL query and
@@ -2918,6 +3017,9 @@ There is~no~automatic rollback. Python/source runs offer the~verified installer
 for~manual launch. A~required Windows reboot remains explicit; cancelling UAC
 reopens the~existing installation. Older clients blocked waiting for~workers
 need a~manual installer launch after fully closing the~old application.
+If~Windows refuses to~start setup, the~helper restarts the~existing application
+only when the~complete installed runtime fingerprint is~unchanged. An~installer
+that started but cannot be~observed remains fenced; this is~not rollback.
 
 
 \subsection{Flight recording and reports}
@@ -2971,6 +3073,8 @@ values become dashes. The~adjacent \ui{PDF} shortcut opens saved flights.
 \ui{Saved flights and PDFs} lists start time, aircraft or recorded gallery,
 sample count, local PDFs, state and retained errors. \ui{Show only flights}
 starts off. Turning it~on keeps sessions with recorded samples or PDFs.
+Qt shows the~current history range and provides newer and older page controls.
+Saved PDF editions show their creation time and page count when available.
 Double-click or press Enter on a~PDF to~open it. \ui{Folder} opens the~files.
 Refresh and the~app log are~under the~ellipsis. \ui{Finish flight and create PDFs} creates
 all four editions and~finishes accepted work and~required delivery. It~keeps
@@ -3030,6 +3134,9 @@ or~running game and~opens the~connection editor directly. A~Photos browsing
 link does not~hide it. Explicit linked upload mode offers gallery reconnection.
 Active capture, pending work and~finalization retain Finish, Review or~Progress
 before setup; an~active manual import retains its~own controls.
+Qt~offers the~same idle Begin or~Reconnect action in~Watcher and~Import. Its
+Begin dialog starts from saved connection values and saves only the~URL and
+API key; Cancel and unrelated unsaved Settings values remain untouched.
 SimBrief's Load/Unload control, settings icon and~status appear only
 for~a~detected
 flight; hiding retains the~loaded plan. Outside a~flight context, Watcher,
@@ -7048,7 +7155,10 @@ physical gallery below a~chosen parent. Photo-only selections can~also
 be~dragged onto a~visible child gallery, moved or~copied through the~searchable
 destination picker, shared through the~native device share sheet where
 supported, or~downloaded. Native sharing falls back to~the~selected-photo ZIP
-when the~browser cannot share the~prepared files. Smart Galleries are~excluded
+when the~browser cannot share the~prepared files. An~administrator can~move
+a~gallery-only selection to~another parent with~\ui{Move}. The~original IDs,
+stored visibility settings and~all descendants travel with~the~galleries.
+Inherited access follows the~new parent. Smart Galleries are~excluded
 from~physical subtree operations. The~selection itself is~only browser state
 and~does not~grant permission. Every mutation/ZIP request rechecks the~normal
 logged-in account, CSRF token, source gallery, selected ownership,
@@ -7062,11 +7172,12 @@ physical-gallery creation, and~selection-export workflows.
 The~compact top toolbar shows the~selection count when visible. Open
 it~to~select
 all items, clear the~selection, share or~delete, and~choose a~destination
-for~moving or~copying photos. Expand \ui{New gallery from selection} only
+for~moving a~photo or~gallery selection or~copying photos. Expand \ui{New gallery from selection} only
 when creating a~gallery; its~parent defaults to~the~current gallery.
 The~plain \ui{?} control opens selection, drag, copy and~move guidance;
-click outside or~press Escape to~dismiss it. Picker instructions and~the~gallery
-directory link appear while the~picker has~focus. Progress, success and~errors
+click outside or~press Escape to~dismiss it. Search results expand below
+the~destination input, with~the~gallery directory link available beside
+empty or~unavailable results. Progress, success and~errors
 remain visible; the~idle ready message is~omitted.
 
 With no~selection, the~manager is~hidden above the~page. Move the~pointer
@@ -10278,14 +10389,23 @@ The~WinApp partition coordinator discovers the~complete test inventory once.
 Each child loads only its~assigned local modules and~must report every selected
 identity. Module/class fixtures, the~complete disjoint identity proof and~the
 existing child/coordinator deadlines remain required.
-Eight serial groups retain five exclusive measured groups and~three
-deterministic, class-preserving remainder shards. Each process receives
+Nine serial groups retain six exclusive groups: the~viewer, four measured
+classes and~the paired native visual suite. Three deterministic,
+class-preserving shards contain the~remainder. Each process receives
 explicit source/test import roots.
 
-The~hosted portable WinApp job installs the~existing Pillow requirement into
-the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage
-runs instead of skipping. Local runs without Pillow may~still skip this
-optional visual fixture; the~headless hosted job does~not~install pystray.
+When native visuals are selected, macOS first retains the~ordinary audit from
+the~exact source SHA, then runs the~delegated visual suite on~a~separate fresh
+runner. The~central audit verifies the~clean source, Python runtime and~complete
+delegated identity set before using that artifact. No~ordinary socket-bearing
+tests run on~the~visual host before capture, and~the~job never changes macOS
+privacy permissions or~dismisses system prompts. Without visual selection, the
+existing advisory macOS ordinary run remains unchanged.
+
+The~hosted portable WinApp job installs the~constrained
+\filepath{winapp/requirements-core.txt} in~the~audit interpreter. Pillow is
+required for~the~tray-badge pixel fixture in~that job. Dedicated Qt jobs use
+the~complete source requirements.
 
 The~title-picture regression extends the~already registered Admin side-panel
 delegation and~browser lifecycle suites, plus the~existing gallery edit

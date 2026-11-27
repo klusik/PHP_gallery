@@ -286,37 +286,13 @@ jobs:
         id: python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: '3.14.10'
 
-      # Read the four owned requirement entries instead of copying version
-      # constraints into YAML. Refuse missing/ambiguous dependency selection.
-      - name: Install declared image, PDF and localization test dependencies
+      # Use the constrained core profile without adding Qt to this portable owner.
+      - name: Install declared WinApp core test dependencies
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import sys
-
-          runtime_requirements = [
-              line.strip()
-              for line in Path("winapp/requirements.txt")
-              .read_text(encoding="utf-8")
-              .splitlines()
-              if line.strip().lower().startswith(
-                  ("pillow", "reportlab", "pypdf", "polib")
-              )
-          ]
-          # Four declared packages own image, PDF and gettext fixture support.
-          if len(runtime_requirements) != 4:
-              raise SystemExit(
-                  "Expected Pillow, ReportLab, pypdf and polib requirements in "
-                  "winapp/requirements.txt."
-              )
-          subprocess.run(
-              [sys.executable, "-m", "pip", "install", *runtime_requirements],
-              check=True,
-          )
-          PY
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
+          python -m pip check
 
       # Delegate every registered portable fixture to the central profile and
       # provide the exact setup-python executable for its child processes.

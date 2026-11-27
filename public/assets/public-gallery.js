@@ -33,7 +33,7 @@
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261102-repeat-modes-v1';
 
 const optionalPublicModules = {
-    quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261021-quick-tag-active-source-v5',
+    quickPhotoTags: './gallery-modules/quick-photo-tags.js?v=20261127-quick-tag-viewport-guard-v6',
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
     backToTop: './gallery-modules/back-to-top.js?v=20261023-compact-scroll-v2',
     publicHomeSearch: './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2',

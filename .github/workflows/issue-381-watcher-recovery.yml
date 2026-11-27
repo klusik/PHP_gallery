@@ -188,18 +188,7 @@ jobs:
           php-version: '8.5'
           coverage: none
       - name: Install declared image and report dependencies
-        shell: pwsh
-        run: |
-          $requirements = @(
-            Get-Content winapp/requirements.txt |
-              Where-Object { $_ -match '^(Pillow|reportlab|pypdf|polib)' }
-          )
-          # Three source-owned entries cover image and report fixture imports.
-          if ($requirements.Count -ne 4) {
-            throw 'Missing declared image, report or locale fixture requirements.'
-          }
-          python -m pip install @requirements
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
       - name: Run complete central WinApp discovery in existing partitions
         shell: pwsh
         env:

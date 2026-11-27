@@ -110,6 +110,23 @@ See the [baseline](docs/performance/issue_404_baseline.md),
 limits. Active Smart Admin Test runs retain selected nested profiler spans;
 their counters do not replace central SQL observations or establish worker exit.
 
+## WinApp desktop composition
+
+WinApp reads the per-profile GUI choice before opening a desktop event loop.
+WinApp 2.0.0 defaults to Qt for profiles without a saved choice. The common
+PyInstaller onedir package includes both Qt and Legacy Tk, with one registered
+executable, interpreter, updater and profile.
+The startup supervisor starts the same executable with a backend-specific
+handshake and waits for a failed Qt startup to exit before starting Legacy Tk.
+
+Tk and Qt present the same profile, Watcher queue, Flight recorder, upload mode,
+credential vault, gallery transport and update owners. Approved active capture
+restart uses those owners' durable continuation records. Qt Widgets presents
+the shell, forms and operator tables. Its embedded Qt Quick scene virtualizes
+the photo grid and keeps its Lightbox image across layout and viewport changes.
+GPU scene-graph support depends on the host graphics device and driver.
+[WinApp backend ownership and qualification](docs/WINAPP_GUI_BACKENDS.md).
+
 ## Native gallery presentation and single-field editing
 
 WinApp keeps per-gallery order and aspect choices in its existing verified
@@ -340,6 +357,24 @@ after the durable decision and preserves unknown outcomes. Ordinary Finish
 waits for its captured plans and required final scans, rather than every live
 Watcher thread. Refresh cannot create a new empty Finish or resume a terminal
 session. See the queue contract for retained-file and late-receipt semantics.
+
+The desktop launcher selects the toolkit before creating a GUI root. Tk is
+the stable default. The optional supervised frontend uses Qt Widgets for
+forms and models and retains bounded Photos and Lightbox frames in Qt Quick.
+The Windows distribution installs one PyInstaller onedir executable, one
+Python runtime and an app-local dependency tree. The supervisor launches
+that same executable with a private nonce. Its packaged Qt runtime hook
+sets process-local paths only for the Qt child. Each process initializes
+one GUI event loop.
+The macOS Lightbox can present bounded Core Image output through a native
+EDR layer without changing ownership of the approved image or its metadata.
+Both frontends use the same layout, locale, gallery transport, native saved
+credentials and mode-admitted upload and AI workers. They use the independent
+report finalization worker. A restart settles AI and defers to any active
+Import or Flight PDF writer. Capture and installed update continuation require
+the original verified profile, target, queue and matching checkpoint. A verified
+unfinished Import is available for explicit review on the same saved binding.
+[WinApp backend ownership and parity](docs/WINAPP_GUI_BACKENDS.md).
 
 The normal WinApp launch selects Photos in the main window. Its workspace
 mounts optional last-complete metadata through `gallery_catalogue_cache.py`
@@ -886,7 +921,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.7.1';
+const CMS_VERSION = '1.8.0';
 ```
 
 Update-related code uses:
@@ -3647,10 +3682,12 @@ policy, read by `app/release_file_policy.php`. Canonical PHP packaging,
 integrity ownership and updater activation derive from that owner. Schema-1
 packaging combines the base production list with reviewed WinApp companion
 membership. The optional `companion_resource_files` holds the font and license,
-and `companion_locale_files` holds the Czech, German and Swedish gettext
-catalogs. Both are additive so installed readers validate the field shapes
-they recognize before their own validator is replaced. Current readers enforce
-the exact allowlists and preserve previously published companion-list shapes.
+`companion_locale_files` holds the Czech, German and Swedish gettext catalogs,
+and `companion_backend_files` holds the split WinApp dependencies, Qt scene,
+notices and shared onedir build inputs. These fields let installed readers
+validate their published field shapes before their own validator is replaced.
+Current readers enforce the exact allowlists and preserve previously published
+companion-list shapes.
 The updater list is a validated base subset retaining
 installation-owned custom CSS and distribution-only artifacts; a GitHub source
 archive may contain development or companion files without activating them.
@@ -5386,9 +5423,14 @@ remain unknown; `winapp/README.md` describes the live matrix.
 
 Installer workflows select x64 CPython 3.14.x explicitly. The builder/frozen EXE
 share `uploader/runtime_check.py`; a fresh pre-GUI report must confirm the
-actual
-embedded patch/implementation/pointer width before Inno Setup. Build mocks prove
-refusal/ordering. An actual hosted installer build is separate qualification.
+actual bundled Python patch, implementation and pointer width before Inno
+Setup. Build mocks prove refusal and ordering. The hosted installer build
+qualifies the real onedir layout.
+The source, builder and performance jobs resolve shared application versions
+from `winapp/constraints.txt`. Installation paths are the complete source,
+core-only, or build manifest, with the benchmark observer added separately.
+Hosted source and performance reports retain observed package versions and
+check the Windows build and its measured workload use matching dependencies.
 
 Upload automation is implemented by:
 
@@ -5431,10 +5473,10 @@ before DLL paths to preserve it through redaction, and activity display removes
 duplicate SimConnect markers. Provider failures never block upload.
 Actual source and last-acquisition diagnostics remain local; historical
 `sim_camera_*` multipart fields preserve compatibility with existing galleries.
-PyInstaller embeds one x64 DLL at `runtime/simconnect/SimConnect.dll`; build
-preflight validates native exports and the embedded payload hash. Inno Setup
-distributes the application EXE without a separate DLL. See `winapp/README.md`
-for runtime discovery and the build mode using already installed dependencies.
+PyInstaller bundles one x64 DLL at `_internal/runtime/simconnect/SimConnect.dll`.
+Build preflight validates the exports and bundled payload hash. Inno Setup
+distributes the common application EXE and its runtime together. See
+`winapp/README.md` for runtime discovery and the installed-dependency build mode.
 
 The installed WinApp updater is independent of the CMS version.
 `uploader/self_update.py` scans bounded paginated public GitHub releases for

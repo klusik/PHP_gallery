@@ -259,9 +259,15 @@ input fixtures and parser behavior intact. Named nested functions and async
 methods follow the same rule; ordinary bound receivers are excluded from
 explicit
 parameter entries, while static methods document their explicit parameters.
-Bash/PowerShell named functions use meaningful immediately preceding native
-comments; argument/result typing and execution semantics remain manual. Changed
-batch bodies and unsupported script syntax may report BLOCKED coverage. SQL,
+Named Bash/PowerShell functions and Windows batch `call :name` subroutines use
+meaningful immediately preceding native comments; argument/result typing and
+execution semantics remain manual. The batch scanner fingerprints standalone
+labels and the entrypoint for nonempty programs. Empty or comment-only files
+contribute no entrypoint. It resolves literal `goto name`, supported conditional
+`if defined`/`if errorlevel ... goto name`, and `call :name` targets,
+and requires documentation for callable labels. It fails closed on dynamic or
+otherwise unsupported call/goto syntax, duplicate labels and unresolved targets;
+ordinary labels reached with `goto` do not require callable documentation. SQL,
 YAML, CSS, SVG, TeX and Apache rules receive native header checks, not invented
 callable-docstring requirements.
 

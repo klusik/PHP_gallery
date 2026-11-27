@@ -89,6 +89,59 @@ smoothness; those acceptance results remain unknown until exercised on the
 target installation. Both renderer paths remain supported under their existing
 retirement requirements.
 
+## WinApp desktop backend preference and startup recovery
+
+The core source requirements support headless Linux CLI processes. The WinApp
+launcher omits the optional tray binding when the shell has neither an X display
+nor an explicit pystray backend, since the library's Xorg import opens a display.
+This is a supported deployment mode for the WinApp launcher. Native tray
+integration remains available on desktop launches with a suitable tray backend.
+
+WinApp 2.0.0 defaults to Qt when the independent `ui-backend.json` preference
+is absent. Its two existing identifiers still preserve saved choices.
+Malformed or unreadable preferences select Legacy Tk. Backend selection is
+independent of credentials, queues and upload configuration. The one-launch
+CLI option leaves the saved selection alone. The desktop launcher owns the
+bounded, nonce-bound Qt startup. It verifies the shared configuration before
+handoff and requires child exit before a fresh fallback. Unreadable or damaged
+configuration is reported before launching a GUI backend. Qt absence,
+incompatible drivers and failed startup retain Legacy Tk and CLI operation.
+Both backends can resume an admitted Watcher from
+the exact installed update ticket. Legacy Tk is the compatibility owner for earlier
+continuations and pending work whose Qt recovery owner cannot be verified.
+Exact Watcher review keeps the saved target, queue identity and operator
+confirmation. Removal requires verified operator parity and an explicit
+compatibility decision.
+[WinApp composition and evidence](WINAPP_GUI_BACKENDS.md).
+
+WinApp 1.8.0 uses a common onedir runtime and the ordinary installer asset
+name understood by the published 1.7.1 onefile updater. Setup retains its
+registered installation identity and the original profile. An onedir
+helper verifies an independent bounded copy of the installed dependencies
+outside the target directory. The installer replaces recognized app-local
+runtime directories only after the installed owner has released them.
+An updater may restart the previous version after a definitive setup failure
+only if the complete runtime still matches. A partial or unverified
+installation remains stopped for repair.
+
+The Qt decoded thumbnail cache is scoped to its authorized catalogue.
+The normal gallery transport remains the disk-cache owner. A remote decoded
+frame can return to the viewport only with independent RAM reuse permission
+and current publication proof. Legacy transient reads keep their original
+no-reuse policy. Refresh, disconnect and grant expiry retire the old
+scene and CPU cache. The CPU budget is shared with Tk and visible texture
+admission stays viewport-bounded.
+
+Native offline reconnect keeps the original legacy global or issuer-scoped
+rolling hint and the same vault owner. An earlier credential may be rotated
+only for its verified installation, account and scope. Explicit reapproval
+also requires the saved upload gallery. Where a modern hint owns the same
+vault slot, the historical hint cannot replace or purge it. Exceptional
+checkpoint fallback and the Tk startup path in the common installer remain
+supported. Current macOS EDR source and lifecycle fixtures qualify bounded decode, screen
+capability decisions and SDR fallback. Physical HDR presentation remains a
+distinct acceptance condition. [WinApp qualification](WINAPP_GUI_BACKENDS.md).
+
 ## Experimental Canvas gallery renderer and native fallback
 
 Owners: WinApp native gallery viewer, the bounded Canvas grid presentation helper,
@@ -370,12 +423,18 @@ recent addresses in `recent-gallery-links.json`, up to 20. Profiles without
 the file can use the existing saved destination hint. On macOS, startup may
 restore a transient listing grant from the user's Keychain within its original
 expiry, after server identity verification. The application uses the login
-Keychain for source launches. If the vault is unavailable, the live in-memory
-session remains usable. Compatible WinApp links can now request explicit
+Keychain for source launches. The native adapter suppresses password dialogs
+while operating on existing Keychain items. When the vault is inaccessible
+before a refresh fence can be written, explicit Connect can request a fresh
+temporary browser approval without replacing the saved credential or enabling
+renewal. This fallback serves locked or untrusted source and installed
+launches while retaining their existing profile and permission checks.
+After the refresh fence is attempted, uncertain outcomes still require
+saved-link recovery. Compatible WinApp links can request explicit
 rolling consent and rotate a saved credential from Keychain or Windows
 Credential Manager at startup. Older clients still support interactive
 browser approval.
-Installed multi-link use is unknown.
+Installed multi-link use and the frequency of inaccessible Keychains are unknown.
 [Apple Keychain implementations](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains).
 
 Existing linked upload target selection is enabled for a verified local Windows
@@ -1587,6 +1646,29 @@ upload. Those old records cannot establish automatic resume consent. Existing
 credentials and files are retained; Abandon is not the continuation path.
 Installed upgrade acceptance and rollback/power-loss behavior remain separate
 from hosted controller, recorder, queue and helper fixtures.
+
+When `ShellExecuteExW` definitively refuses to start setup for a non-UAC reason,
+the helper restarts the original installation only if its complete runtime
+fingerprint is unchanged. UAC cancellation uses the same guarded recovery. A
+setup process that started but cannot be observed remains fenced. The guarded
+restart applies only to the original, verified runtime files.
+The helper owns ordinary launch error feedback. Windows continues to own
+administrator prompts and the elevated setup process.
+
+A valid standalone linked upload marker remains bound to its original target
+across backend startup and restart. Both native gallery pickers expose the
+same explicit observation and review. An upload already awaiting confirmation
+retains its exact marker, and automatic continuation still requires the
+original verified transfer boundary.
+
+Older local-only Flight sessions can retain pending photo paths in a frozen
+schema 2 journal after explicit abandonment. These profiles exist in use.
+Qt admission recognizes the stopped recording, completed and abandoned plan,
+and matching journal identity. The shared recovery scheduler excludes the closed
+plan. Retain this compatibility while those flight archives remain readable.
+The admission fixture checks the original bytes and refuses an unfinished,
+foreign or unfrozen queue. The installed Settings fixture carries the archived
+flight and a separate uncertain linked upload through both backend switches.
 
 Updater diagnostic records preserve bounded transport causes and owned source
 sites before the worker-to-Tk boundary reduces failures to a concise status.
@@ -4355,6 +4437,23 @@ and absence of secrets; actual hosting PHP-log delivery remains unverified.
   additive list while upgrades from readers with the font/license allowlist
   are supported. Retirement requires a documented newer updater floor and a
   verified upgrade path for installations on that floor.
+
+### UPD-8 — WinApp backend files in the production inventory
+
+- **Reason / protected scenario:** The packaged WinApp source entry point and
+  build command depend on split requirements, the Qt Quick scene and onedir
+  build inputs. Older CMS validators check their companion fields before
+  activating an update.
+- **Owner:** `app/release_file_policy.php` and
+  `scripts/generate_production_files.php` admit the reviewed paths through
+  optional `companion_backend_files`. The CMS updater still activates the
+  existing updater subset, and WinApp Setup retains its own version and files.
+- **Evidence / tests:** `production_file_policy_test.php` exercises exact path
+  and field validation. `production_package_test.php` checks production folder
+  and ZIP bytes. `updater_inventory_compatibility_test.php` checks a new
+  inventory against the retained installed readers and their activation sets.
+- **Usage / retirement:** Installed reader adoption is unknown. Keep the
+  additive field while compatible upgrades from those readers are supported.
 
 ### UPD-3 — Windows checkout line endings in production inventory verification
 

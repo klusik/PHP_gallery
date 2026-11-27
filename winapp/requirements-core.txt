@@ -1,0 +1,25 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/requirements-core.txt
+# Module Type: Shared source runtime requirements
+# Purpose: Install GUI-independent WinApp application dependencies.
+# Responsibilities: Keep the Tk and CLI runtime independent of Qt packages.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+-c constraints.txt
+# Purpose: Preserve the qualified source-compatibility floors.
+# Type: package requirement. Units: semantic version. Scope: shared core runtime.
+# Consumers: Tk, CLI, image, PDF and localization features.
+# Rationale: constraints.txt supplies the exact versions used by qualification.
+Pillow>=10.0
+pystray>=0.19.5
+reportlab>=5.0.1,<6
+pypdf>=6.0
+polib>=1.2,<2
+# Purpose: Declare Cocoa framework APIs needed by macOS source mode.
+# Type: platform-marked package requirement. Units: semantic version.
+# Scope: macOS core runtime. Consumers: native profile and HDR integration.
+# Rationale: keep Apple bindings absent from non-macOS installations.
+pyobjc-framework-Cocoa>=11.0; sys_platform == "darwin"
+pyobjc-framework-Quartz>=11.0; sys_platform == "darwin"

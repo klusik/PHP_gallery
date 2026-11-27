@@ -1,5 +1,72 @@
 # Patch notes
 
+## Version 1.8.0
+
+PHP Gallery 1.8.0 includes WinApp 2.0.0 and adds subgallery moves to the web
+Picture manager.
+
+### Highlights
+
+#### WinApp interface
+
+- Added the **Qt / PySide6** interface with gallery management, Watcher,
+  linked and API-key imports, flight reports, Activity, and the shared updater.
+  [#445](https://github.com/klusik/PHP_gallery/issues/445)
+- Made Qt the default for profiles without a saved choice. Existing choices
+  are honored, and **Legacy Tk** is available in **Settings > Interface**.
+  [#446](https://github.com/klusik/PHP_gallery/issues/446)
+- Improved the photo details panel with a short transition, a larger preview,
+  aligned metadata, and expandable long names. Improved thumbnail loading and
+  cache feedback, and made gallery icons easier to read with localized tooltips.
+  [#445](https://github.com/klusik/PHP_gallery/issues/445) · [#446](https://github.com/klusik/PHP_gallery/issues/446)
+- Enabled title edits for unpublished subgalleries during a steady linked
+  Watcher session. [#446](https://github.com/klusik/PHP_gallery/issues/446)
+
+#### Web Picture manager
+
+- Added **Move** for physical subgalleries after the administrator confirms a
+  destination. Moves carry the selected galleries, their photos and descendants,
+  and refresh the current page in place.
+- Made the panel more compact and kept destination search results visible on
+  narrow screens. Moved longer instructions under the help button.
+  [#446](https://github.com/klusik/PHP_gallery/issues/446#issuecomment-7220471950)
+
+### Technical Details
+
+#### Installer, credentials and recovery
+
+- Switched the standard Windows setup to a single shared onedir runtime
+  with both backends, replaceable Qt libraries and corresponding-source
+  notices. The updater reuses the registered installation and shared profile.
+- Reused the uploader's original target binding, FIFO, recovery documents
+  and workers. Linked grants retain their existing issuer, account and scope
+  checks. Title edits use the same serialized service as uploads.
+- Added a virtualized Photos grid, retained textures, asynchronous loading,
+  and bounded caches. The Lightbox uses retained rendering and supports EDR
+  on eligible macOS displays with SDR fallback.
+
+#### Gallery moves and verification
+
+- Added subtree validation to `app/services/picture_manager.php`. Moves use the
+  shared gallery writer and preserve stable IDs and explicit visibility. The
+  service refuses invalid destinations and pending visibility recovery before
+  relocating the subtree. No database migration is required.
+- Extended hosted WinApp startup and Photos checks, the real MySQL and MariaDB
+  move fixtures, and Chromium tests for destination selection, panel layout and
+  in-place refresh.
+
+### User Impact
+
+#### WinApp users
+
+- Users can switch interfaces with a restart and keep their existing settings
+  and saved work. If Qt fails to start, WinApp can reopen with Legacy Tk.
+
+#### Administrators
+
+- Administrators can reorganize whole gallery branches from the gallery page.
+  Inherited access follows the new parent gallery.
+
 ## Version 1.7.1
 
 PHP Gallery 1.7.1 includes WinApp 1.7.1 with steadier workspace switching,

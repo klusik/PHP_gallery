@@ -1924,7 +1924,9 @@ button:disabled,
     border-color: color-mix(in srgb, var(--ink) 18%, transparent);
     border-radius: 0 0 min(var(--radius, 8px), 8px) min(var(--radius, 8px), 8px);
     background: color-mix(in srgb, var(--panel) 92%, transparent);
-    backdrop-filter: blur(16px);
+    /* The panel must blur the gallery behind it. An ancestor backdrop
+       filter would isolate the panel from the underlying gallery. */
+    backdrop-filter: none;
     box-shadow: 0 6px 24px #0002;
 }
 
@@ -1948,7 +1950,8 @@ button:disabled,
 
 .public-page [data-picture-manager]:not(
     .has-picture-manager-selection, :hover,
-    :has(:focus-visible), :has(:popover-open)
+    :has(:focus-visible), :has(:popover-open),
+    .is-picture-manager-expanded:has(.picture-manager-status:not([data-state="idle"]))
 ) {
     transform: translate(-50%, -100%);
     box-shadow: none;
@@ -1956,7 +1959,8 @@ button:disabled,
 
 .public-page [data-picture-manager]:not(
     .has-picture-manager-selection, :hover,
-    :has(:focus-visible), :has(:popover-open)
+    :has(:focus-visible), :has(:popover-open),
+    .is-picture-manager-expanded:has(.picture-manager-status:not([data-state="idle"]))
 )
     .picture-manager-panel {
     visibility: hidden;
@@ -2017,6 +2021,7 @@ button:disabled,
 
 .public-page .picture-manager-toolbar
     .picture-manager-help-toggle {
+    anchor-name: --picture-manager-help-anchor;
     flex: 0 0 auto;
     min-width: var(--picture-manager-target);
     min-height: var(--picture-manager-target);
@@ -2035,7 +2040,8 @@ button:disabled,
     max-height: calc(100dvh - 4rem);
     border-color: color-mix(in srgb, var(--ink) 18%, transparent);
     border-radius: min(var(--radius, 8px), 8px);
-    background: color-mix(in srgb, var(--panel) 97%, transparent);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(16px);
     box-shadow: 0 12px 32px #0003;
 }
 
@@ -2079,6 +2085,22 @@ button:disabled,
 .public-page .picture-manager-toolbar
     .picture-manager-inline-fields {
     gap: .4rem;
+}
+
+.public-page .picture-manager-toolbar .picture-manager-destination-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+}
+
+.picture-manager-destination-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.public-page .picture-manager-toolbar .picture-manager-icon-button[hidden] {
+    display: none;
 }
 
 .public-page .picture-manager-toolbar
@@ -2187,13 +2209,27 @@ button:disabled,
     background: color-mix(in srgb, var(--panel) 92%, transparent);
     color: var(--ink);
 }
-/* Reveal picker instructions and its directory link while working in that
-   picker, retaining keyboard access and the existing failure recovery path. */
-.public-page .picture-manager-toolbar
-    .gallery-search-picker:not(:focus-within) > .gallery-search-picker-help,
-.public-page .picture-manager-toolbar
-    .gallery-search-picker:not(:focus-within) > a {
+/* The help disclosure carries the instructions. The directory is visible
+   beside empty/error results, where it provides the existing recovery path. */
+.public-page .picture-manager-toolbar .gallery-search-picker-help,
+.public-page .picture-manager-toolbar .gallery-search-picker > a {
     display: none;
+}
+
+.public-page .picture-manager-toolbar .is-gallery-search-open:has(
+    [data-gallery-search-picker-status]:not([hidden])
+) > a {
+    display: inline-block;
+}
+
+/* Let results expand the scrollable panel instead of clipping an absolute
+   list to the closed panel height. The list scrolls independently when full.
+   Type: CSS length. Units: dvh/rem. Scope: Picture manager search results.
+   Consumers: shared picker menu. Rationale: 42dvh/18rem leaves room for
+   the selection actions and the remaining form on short screens. */
+.public-page .picture-manager-toolbar .gallery-search-picker-menu {
+    position: static;
+    max-block-size: min(42dvh, 18rem);
 }
 
 .public-page .picture-manager-toolbar
@@ -2215,6 +2251,8 @@ button:disabled,
 .public-page .picture-manager-toolbar
     .gallery-search-picker-option-path {
     font-size: .7rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .public-page .picture-manager-toolbar
@@ -2236,17 +2274,28 @@ button:disabled,
 }
 
 .public-page .picture-manager-help {
-    max-inline-size: min(36rem, calc(100vw - 2rem));
+    max-inline-size: min(24rem, calc(100vw - 2rem));
     max-block-size: calc(100dvh - 4rem);
     overflow: auto;
     padding: 1rem;
     border: 1px solid var(--line);
     border-radius: min(var(--radius, 8px), 8px);
-    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(16px);
     color: var(--ink);
     box-shadow: 0 12px 32px #0003;
     font-size: .85rem;
     line-height: 1.5;
+}
+
+@supports (position-area: bottom span-left) {
+    .public-page .picture-manager-help {
+        position-anchor: --picture-manager-help-anchor;
+        position-area: bottom span-left;
+        inset: auto;
+        justify-self: end;
+        margin: .25rem .5rem 0;
+    }
 }
 
 .picture-manager-help p {
@@ -2272,6 +2321,10 @@ button:disabled,
     .public-page .picture-manager-toolbar .picture-manager-count {
         white-space: normal;
         text-align: center;
+    }
+
+    .public-page .picture-manager-toolbar .picture-manager-destination-fields {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .public-page .picture-manager-toolbar .picture-manager-actions > button,

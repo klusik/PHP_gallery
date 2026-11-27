@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Validate public-view photo and physical-gallery selections before mutation
- *   - Reuse existing gallery image movement logic where possible
+ *   - Reuse the shared photo and physical gallery move services
  *   - Copy selected images and physical gallery trees without removing source files
  *   - Keep file and database changes reversible on failure
  *
@@ -983,6 +983,76 @@ function picture_manager_assert_destination_outside_gallery_selection(
                 'A selected gallery cannot be copied into itself or one of its descendants.',
             );
         }
+    }
+}
+
+/**
+ * Relocate selected direct physical subgalleries under the shared writer lease.
+ *
+ * Check the source membership and every destination before moving any bytes.
+ * Each subtree uses the canonical mover and its own filesystem/DB recovery.
+ * A late failure stops the batch and reports the already confirmed moves.
+ *
+ * @param int $sourceId Gallery showing the selected direct children.
+ * @param int $destinationId Existing destination parent gallery.
+ * @param list<int> $galleryIds Distinct selected physical root IDs in page order.
+ * @return array{moved_ids:list<int>,failure:?Throwable} Confirmed roots and
+ *     the first unconfirmed operation, if any.
+ * @throws RuntimeException When the selection or destination is invalid.
+ */
+function picture_manager_move_gallery_selection(
+    int $sourceId,
+    int $destinationId,
+    array $galleryIds,
+): array {
+    $writer = gallery_edit_writer_begin();
+    try {
+        gallery_linked_reservation_assert_admin_write();
+        $failures = [];
+        $selected = picture_manager_owned_galleries_for_selection(
+            $sourceId, $galleryIds, $failures,
+        );
+        if ($sourceId === $destinationId || $selected === [] || $failures !== []) {
+            throw new RuntimeException('Gallery move selection is no longer valid.');
+        }
+        picture_manager_assert_destination_outside_gallery_selection(
+            $destinationId, $galleryIds,
+        );
+        $destination = find_gallery($destinationId, true);
+        if ($destination === null) {
+            throw new RuntimeException('Gallery move destination is unavailable.');
+        }
+        $parentPath = (string) $destination['folder_path'];
+        gallery_visibility_marker_assert_importable($parentPath);
+        $targets = [];
+        foreach ($selected as $gallery) {
+            $path = (string) $gallery['folder_path'];
+            gallery_visibility_marker_assert_subtree_clear($path);
+            $target = $parentPath . '/' . gallery_folder_name_from_path($path);
+            $absolute = gallery_target_abs_path($target);
+            if (isset($targets[$target]) || is_link($absolute) || file_exists($absolute)
+                || find_gallery_by_folder_path($target, true)) {
+                throw new RuntimeException('Gallery move destination is occupied.');
+            }
+            $targets[$target] = true;
+        }
+        smart_gallery_validate_gallery_parent_map(array_fill_keys($galleryIds, $destinationId));
+
+        $moved = [];
+        foreach ($galleryIds as $id) {
+            try {
+                if (!admin_operation_model_lock_owned($writer)
+                    || !move_gallery_folder_to_parent_owned($id, $destinationId)['moved']) {
+                    throw new RuntimeException('Gallery move could not be confirmed.');
+                }
+                $moved[] = $id;
+            } catch (Throwable $failure) {
+                return ['moved_ids' => $moved, 'failure' => $failure];
+            }
+        }
+        return ['moved_ids' => $moved, 'failure' => null];
+    } finally {
+        gallery_edit_writer_end($writer);
     }
 }
 

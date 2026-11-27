@@ -1,0 +1,787 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-445-winapp.yml
+# Module Type: WinApp backend qualification workflow
+# Purpose: Retain hosted comparisons and functional evidence for issue 445.
+# Responsibilities: Bind central audit execution to the feature and its baseline.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 445 WinApp GUI backends
+
+on:
+  push:
+    branches:
+      - feature/445-pyside6-winapp
+      - feature/446-winapp-qt-default-inspector
+  workflow_call:
+    inputs:
+      candidate:
+        description: Exact prepared candidate from the qualification-only integration run.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PHP_GALLERY_SOURCE_BASE: b63d6d5e5bee014ab3750080833f49dcc27e9a34
+  ISSUE_445_SHA: ${{ inputs.candidate || github.sha }}
+  # Built from the candidate in a disposable tree. This is newer than the
+  # public stable release and older than the tracked WinApp release candidate.
+  ISSUE_445_EARLIER_VERSION: '1.7.2'
+
+jobs:
+  tk-baseline:
+    name: Tk Canvas baseline (Windows)
+    if: startsWith(github.event.head_commit.message, '[gui-baseline]')
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: isolated benchmark job.
+    # Consumers: Actions scheduler. Rationale: 45 covers the central
+    # 40-minute benchmark limit and environment setup.
+    timeout-minutes: 45
+    env:
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_TK_PERF_PROTOCOL: issue_399_tk_protocol.json
+      PHP_GALLERY_TK_PERF_STAGE: baseline
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact checkpoint and immutable Tk source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) {
+            throw 'Checkout does not match the event SHA.'
+          }
+          git merge-base --is-ancestor $env:PHP_GALLERY_SOURCE_BASE HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The immutable baseline is missing from the feature history.'
+          }
+          "PHP_GALLERY_TK_PERF_BASELINE=$env:PHP_GALLERY_SOURCE_BASE" >> $env:GITHUB_ENV
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install pinned benchmark dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt -r winapp/requirements-benchmark.txt
+          python -m pip check
+      - name: Run central Tk performance audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: php scripts/audit.php --suite=watcher-tk-performance
+      - name: Retain baseline reports and raw trials
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-tk-baseline-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: immutable baseline artifact.
+          # Consumers: qualification review. Rationale: 60 matches issue 434.
+          retention-days: 60
+
+  backends:
+    name: ${{ matrix.label }}
+    if: ${{ !startsWith(github.event.head_commit.message, '[gui-baseline]') }}
+    runs-on: ${{ matrix.runner }}
+    # Type: int. Units: minutes. Scope: one exact-SHA desktop regression.
+    # Consumers: Actions scheduler. Rationale: 18 gives the bounded WinApp
+    # partitions time for a cold Qt wheel install, display setup and artifacts.
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, label: 'Tk without Qt (Windows)', backend: tkinter }
+          - { runner: windows-2025, label: 'Tk and Qt (Windows)', backend: pyside6 }
+          - { runner: ubuntu-24.04, label: 'Tk and Qt (Linux)', backend: pyside6 }
+          - { runner: macos-15, label: 'Tk and Qt (macOS advisory)', backend: pyside6 }
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact checkout and immutable source base
+        shell: bash
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$ISSUE_445_SHA"
+          test "$(git merge-base HEAD "$PHP_GALLERY_SOURCE_BASE")" = "$PHP_GALLERY_SOURCE_BASE"
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: Run the existing workflow contracts before feature regressions
+        if: ${{ !inputs.candidate && runner.os == 'Linux' }}
+        run: php scripts/audit.php --suite=ci-workflow-contract
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install Linux display and Qt platform libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libegl1 libgl1 libx11-xcb1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-randr0 libxcb-xfixes0 \
+            libxcb-sync1 libxcb-shm0 libxcb-xkb1 libxkbcommon-x11-0
+      - name: Use a physical fixture directory on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -eu
+          # macOS supplies TMPDIR below the /var symlink. The production file
+          # guards correctly reject ancestors that are symlinks.
+          echo "TMPDIR=$(cd "$RUNNER_TEMP" && pwd -P)" >> "$GITHUB_ENV"
+      - name: Install and check a clean WinApp source environment
+        id: environment
+        shell: bash
+        env:
+          SOURCE_PROFILE: ${{ matrix.backend }}
+        run: |
+          set -eu
+          environment=cache/issue-445-source-env
+          python -m venv "$environment"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            interpreter="$environment/Scripts/python.exe"
+          else
+            interpreter="$environment/bin/python"
+          fi
+          requirements=requirements.txt
+          if [ "$SOURCE_PROFILE" = "tkinter" ]; then
+            requirements=requirements-core.txt
+          fi
+          "$interpreter" -m pip install --disable-pip-version-check -r "winapp/$requirements"
+          "$interpreter" -m pip check
+          printf 'python=%s\n' "$("$interpreter" -c 'import sys; print(sys.executable)' | tr -d '\r')" >> "$GITHUB_OUTPUT"
+      - name: Check out the immutable Tk regression inventory
+        if: runner.os == 'Windows' && matrix.backend == 'tkinter'
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.PHP_GALLERY_SOURCE_BASE }}
+          path: cache/issue-445-regression-baseline
+          persist-credentials: false
+      - name: Run ordinary WinApp partitions with visual IDs delegated
+        if: matrix.backend == 'pyside6'
+        id: ordinary
+        continue-on-error: true
+        shell: bash
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          PHP_GALLERY_REQUIRE_QT: '1'
+          PHP_GALLERY_WINAPP_SOURCE_PROFILE: pyside6
+          PHP_GALLERY_QT_ARTIFACT_DIR: ${{ github.workspace }}/cache/issue-445-qt
+          # Retain the failing thread and native boundary if an exact desktop
+          # partition exits without a Python result or report.
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          set -eu
+          mkdir -p cache/issue-445-qt
+          audit=(php scripts/audit.php --suite=winapp-partitioned-no-visual
+            --json=cache/test-audit/winapp-ordinary-audit.json)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            QT_QUICK_BACKEND=software xvfb-run -a "${audit[@]}"
+          else
+            "${audit[@]}"
+          fi
+      - name: Run exact delegated visual cases
+        if: matrix.backend == 'pyside6' && runner.os != 'macOS'
+        id: visual
+        continue-on-error: true
+        shell: bash
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          PHP_GALLERY_REQUIRE_QT: '1'
+          PHP_GALLERY_WINAPP_SOURCE_PROFILE: pyside6
+          PHP_GALLERY_VISUAL_PARITY: ${{ (inputs.candidate || contains(github.event.head_commit.message, '[445-visual]')) && '1' || '0' }}
+          PHP_GALLERY_VISUAL_PARITY_OUTPUT: ${{ github.workspace }}/cache/issue-445-qt/visual-parity
+          PHP_GALLERY_QT_ARTIFACT_DIR: ${{ github.workspace }}/cache/issue-445-qt
+          PHP_GALLERY_WINAPP_ORDINARY_AUDIT: cache/test-audit/winapp-ordinary-audit.json
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          set -eu
+          audit=(php scripts/audit.php --suite=winapp-visual-parity
+            --json=cache/test-audit/winapp-visual-audit.json)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            QT_QUICK_BACKEND=software xvfb-run -a "${audit[@]}"
+          else
+            "${audit[@]}"
+          fi
+      - name: Require both ordinary and visual WinApp results
+        if: always() && matrix.backend == 'pyside6' && runner.os != 'macOS'
+        shell: bash
+        env:
+          ORDINARY_OUTCOME: ${{ steps.ordinary.outcome }}
+          VISUAL_OUTCOME: ${{ steps.visual.outcome }}
+        run: |
+          if [ "$ORDINARY_OUTCOME" != "success" ] || [ "$VISUAL_OUTCOME" != "success" ]; then
+            echo "Both ordinary and delegated visual WinApp suites must pass." >&2
+            exit 1
+          fi
+      - name: Require ordinary macOS WinApp result
+        if: always() && matrix.backend == 'pyside6' && runner.os == 'macOS'
+        shell: bash
+        env:
+          ORDINARY_OUTCOME: ${{ steps.ordinary.outcome }}
+        run: |
+          if [ "$ORDINARY_OUTCOME" != "success" ]; then
+            echo "The ordinary macOS WinApp suite must pass." >&2
+            exit 1
+          fi
+      - name: Run central desktop regressions
+        if: matrix.backend == 'tkinter'
+        shell: bash
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          PHP_GALLERY_REQUIRE_QT: '0'
+          PHP_GALLERY_WINAPP_SOURCE_PROFILE: tkinter
+          PHP_GALLERY_WINAPP_BASELINE_DIR: ${{ github.workspace }}/cache/issue-445-regression-baseline
+          PHP_GALLERY_QT_ARTIFACT_DIR: ${{ github.workspace }}/cache/issue-445-qt
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          set -eu
+          php scripts/audit.php --suite=winapp-partitioned
+      - name: Retain audit and native Settings captures
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-${{ runner.os }}-${{ matrix.backend }}-${{ env.ISSUE_445_SHA }}
+          path: |
+            cache/test-audit/**
+            cache/issue-445-qt/**
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: source qualification artifacts.
+          # Consumers: parity review. Rationale: 60 matches benchmark retention.
+          retention-days: 60
+
+  macos-visual:
+    name: Fresh-host macOS native visual qualification
+    needs: [backends]
+    if: >-
+      !cancelled() && !startsWith(github.event.head_commit.message, '[gui-baseline]') &&
+      (inputs.candidate || contains(github.event.head_commit.message, '[445-visual]'))
+    runs-on: macos-15
+    # Type: int. Units: minutes. Scope: isolated native visual suite.
+    # Consumers: Actions scheduler. Rationale: nine delegated children each
+    # retain the established 90-second cap plus clean dependency setup.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact checkout and immutable source base
+        shell: bash
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$ISSUE_445_SHA"
+          test "$(git merge-base HEAD "$PHP_GALLERY_SOURCE_BASE")" = "$PHP_GALLERY_SOURCE_BASE"
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Use a physical fixture directory on macOS
+        shell: bash
+        run: |
+          set -eu
+          echo "TMPDIR=$(cd "$RUNNER_TEMP" && pwd -P)" >> "$GITHUB_ENV"
+      - name: Install and check a clean Qt visual environment
+        id: environment
+        shell: bash
+        run: |
+          set -eu
+          environment=cache/issue-445-source-env
+          python -m venv "$environment"
+          interpreter="$environment/bin/python"
+          "$interpreter" -m pip install --disable-pip-version-check -r winapp/requirements.txt
+          "$interpreter" -m pip check
+          printf 'python=%s\n' "$("$interpreter" -c 'import sys; print(sys.executable)' | tr -d '\r')" >> "$GITHUB_OUTPUT"
+      - name: Download the exact ordinary macOS audit artifact
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-macOS-pyside6-${{ env.ISSUE_445_SHA }}
+          path: cache
+      - name: Require the retained ordinary audit input
+        shell: bash
+        run: test -s cache/test-audit/winapp-ordinary-audit.json
+      - name: Run delegated visual cases on the fresh host
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          PHP_GALLERY_REQUIRE_QT: '1'
+          PHP_GALLERY_WINAPP_SOURCE_PROFILE: pyside6
+          PHP_GALLERY_VISUAL_PARITY: '1'
+          PHP_GALLERY_VISUAL_PARITY_OUTPUT: ${{ github.workspace }}/cache/issue-445-qt/visual-parity
+          PHP_GALLERY_QT_ARTIFACT_DIR: ${{ github.workspace }}/cache/issue-445-qt
+          PHP_GALLERY_WINAPP_ORDINARY_AUDIT: cache/test-audit/winapp-ordinary-audit.json
+          PYTHONFAULTHANDLER: '1'
+        shell: bash
+        run: |
+          set -eu
+          php scripts/audit.php --suite=winapp-visual-parity \
+            --json=cache/test-audit/winapp-visual-audit.json
+      - name: Retain fresh-host visual evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-macOS-visual-${{ env.ISSUE_445_SHA }}
+          path: |
+            cache/test-audit/**
+            cache/issue-445-qt/**
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: isolated native visual evidence.
+          # Consumers: report and parity review. Rationale: match source artifacts.
+          retention-days: 60
+
+  stable-frozen:
+    name: WinApp common frozen build (Windows, ${{ matrix.package }})
+    if: >-
+      inputs.candidate || contains(github.event.head_commit.message, '[gui-frozen]') ||
+      startsWith(github.event.head_commit.message, '[445-upgrade]')
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: isolated WinApp installer build.
+    # Consumers: Actions scheduler. Rationale: 20 covers the central build
+    # deadline and upload without invoking the release workflow.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { package: candidate }
+          - { package: earlier }
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the tested installer source
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:ISSUE_445_SHA) {
+            throw 'The frozen-build source changed.'
+          }
+          git merge-base --is-ancestor $env:PHP_GALLERY_SOURCE_BASE HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'The immutable source base is missing.' }
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Build the exact common setup through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+          PHP_GALLERY_FROZEN_BUILD_ONLY: '1'
+          PHP_GALLERY_FROZEN_EARLIER_VERSION: ${{ matrix.package == 'earlier' && env.ISSUE_445_EARLIER_VERSION || '' }}
+        run: php scripts/audit.php --suite=winapp-frozen-installer
+      - name: Retain installer and runtime smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-${{ matrix.package }}-frozen-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: unpublished verification artifacts.
+          # Consumers: exact-SHA review. Rationale: 60 aligns with source evidence.
+          retention-days: 60
+      - name: Retain the compact setup descriptor and builder evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-${{ matrix.package }}-package-evidence-${{ env.ISSUE_445_SHA }}
+          path: |
+            cache/test-audit/**/winapp-frozen-installer/winapp-update.json
+            cache/test-audit/**/winapp-frozen-installer.log
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: evidence used by the qualification report.
+          # Consumers: issue 445 review. Rationale: matches the installers.
+          retention-days: 60
+
+  installed-frontends:
+    name: Windows installed Settings and Qt recovery
+    needs: [stable-frozen]
+    if: needs.stable-frozen.result == 'success'
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: independent installed desktop test.
+    # Consumers: Actions scheduler. Rationale: 25 covers setup transfer,
+    # the bounded central native smoke and retention of its diagnostics.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Prepare the owned-window observer
+        run: |
+          python -m pip install --disable-pip-version-check -c winapp/constraints.txt Pillow
+          python -m pip check
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-candidate-frozen-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-installed-ui
+      - name: Exercise installed Settings, library faults and setup repair
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+          PHP_GALLERY_FROZEN_UI_INPUTS: ${{ github.workspace }}/cache/issue-445-installed-ui
+        run: php scripts/audit.php --suite=winapp-frozen-installer
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: issue-445-installed-ui-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: installed UI evidence retention.
+          # Consumers: issue 445 review. Rationale: matches installer artifacts.
+          retention-days: 60
+
+  installed-updates:
+    name: Windows installed updates from Tk and Qt
+    needs: [stable-frozen]
+    if: needs.stable-frozen.result == 'success'
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: one complete journey on a disposable VM.
+    # Consumers: Actions scheduler. Rationale: 30 covers both setup downloads,
+    # the 20-minute central update audit and evidence retention.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install the shared source dependencies for the update evidence reader
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
+          python -m pip check
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-earlier-frozen-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-setups/earlier
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-candidate-frozen-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-setups/target
+      - name: Exercise authentic prior and qualification installers through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+          PHP_GALLERY_RELEASE_API_TOKEN: ${{ github.token }}
+          PHP_GALLERY_FROZEN_EARLIER_VERSION: ${{ env.ISSUE_445_EARLIER_VERSION }}
+          PHP_GALLERY_FROZEN_UPDATE_INPUTS: ${{ github.workspace }}/cache/issue-445-setups
+        run: php scripts/audit.php --suite=winapp-frozen-installer
+      - name: Retain sanitized installation and helper evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-installed-updates-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: unpublished upgrade evidence.
+          # Consumers: exact-SHA review. Rationale: aligns with the setup artifacts.
+          retention-days: 60
+
+  paired-photos:
+    name: Photos comparison (${{ matrix.photos }}, ${{ matrix.cache }})
+    if: >-
+      inputs.candidate || startsWith(github.event.head_commit.message, '[gui-compare]') ||
+      startsWith(github.event.head_commit.message, '[445-bench]')
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: one paired size/cache cell.
+    # Consumers: Actions scheduler. Rationale: 45 covers the central audit's
+    # 40-minute maximum plus a reproducible runtime installation.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # Type: int. Units: runners. Scope: paired performance cells.
+      # Consumers: Actions matrix. Rationale: Three concurrent Windows VMs
+      # limit runner demand while keeping native functional jobs independent.
+      max-parallel: 3
+      # Type: list<int>. Units: catalogue photos. Scope: workload cells.
+      # Consumers: Issue 445 comparison driver. Rationale: Full qualification
+      # preserves 100, 500 and 2,000 photos; diagnosis targets the 2,000 warm cell.
+      matrix: ${{ fromJSON(!inputs.candidate && startsWith(github.event.head_commit.message, '[445-bench]') && '{"photos":[2000],"cache":["warm"]}' || '{"photos":[100,500,2000],"cache":["cold","warm"]}') }}
+    env:
+      PHP_GALLERY_TK_PERF_PROTOCOL: issue_445_gui
+      PHP_GALLERY_TK_PERF_STAGE: compare
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ inputs.candidate || github.sha }}
+      PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+      PHP_GALLERY_GUI_PHOTO_COUNT: ${{ matrix.photos }}
+      PHP_GALLERY_GUI_CACHE: ${{ matrix.cache }}
+      QSG_INFO: '1'
+      QT_FORCE_STDERR_LOGGING: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact candidate and stable Tk control
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:ISSUE_445_SHA) {
+            throw 'The candidate checkout changed.'
+          }
+          git merge-base --is-ancestor $env:PHP_GALLERY_SOURCE_BASE HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'The immutable Tk source is missing.' }
+          "PHP_GALLERY_TK_PERF_BASELINE=$env:PHP_GALLERY_SOURCE_BASE" >> $env:GITHUB_ENV
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install fixed paired workload dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements.txt -r winapp/requirements-benchmark.txt
+          python -m pip check
+      - name: Measure both Tk renderers and Qt Quick through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: php scripts/audit.php --suite=watcher-tk-performance
+      - name: Retain paired samples and actual device details
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-photos-${{ matrix.photos }}-${{ matrix.cache }}-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: comparison artifacts.
+          # Consumers: current parity review. Rationale: 60 matches baseline.
+          retention-days: 60
+
+  qt-interactions:
+    name: Qt ${{ matrix.label }} (Windows)
+    if: inputs.candidate || contains(github.event.head_commit.message, '[445-interactions]')
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: one scheduler-bound interaction job.
+    # Consumers: Actions scheduler. Rationale: 15 covers a 180-second soak,
+    # native interaction traces and reproducible runtime installation.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { key: shell, label: 'workspace interactions and soak', protocol: issue_445_qt_shell }
+          - { key: photos, label: 'Photos and Lightbox interactions', protocol: issue_445_qt_photos_interactions }
+    env:
+      PHP_GALLERY_TK_PERF_PROTOCOL: ${{ matrix.protocol }}
+      PHP_GALLERY_TK_PERF_STAGE: compare
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ inputs.candidate || github.sha }}
+      PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+      PHP_GALLERY_TK_PERF_BASELINE: b63d6d5e5bee014ab3750080833f49dcc27e9a34
+      QSG_INFO: '1'
+      QT_FORCE_STDERR_LOGGING: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install the pinned Qt interaction dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements.txt -r winapp/requirements-benchmark.txt
+          python -m pip check
+      - name: Measure the native controls through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: php scripts/audit.php --suite=watcher-tk-performance
+      - name: Retain interaction timing, process resources and device data
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-445-qt-interactions-${{ matrix.key }}-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: representative workload evidence.
+          # Consumers: issue 445 review. Rationale: matches Photos evidence.
+          retention-days: 60
+
+  packaging-metrics:
+    name: Windows installed layout comparison
+    needs: [stable-frozen]
+    if: needs.stable-frozen.result == 'success' && (inputs.candidate || contains(github.event.head_commit.message, '[445-packaging]'))
+    runs-on: windows-2025
+    permissions:
+      actions: read
+      contents: read
+    # Type: int. Units: minutes. Scope: three installer layouts on one VM.
+    # Consumers: Actions scheduler. Rationale: 30 covers input retrieval and
+    # the central 20-minute native measurement ceiling.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install the pinned resource observer
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt -r winapp/requirements-benchmark.txt
+          python -m pip check
+      - name: Authenticate the historical dual-build source and successful job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/45726147418" | ConvertFrom-Json
+          if ($run.head_sha -ne '96e7c85f34fc8bbac558071baf2ebdf8ce858625' -or
+              $run.head_branch -ne 'feature/445-pyside6-winapp') {
+            throw 'The historical build run does not match its immutable source.'
+          }
+          $jobs = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/45726147418/jobs" | ConvertFrom-Json
+          $qualified = @($jobs.jobs | Where-Object {
+            $_.name -eq 'WinApp frozen build (Windows, qt)' -and $_.conclusion -eq 'success'
+          })
+          if ($qualified.Count -ne 1) { throw 'The archived dual-build package has no successful owner job.' }
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-candidate-frozen-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-layouts/candidate
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-qt-frozen-96e7c85f34fc8bbac558071baf2ebdf8ce858625
+          path: cache/issue-445-layouts/prior
+          run-id: '45726147418'
+          github-token: ${{ github.token }}
+      - name: Install and measure the actual layouts through the central audit
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
+          PHP_GALLERY_FROZEN_LAYOUT_INPUTS: ${{ github.workspace }}/cache/issue-445-layouts
+        run: php scripts/audit.php --suite=winapp-frozen-installer
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: issue-445-packaging-metrics-${{ env.ISSUE_445_SHA }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: installed layout measurements.
+          # Consumers: issue 445 review. Rationale: matches qualification reports.
+          retention-days: 60
+
+  qualification-report:
+    name: Czech qualification report
+    needs: [backends, macos-visual, stable-frozen, installed-frontends, installed-updates, paired-photos, qt-interactions, packaging-metrics]
+    if: ${{ !cancelled() && (inputs.candidate || contains(github.event.head_commit.message, '[445-report]')) }}
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: render existing evidence only.
+    # Consumers: Actions scheduler. Rationale: five covers compact artifact
+    # download, one HTML generation and upload without repeating any tests.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.ISSUE_445_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-photos-*-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-*-pyside6-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence
+      - uses: actions/download-artifact@v8.0.1
+        if: ${{ inputs.candidate || contains(github.event.head_commit.message, '[445-visual]') }}
+        continue-on-error: true
+        with:
+          name: issue-445-macOS-visual-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence/issue-445-macOS-visual-${{ env.ISSUE_445_SHA }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-Windows-tkinter-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence/issue-445-Windows-tkinter-${{ env.ISSUE_445_SHA }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-*-package-evidence-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-installed-updates-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence/issue-445-installed-updates-${{ env.ISSUE_445_SHA }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-installed-ui-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence/issue-445-installed-ui-${{ env.ISSUE_445_SHA }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-qt-interactions-*-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: issue-445-packaging-metrics-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-evidence/issue-445-packaging-metrics-${{ env.ISSUE_445_SHA }}
+      - name: Render the Czech standalone HTML with the exact hosted evidence
+        env:
+          REQUIRE_DEPENDENCIES_MATCH: ${{ inputs.candidate && '1' || '0' }}
+          REQUIRE_FRESH_MAC_VISUAL: ${{ (inputs.candidate || contains(github.event.head_commit.message, '[445-visual]')) && '1' || '0' }}
+          REQUIRE_PAIRED_PERFORMANCE: ${{ (inputs.candidate || startsWith(github.event.head_commit.message, '[gui-compare]')) && '1' || '0' }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$ISSUE_445_SHA"
+          python tools/perf/issue_445_report.py --inputs cache/issue-445-evidence \
+            --output cache/issue-445-report --candidate "$ISSUE_445_SHA"
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: issue-445-report-cs-${{ env.ISSUE_445_SHA }}
+          path: cache/issue-445-report/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: final downloadable evaluation.
+          # Consumers: owner review. Rationale: matches raw evidence retention.
+          retention-days: 60

@@ -566,6 +566,34 @@ class ReleaseAsset:
     release_id: int
 
 
+class InstallGate:
+    """Pause new operations only while preparing the external helper."""
+
+    def __init__(self) -> None:
+        """Initialize open admission without a worker-completion deadline.
+
+        Returns:
+            None: Starts with new work permitted.
+        """
+        self.active = False
+
+    def begin(self) -> None:
+        """Pause new work while the verified installer is handed off.
+
+        Returns:
+            None: Marks helper preparation active.
+        """
+        self.active = True
+
+    def cancel(self) -> None:
+        """Restore admission when helper preparation fails or completes.
+
+        Returns:
+            None: Leaves the application available for retry or graceful exit.
+        """
+        self.active = False
+
+
 def _version(value: str) -> tuple[int, int, int]:
     """Parse a canonical numeric uploader version without lexical ordering."""
     if not isinstance(value, str) or len(value) > 32 or not _VERSION.fullmatch(value):
@@ -930,11 +958,18 @@ def find_update(
 
 
 def _validate(asset: ReleaseAsset) -> None:
-    """Validate metadata again at every public disk/launch boundary."""
+    """Validate the unified installer at each download and launch boundary.
+
+    Args:
+        asset (ReleaseAsset): Exact published release asset selected for download.
+    Returns:
+        None: The filename, version, URL, size and digest satisfy their contracts.
+    """
     if not isinstance(asset, ReleaseAsset):
         raise UpdateError("Invalid installer metadata.")
     _version(asset.version)
-    if asset.name != f"PHPGalleryUploader-{asset.version}-Setup.exe":
+    match = _NAME.fullmatch(asset.name) if isinstance(asset.name, str) else None
+    if match is None or match.group(1) != asset.version:
         raise UpdateError("Installer name does not match its version.")
     _asset_url(asset.download_url, asset.name)
     _positive(asset.size, MAX_INSTALLER_SIZE)

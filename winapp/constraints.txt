@@ -1,0 +1,38 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/constraints.txt
+# Module Type: Qualified dependency constraints
+# Purpose: Align supported WinApp, CI and benchmark package versions.
+# Responsibilities: Constrain selected direct and measurement dependencies.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+# Type: package version constraint. Units: semantic version. Scope: shared app.
+# Consumers: source, frozen build, tests and paired benchmark workloads.
+# Rationale: preserve the exact versions from the passing issue 445 workload.
+Pillow==12.0.0
+pystray==0.19.5
+reportlab==5.0.1
+pypdf==6.4.0
+polib==1.2.0
+# Type: package version constraint. Units: semantic version. Scope: benchmark.
+# Consumers: requirements-benchmark.txt and explicit metric environments.
+# Rationale: retain the observed process sampler version without shipping it.
+psutil==7.1.3
+# Type: package version constraint. Units: semantic version. Scope: runtime/build.
+# Consumers: packaging tools and application transitive requirements.
+# Rationale: match the successful hosted common-runtime build evidence.
+charset-normalizer==3.5.3
+six==1.17.0
+altgraph==0.17.5
+packaging==26.4
+pyinstaller-hooks-contrib==2026.10
+pefile==2024.8.26; sys_platform == "win32"
+pywin32-ctypes==0.2.3; sys_platform == "win32"
+# Type: package version constraint. Units: semantic version. Scope: macOS source.
+# Consumers: PyObjC frameworks in requirements-core.txt.
+# Rationale: match the passing advisory macOS installation log.
+pyobjc-core==13.1; sys_platform == "darwin"
+pyobjc-framework-Cocoa==13.1; sys_platform == "darwin"
+pyobjc-framework-Quartz==13.1; sys_platform == "darwin"
+setuptools==84.2.1

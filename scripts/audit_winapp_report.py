@@ -27,6 +27,15 @@ from types import TracebackType
 from typing import NotRequired, TextIO, TypedDict
 
 
+# Purpose: Identify the only class delegated out of the hosted Qt matrix.
+# Type: str. Units: canonical unittest class identity.
+# Scope: issue 445 split visual qualification on Windows, Linux and macOS.
+# Consumers: split partition coordinator and dedicated visual audit suite.
+# Rationale: preserve the exact production visual class and its fixtures while
+# keeping its measured runtime outside the ordinary 480-second run.
+VISUAL_PARITY_CLASS_ID = "test_gui_visual_parity.VisualParityTests"
+
+
 class SubtestReport(TypedDict):
     """Describe one reported subtest outcome and its concrete execution detail."""
 
@@ -137,6 +146,8 @@ class PartitionCoverageProof(TypedDict):
     expected_test_ids: list[str]
     observed_test_ids: list[str]
     total_duration_seconds: float
+    delegated_test_ids: NotRequired[list[str]]
+    canonical_test_ids: NotRequired[list[str]]
 
 
 class AuditTextTestResult(unittest.TextTestResult):

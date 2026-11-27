@@ -75,7 +75,7 @@ jobs:
           php-version: '8.5'
           coverage: none
       - name: Install declared companion dependencies
-        run: python -m pip install -r winapp/requirements.txt
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
       - name: Provision the Linux Tk display
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk

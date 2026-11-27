@@ -45,7 +45,10 @@ class WindowsDisplayTests(unittest.TestCase):
         Returns:
             None: The unsupported observation is unknown rather than zero.
         """
-        with mock.patch.object(process_memory, 'os', SimpleNamespace(name='posix')):
+        with (
+            mock.patch.object(process_memory, 'os', SimpleNamespace(name='posix')),
+            mock.patch.object(process_memory, 'sys', SimpleNamespace(platform='linux')),
+        ):
             self.assertIsNone(process_memory.current_process_ram_bytes())
 
     @unittest.skipUnless(os.name == 'nt', 'Requires the actual Windows process API.')

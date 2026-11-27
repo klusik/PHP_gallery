@@ -297,7 +297,7 @@ function source_declaration_snapshots(string $source, string $path): array
 {
     if (in_array(
         strtolower(pathinfo($path, PATHINFO_EXTENSION)),
-        ['sh', 'ps1', 'psm1'],
+        ['sh', 'ps1', 'psm1', 'bat', 'cmd'],
         true,
     )) {
         $snapshots = script_declaration_snapshots(
@@ -494,6 +494,8 @@ function source_head_declaration_allowed(string $path): bool
                     'sh',
                     'ps1',
                     'psm1',
+                    'bat',
+                    'cmd',
                 ],
                 true,
             )
@@ -532,9 +534,9 @@ function changed_documentation_report(
         'findings' => [],
         'blocked' => [],
         'coverage' => [
-            'scope' => 'Added/materially changed named functions, methods and class-like declarations in PHP, Python/PYW, JS/MJS/CJS, inline HTML scripts and ordinary Bash/PowerShell functions; named-declaration doc-only regressions. Anonymous/variable-bound callbacks, arrows and properties need no docstrings. Native signature typing and parser coverage remain independent; unchanged legacy debt stays visible in the inventory.',
+            'scope' => 'Added/materially changed named functions, methods and class-like declarations in PHP, Python/PYW, JS/MJS/CJS, inline HTML scripts, ordinary Bash/PowerShell functions, and batch entrypoints/labels; named-declaration doc-only regressions. Batch call labels are callable functions; goto-only labels are control labels. Anonymous/variable-bound callbacks, arrows and properties need no docstrings. Native signature typing and parser coverage remain independent; unchanged legacy debt stays visible in the inventory.',
             'identity' => 'Namespace/containing declaration identity and executable-token fingerprints; no line-number identity or baseline.',
-            'limitations' => 'Conservative JS/native-script lexers, aliases/complex types and semantic truthfulness require review. Native-script argument/result typing remains manual. Python lambdas cannot have native docstrings and are excluded. Unsupported script declarations, changed batch bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
+            'limitations' => 'Conservative JS/native-script lexers, aliases/complex types and semantic truthfulness require review. Native-script argument/result typing remains manual. Python lambdas cannot have native docstrings and are excluded. Unsupported script declarations, unsupported batch call/goto forms, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
         ],
     ];
     try {
@@ -641,6 +643,8 @@ function changed_documentation_report(
                     'sh',
                     'ps1',
                     'psm1',
+                    'bat',
+                    'cmd',
                 ],
                 true,
             );

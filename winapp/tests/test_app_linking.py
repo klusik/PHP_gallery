@@ -39,6 +39,7 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader import app_linking as linking
 from uploader import gallery_media_cache, offline_linking, session_resume
+from uploader.credential_store import CredentialStoreUnavailable
 from uploader.diagnostics import (
     PhotosDecodeError, PhotosDecodeFacts,
     SAFE_PHOTOS_DECODE_BODY_MAX_BYTES, SAFE_PHOTOS_DECODE_PIXEL_MAX,
@@ -58,12 +59,12 @@ from uploader.state_store import load_recent_gallery_addresses
 # runner to schedule worker threads without waiting indefinitely on failure.
 TEST_WORKER_WAIT_SECONDS = 2.0
 
-# Purpose: Keep restored grant fixtures live for their synchronous worker call.
-# Type: float. Units: seconds. Scope: transient/offline restore regressions.
-# Consumers: LinkingTransportTests restore capability fixtures.
+# Purpose: Keep synthetic grants live through fixture setup and operations.
+# Type: float. Units: seconds. Scope: restore and live media fixtures.
+# Consumers: NativeMediaSessionTests and restore capability fixtures.
 # Rationale: Two minutes is independent of scheduling waits and avoids an
 #   expiry race without prolonging or sleeping in the test.
-TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS = 120.0
+TEST_FIXTURE_GRANT_LIFETIME_SECONDS = 120.0
 
 # Purpose: Make the deadline regression complete promptly without real I/O.
 # Type: float. Units: seconds. Scope: one fake delayed HTTPS request.
@@ -3168,7 +3169,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+            time.monotonic() + TEST_FIXTURE_GRANT_LIFETIME_SECONDS, linking.GALLERIES_SCOPE,
         )
         body = b'current cached thumbnail'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
@@ -3867,7 +3868,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            time.monotonic() + TEST_FIXTURE_GRANT_LIFETIME_SECONDS,
             linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
             admin_preload_supported=True,
         )
@@ -4592,7 +4593,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            time.monotonic() + TEST_FIXTURE_GRANT_LIFETIME_SECONDS,
             linking.GALLERIES_SCOPE,
         )
         photo_id, gallery_id = 7, 4
@@ -5213,7 +5214,11 @@ class NativeMediaTransportTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        server = CountingServer(('127.0.0.1', 0), JsonHandler)
+        # HTTPServer normally reverse-resolves its own bound address. This
+        # local fixture already has a numeric identity. Keep the client DNS,
+        # TCP, HTTP/1.1 and connection-reuse observations real.
+        with mock.patch.object(socket, 'getfqdn', return_value='127.0.0.1'):
+            server = CountingServer(('127.0.0.1', 0), JsonHandler)
         server.daemon_threads = True
         serve_thread = threading.Thread(
             target=server.serve_forever, name='LinkingPoolLoopbackFixture',
@@ -6847,9 +6852,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                 mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
                            return_value=()),
                 mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                mock.patch('uploader.offline_linking.discover_linking_capabilities',
                            return_value=frozenset({'rolling_access'})),
-                mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+                mock.patch('uploader.offline_linking.rotate_saved_offline_access',
                            side_effect=linking.LinkingRefreshRejected('Refused.')) as rotate,
             ):
                 thread.return_value.is_alive.return_value = False
@@ -6877,6 +6882,79 @@ class LinkingDeliveryTests(unittest.TestCase):
                         'Saved gallery access expired. Approve the link again.',
                     )
 
+    def test_inaccessible_saved_link_can_open_temporary_browser_consent(self) -> None:
+        """Keep a denied saved grant while an explicit localhost Link uses consent.
+
+        Returns:
+            None: Only an explicit link opens the browser for the exact mount,
+                and approval leaves the saved grant and hint untouched.
+        """
+        issuer = 'http://localhost:8888/galerie'
+        binding = offline_linking.OfflineBinding(
+            issuer, 7, linking.ROLLING_GALLERIES_SCOPE,
+        )
+        url = (
+            issuer + '/index.php?page=app_linking_start'
+            + '&request_handle=' + TEST_REQUEST_HANDLE
+        )
+        for explicit in (False, True):
+            with (
+                self.subTest(explicit=explicit),
+                TemporaryDirectory() as directory,
+                mock.patch('uploader.app_linking_ui.tk.StringVar'),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.app_linking_ui.restore_saved_offline_session',
+                           side_effect=CredentialStoreUnavailable),
+                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempts,
+                mock.patch('uploader.app_linking_ui.webbrowser.open',
+                           return_value=True) as open_browser,
+                mock.patch('uploader.app_linking_ui.remember_desktop_transient_link') as remember,
+            ):
+                thread.return_value.is_alive.return_value = False
+                manager = LinkingManager(mock.Mock())
+                manager._offline_path = Path(directory) / 'offline-link.json'
+                manager._recent_link_path = Path(directory) / 'recent-gallery-links.json'
+                manager._queue_initial_gallery_page = mock.Mock()
+                manager._native_offline_store = mock.Mock(return_value=mock.Mock())
+                path = manager._offline_binding_path(binding)
+                offline_linking.save_offline_binding(path, binding)
+                original_hint = path.read_bytes()
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.available.return_value = True
+                session.identity.return_value = linking.LinkedIdentity(binding.account_id, 'admin')
+                attempt = attempts.return_value
+                attempt.push_request.return_value = linking.PushedAuthorization(
+                    TEST_REQUEST_HANDLE, url, time.monotonic() + linking.HANDOFF_MAX_LIFETIME_SECONDS,
+                )
+                attempt.wait_for_callback.return_value = 'approved'
+                attempt.requests_offline_access.return_value = False
+                attempt.exchange_once.return_value = session
+
+                self.assertTrue(manager.resume_saved_link(issuer, approve_if_absent=explicit))
+                thread.call_args.kwargs['target']()
+                manager._poll()
+                if explicit:
+                    attempts.assert_called_once_with(issuer, scope=linking.GALLERIES_SCOPE)
+                    thread.call_args.kwargs['target']()
+                    manager._poll()
+                    attempt.push_request.assert_called_once_with(
+                        prefer_upload=False, prefer_presentation=True, prefer_admin_media=True,
+                        require_admin_media=False,
+                    )
+                    open_browser.assert_called_once_with(url)
+                    self.assertIs(manager._session, session)
+                else:
+                    attempts.assert_not_called()
+                    open_browser.assert_not_called()
+                    self.assertIsNone(manager._session)
+                manager._native_offline_store.assert_called_once_with()
+                attempt.exchange_offline_once.assert_not_called()
+                remember.assert_not_called()
+                self.assertEqual(original_hint, path.read_bytes())
+                self.assertEqual(binding, manager._offline_binding)
+
     def test_transient_restore_propagates_optional_batch_discovery(self) -> None:
         """Restore a transient grant with the freshly discovered capability.
 
@@ -6888,7 +6966,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         grant = session_resume.TransientGrant(
             issuer, 7, linking.GALLERIES_SCOPE,
-            time.time() + TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS,
+            time.time() + TEST_FIXTURE_GRANT_LIFETIME_SECONDS,
             'pgla_' + 'A' * 43,
         )
         for capabilities, expected in (
@@ -6907,11 +6985,15 @@ class LinkingDeliveryTests(unittest.TestCase):
                     'uploader.app_linking_ui.sys',
                     SimpleNamespace(platform='darwin'),
                 ),
-                mock.patch('uploader.app_linking_ui.load_transient',
+                mock.patch(
+                    'uploader.desktop_connection.sys',
+                    SimpleNamespace(platform='darwin'),
+                ),
+                mock.patch('uploader.desktop_connection.load_transient',
                            return_value=grant),
-                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                mock.patch('uploader.desktop_connection.discover_linking_capabilities',
                            return_value=capabilities),
-                mock.patch('uploader.app_linking_ui.LinkingSession') as factory,
+                mock.patch('uploader.desktop_connection.LinkingSession') as factory,
                 mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
             ):
                 session = mock.Mock()
@@ -6948,7 +7030,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         access.issuer = issuer
         access.token = 'pgla_' + 'A' * 43
         access.expires_at = (
-            time.monotonic() + TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS
+            time.monotonic() + TEST_FIXTURE_GRANT_LIFETIME_SECONDS
         )
         access.username = 'admin'
         access.scope = binding.scope
@@ -6965,12 +7047,12 @@ class LinkingDeliveryTests(unittest.TestCase):
                            side_effect=lambda *_a, **_kw: mock.Mock()),
                 mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                mock.patch('uploader.offline_linking.discover_linking_capabilities',
                            return_value=capabilities),
-                mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+                mock.patch('uploader.offline_linking.rotate_saved_offline_access',
                            return_value=access),
-                mock.patch('uploader.app_linking_ui.LinkingSession') as factory,
-                mock.patch('uploader.app_linking_ui.enable_rolling_renewal'),
+                mock.patch('uploader.offline_linking.LinkingSession') as factory,
+                mock.patch('uploader.offline_linking.enable_rolling_renewal'),
                 mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
             ):
                 session = mock.Mock()
@@ -7007,9 +7089,9 @@ class LinkingDeliveryTests(unittest.TestCase):
             mock.patch('uploader.app_linking_ui.tk.StringVar'),
             mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
             mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-            mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+            mock.patch('uploader.offline_linking.discover_linking_capabilities',
                        return_value=frozenset({'rolling_access'})),
-            mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+            mock.patch('uploader.offline_linking.rotate_saved_offline_access',
                        side_effect=RuntimeError('Uncertain rotation')) as rotate,
             mock.patch('uploader.app_linking_ui.remove_saved_offline_link') as remove,
         ):
@@ -7059,7 +7141,11 @@ class LinkingDeliveryTests(unittest.TestCase):
             manager.unlink()
             thread.call_args.kwargs['target']()
             manager._poll()
-            remove.assert_called_once()
+            remove.assert_called_once_with(
+                manager._native_offline_store.return_value,
+                manager._offline_binding_path(binding), binding,
+                capture_refresh=True,
+            )
             manager._start.assert_not_called()
             self.assertIsNone(manager._offline_binding)
             self.assertEqual(issuer, manager.address())
@@ -7261,6 +7347,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
                 mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempt_factory,
                 mock.patch('uploader.app_linking_ui.store_approved_refresh') as persist,
+                mock.patch('uploader.desktop_connection.store_approved_refresh', new=persist),
             ):
                 legacy = scenario == 'legacy'
                 selected = scenario != 'photos'
@@ -7427,6 +7514,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._offline_path = Path(directory.name) / 'offline-link.json'
                 manager._browse_var = mock.Mock()
                 manager._browse_var.get.return_value = mode != 'identity'
+                manager._capabilities = (
+                    frozenset({'galleries:list'}) if mode != 'identity' else frozenset()
+                )
                 for name in (
                     '_upload_var', '_read_var', '_create_var',
                     '_visibility_var', '_offline_var',
@@ -8371,6 +8461,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._offline_store = mock.MagicMock()
         manager._offline_binding = None
         manager._offline_path = Path('/fixture/offline-link.json')
+        manager._capabilities = frozenset({'galleries:list', 'gallery:upload', 'offline_access'})
         manager._upload_var = mock.Mock()
         manager._upload_var.get.return_value = True
         manager._browse_var = mock.Mock()
@@ -8764,7 +8855,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             with (
                 mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
                 mock.patch('uploader.app_linking_ui.delete_transient'),
-                mock.patch('uploader.app_linking_ui.load_offline_binding', return_value=None),
+                mock.patch('uploader.desktop_connection.load_offline_binding', return_value=None),
             ):
                 thread.return_value.is_alive.return_value = False
                 manager.unlink(second)
@@ -8814,7 +8905,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         with (
             mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
             mock.patch('uploader.app_linking_ui.delete_transient'),
-            mock.patch('uploader.app_linking_ui.load_offline_binding', return_value=None),
+            mock.patch('uploader.desktop_connection.load_offline_binding', return_value=None),
         ):
             thread.return_value.is_alive.return_value = False
             manager.unlink()

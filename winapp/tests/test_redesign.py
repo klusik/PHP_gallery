@@ -1729,6 +1729,61 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     app.probe_linked_uncertain_upload(target, 123)
                 target.session.probe_uncertain_upload.assert_not_called()
 
+    def test_qt_linked_recovery_preserves_uncertainty_for_the_original_target(self) -> None:
+        """Drive the real linked journal through the shared Qt connection commands.
+
+        Returns:
+            None: Observation and stale targets preserve history byte-for-byte.
+                Exact review allows other files and keeps the original fenced.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory).resolve()
+            session = mock.Mock(spec=LinkingSession)
+            session.available.return_value = True
+            session.can_upload.return_value = True
+            session.matches_issuer.return_value = True
+            session.approved_scope.return_value = UPLOAD_SCOPE
+            session.identity.return_value.user_id = 9  # Synthetic Admin identity.
+            session.probe_uncertain_upload.return_value = 'present'
+            target = MAIN.LinkedUploadTarget(
+                session, 'https://gallery.example', 9, 4, 'Fixture gallery',
+            )
+            other = MAIN.replace(target, gallery_id=target.gallery_id + 1)
+            mode = mock.Mock(spec=MAIN.GuiModeOwner)
+            mode.view.return_value = mock.Mock(state='linked_active', record=mock.Mock(
+                issuer=target.issuer, account_id=target.user_id,
+                gallery_id=target.gallery_id, scope=UPLOAD_SCOPE,
+            ))
+            desktop = MAIN.DesktopConfiguration(
+                MAIN.ConfigStore(profile / 'config.json'), MAIN.WatcherConfig(), mode,
+            )
+            desktop.target = target
+            recovery = desktop.connections.recovery
+            assert recovery is not None
+            original_source = profile / 'missing.jpg'
+            digest = 'a' * 64  # Structural SHA-256 spelling for an absent synthetic source.
+            file_size = 128  # Bytes supplied for the synthetic read-only observation.
+            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+                state = MAIN.LinkedUploadState(target)
+                state.mark_uncertain(original_source, digest)
+                retained = state.path.read_bytes()
+                marker = recovery.review(target, None)
+                self.assertIsNotNone(marker)
+                observed, detected_marker = recovery.probe(target, file_size)
+                self.assertEqual(('present', marker), (observed, detected_marker))
+                session.probe_uncertain_upload.assert_called_once_with(target.gallery_id, digest, file_size)
+                self.assertTrue(recovery.is_current(target, detected_marker))
+                self.assertFalse(recovery.is_current(other, detected_marker))
+                self.assertIsNone(recovery.review(other, detected_marker))
+                self.assertEqual(retained, state.path.read_bytes())
+                self.assertEqual(marker, recovery.review(target, detected_marker))
+                self.assertFalse(recovery.is_current(target, detected_marker))
+                verified = MAIN.LinkedUploadState(target)
+                self.assertFalse(verified.has_unresolved_upload())
+                self.assertTrue(verified.has_uncertain_source(original_source, digest))
+                self.assertFalse(verified.retry_allowed(original_source, digest))
+                self.assertFalse(original_source.exists())
+
     def test_recovery_refuses_races_and_a_busy_target(self) -> None:
         """Reject changed markers, identity loss and another target lease.
 
@@ -2633,17 +2688,22 @@ class ConfigStateTests(unittest.TestCase):
         """Keep damaged configuration unchanged and prevent startup workers.
 
         Returns:
-            None: Checks normal, once, startup and startup-registration modes.
+            None: Checks default Qt, explicit Legacy Tk, tray and command modes.
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'
             original = b'{"api_key":"pgu_fixture",'
             path.write_bytes(original)
-            for arguments in ([], ['--once'], ['--startup'], ['--configure-startup']):
+            for arguments in (
+                [], ['--gui-backend', 'tkinter'], ['--once'], ['--startup'],
+                ['--configure-startup'],
+            ):
                 with (
                     self.subTest(arguments=arguments),
+                    mock.patch.object(MAIN, 'CONFIG_DIR', path.parent),
                     mock.patch.object(MAIN, 'WindowsInstance') as instance,
                     mock.patch.object(MAIN, 'setup_logging'),
+                    mock.patch.object(MAIN, '_start_qt_supervisor') as supervise,
                     mock.patch.object(MAIN, 'WatcherApp') as app,
                     mock.patch.object(MAIN, 'run_once') as once,
                     mock.patch.object(MAIN, 'synchronize_startup') as startup,
@@ -2652,11 +2712,14 @@ class ConfigStateTests(unittest.TestCase):
                 ):
                     instance.return_value.acquire.return_value = True
                     self.assertEqual(1, MAIN.main(arguments + ['--config', str(path)]))
+                    supervise.assert_not_called()
                     app.assert_not_called()
                     once.assert_not_called()
                     startup.assert_not_called()
                     if '--once' in arguments or '--configure-startup' in arguments:
                         messages.showerror.assert_not_called()
+                    else:
+                        messages.showerror.assert_called_once()
                     self.assertEqual(original, path.read_bytes())
 
     def test_once_requires_real_mode_admission_for_the_complete_scan(self) -> None:

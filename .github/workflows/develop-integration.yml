@@ -508,6 +508,19 @@ jobs:
       checkout_ref: ${{ needs.publish-candidate.outputs.candidate_sha }}
       source_base: ${{ needs.select.outputs.develop_sha }}
 
+  # Independently qualify the issue 445 desktop and real update workloads on A.
+  # The published FULL seal retains its existing required owner set.
+  issue-445-winapp:
+    name: Issue 445 exact prepared WinApp evidence
+    needs: [select, publish-candidate, inherited-basic]
+    if: ${{ !cancelled() && inputs.qualify_only && inputs.source_branch == 'feature/445-pyside6-winapp' && inputs.qualified_run == '' && needs.select.result == 'success' && needs.publish-candidate.result == 'success' && needs.inherited-basic.result == 'success' && needs.publish-candidate.outputs.candidate_sha == needs.publish-candidate.outputs.final_source_sha }}
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/issue-445-winapp.yml
+    with:
+      candidate: ${{ needs.publish-candidate.outputs.candidate_sha }}
+
   # Read-only seal before any develop write: authenticate all native FULL
   # owners, independent BASIC and the exact candidate/tree/base. Retaining
   # this archive permits safe publication recovery without another FULL.

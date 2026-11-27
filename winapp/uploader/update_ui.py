@@ -32,6 +32,7 @@ from uploader.localization import gettext, gettext_noop
 from uploader.state_store import atomic_write_json
 from uploader.ui_shell import EmbeddedWindow
 from uploader.self_update import (
+    InstallGate,
     ReleaseAsset,
     UpdateCancelled,
     UpdateDiagnostic,
@@ -136,34 +137,6 @@ UPDATE_STATE_MAX_BYTES = 16384
 # Consumers: UpdateController.show.
 # Rationale: 620 by 250 fits the translated installer handoff and action row.
 _UPDATE_DIALOG_SIZE = (620, 250)
-
-
-class InstallGate:
-    """Pause new operations only while preparing the external helper."""
-
-    def __init__(self) -> None:
-        """Initialize open admission without a worker-completion deadline.
-
-        Returns:
-            None: Starts with new work permitted.
-        """
-        self.active = False
-
-    def begin(self) -> None:
-        """Pause new work while the verified installer is handed off.
-
-        Returns:
-            None: Marks helper preparation active.
-        """
-        self.active = True
-
-    def cancel(self) -> None:
-        """Restore admission when helper preparation fails.
-
-        Returns:
-            None: Leaves the application available for another attempt.
-        """
-        self.active = False
 
 
 def read_update_state(state_path: Path) -> dict[str, object]:

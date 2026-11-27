@@ -22,9 +22,11 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass, replace
+from math import nextafter
 from pathlib import Path
 from typing import Callable
 import tkinter as tk
@@ -92,6 +94,12 @@ SCROLL_FIXTURE_DETAIL_FRAGMENTS = 40
 # Type: int. Units: Win32 wheel delta. Scope: evidence scroll regression.
 # Consumers: WatchRecoveryNativeUiTests. Rationale: 120 is the standard single-notch delta.
 SCROLL_FIXTURE_WHEEL_DELTA = -120
+# Purpose: Reproduce a monotonic-clock rounding boundary in the countdown.
+# Type: float. Units: synthetic monotonic seconds. Scope: completed progress UI.
+# Consumers: Native WatchRecovery countdown fixture.
+# Rationale: Just below 128, adding the three-second interval rounds the
+# deadline to 131, so the remaining floating-point value is greater than 3.
+AUTOCLOSE_FIXTURE_MONOTONIC_SECONDS = nextafter(128.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -851,11 +859,20 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.activity_bar.grid_remove()
         ui.refresh_tasks()
         ui.refresh_progress_actions()
-        ui.refresh_autoclose()
-        root.update()
-        self.assertIn('3', ui.completion_var.get())
-        self.assertTrue(ui.autoclose_frame.winfo_ismapped())
-        self.capture_force_finish_window(window, ui, 'finish-completed-countdown.png')
+        with mock.patch(
+            'uploader.flight_ui.time.monotonic',
+            return_value=AUTOCLOSE_FIXTURE_MONOTONIC_SECONDS,
+        ):
+            ui.refresh_autoclose()
+            root.update()
+            self.assertEqual(
+                tr('en', 'progress_autoclose').format(seconds=3),
+                ui.completion_var.get(),
+            )
+            self.assertTrue(ui.autoclose_frame.winfo_ismapped())
+            self.capture_force_finish_window(
+                window, ui, 'finish-completed-countdown.png',
+            )
         ui.keep_progress_open()
         self.assertFalse(ui.autoclose_frame.winfo_manager())
         progress.phase = 'draining'

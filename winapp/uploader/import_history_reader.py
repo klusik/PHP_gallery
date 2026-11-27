@@ -26,6 +26,28 @@ from .state_store import JobStateStore
 ReadKind = Literal["history", "detail"]
 
 
+def read_import_detail(
+    store: JobStateStore, job_id: str, item_row_limit: int,
+    generation: ImportWorkerGeneration, revision: int,
+) -> tuple[ImportJob | None, ImportProgressSnapshot | None]:
+    """Read and project one exact durable job for either desktop frontend.
+
+    Args:
+        store (JobStateStore): Existing safe state reader for this profile.
+        job_id (str): Exact selected durable import job identity.
+        item_row_limit (int): Caller-owned view cap for accepted item rows.
+        generation (ImportWorkerGeneration): Opaque selection identity.
+        revision (int): Current request revision for this generation.
+    Returns:
+        tuple[ImportJob | None, ImportProgressSnapshot | None]: Independent
+            job copy and immutable bounded detail, or two None values if absent.
+    """
+    job = store.get_job(job_id)
+    if job is None:
+        return None, None
+    return job, ImportProgressSnapshot.from_job(job, generation, revision, item_row_limit)
+
+
 @dataclass(frozen=True, slots=True)
 class ImportHistoryReadResult:
     """Carry one latest history or detail read back to the event-pump owner.
@@ -328,13 +350,9 @@ class ImportHistoryReader:
                 return ImportHistoryReadResult(
                     kind="history", ticket=request.ticket, history=history,
                 )
-            job = self._store.get_job(request.job_id)
-            snapshot = (
-                ImportProgressSnapshot.from_job(
-                    job, request.generation, request.ticket,
-                    request.item_row_limit,
-                )
-                if job is not None else None
+            job, snapshot = read_import_detail(
+                self._store, request.job_id, request.item_row_limit,
+                request.generation, request.ticket,
             )
             return ImportHistoryReadResult(
                 kind="detail", ticket=request.ticket, snapshot=snapshot, job=job,

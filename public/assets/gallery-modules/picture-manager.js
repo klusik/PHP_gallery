@@ -11,7 +11,7 @@
  * Responsibilities:
  *   - Attach a visible file-manager-style selection model to public gallery photos and physical subgalleries
  *   - Support Shift-click range selection and Ctrl/Cmd-click item toggling
- *   - Move selected photos through the existing server-side move endpoint
+ *   - Move selected photos or subgalleries through the shared move endpoint
  *   - Copy selected photos through the shared server-side copy endpoint
  *   - Delete mixed selections through the existing filesystem-backed mutation services
  *   - Create a physical gallery from selected photos and subgallery trees at a chosen parent
@@ -57,6 +57,8 @@ export function teardownPictureManager() {
 /**
  * Enables the public gallery Picture manager.
  *
+ * @param {function(Record<string, unknown>):Promise<{synchronized: boolean}>} completeGalleryMove Canonical public refresh for a confirmed gallery move.
+ *
  * The interaction model intentionally mirrors normal desktop file managers while
  * keeping every action discoverable through visible controls. Normal photo clicks
  * still open the lightbox. Modifier-clicks and the visible check buttons are the
@@ -64,7 +66,7 @@ export function teardownPictureManager() {
  *
  * @return {void} Result value for the caller.
  */
-export function setupPictureManager() {
+export function setupPictureManager(completeGalleryMove) {
     // toolbar stores the public-page manager controls rendered by PHP.
     const toolbar = document.querySelector('[data-picture-manager]');
     if (!(toolbar instanceof HTMLElement)) {
@@ -83,18 +85,6 @@ export function setupPictureManager() {
     const imageCards = cards.filter((card) => card.hasAttribute('data-picture-manager-image'));
     // galleryCards stores selected physical direct subgalleries used by delete and create-from-selection.
     const galleryCards = cards.filter((card) => card.hasAttribute('data-picture-manager-gallery'));
-    if (cards.length === 0) {
-        activePictureManager = {
-            toolbar,
-            /** Clear the empty-state manager's expanded toolbar marker. */
-            teardown() {
-                if (toolbar.dataset.pictureManagerExpanded) {
-                    delete toolbar.dataset.pictureManagerExpanded;
-                }
-            },
-        };
-        return;
-    }
     const eventController = new AbortController();
     const signalOptions = {signal: eventController.signal};
 
@@ -111,8 +101,9 @@ export function setupPictureManager() {
     const sourceGalleryId = toolbar.dataset.sourceGalleryId || '';
     // csrfToken stores the CSRF token rendered by PHP for manager endpoints.
     const csrfToken = toolbar.dataset.csrfToken || '';
-    // moveUrl stores the JSON endpoint used for moving selected photos.
+    // moveUrl stores the JSON endpoint used for moving selected physical items.
     const moveUrl = toolbar.dataset.moveUrl || '';
+    const canMoveGalleries = toolbar.dataset.pictureManagerCanMoveGalleries === '1';
     // copyUrl stores the JSON endpoint used for copying selected photos to an existing gallery.
     const copyUrl = toolbar.dataset.copyUrl || '';
     // createUrl stores the JSON endpoint used for creating a child gallery copy.
@@ -320,31 +311,39 @@ export function setupPictureManager() {
 
         /**
      * Enables or disables mutation buttons based on current form state.
+     * @return {void} Projects the current selection into the visible action controls.
      */
     function updateActionButtons() {
         const hasSelection = selectedKeys.size > 0;
-        const hasSelectedGalleries = selectedGalleryIdsInPageOrder().length > 0;
+        const galleryIds = selectedGalleryIdsInPageOrder();
+        const hasSelectedGalleries = galleryIds.length > 0;
         const hasSelectedImages = selectedIdsInPageOrder().length > 0;
-        const hasDestination = destinationInput instanceof HTMLInputElement && destinationInput.value !== '';
+        const destinationId = destinationInput instanceof HTMLInputElement ? destinationInput.value : '';
+        const hasDestination = destinationId !== '' && destinationId !== sourceGalleryId;
         const hasNewParent = newParentInput instanceof HTMLInputElement && newParentInput.value !== '';
         const hasTitle = newTitleInput instanceof HTMLInputElement && newTitleInput.value.trim() !== '';
         if (moveButton instanceof HTMLButtonElement) {
-            moveButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries || !hasDestination;
+            const canMoveSelection = hasSelectedGalleries
+                ? canMoveGalleries && !hasSelectedImages && !galleryIds.includes(destinationId)
+                : hasSelectedImages;
+            moveButton.disabled = activeRequest || !canMoveSelection || !hasDestination;
         }
         if (copyButton instanceof HTMLButtonElement) {
+            copyButton.hidden = hasSelectedGalleries;
             copyButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries || !hasDestination;
         }
         if (createButton instanceof HTMLButtonElement) {
             createButton.disabled = activeRequest || !hasSelection || !hasTitle || !hasNewParent;
         }
         if (shareButton instanceof HTMLButtonElement) {
+            shareButton.hidden = hasSelectedGalleries;
             shareButton.disabled = activeRequest || !hasSelectedImages || hasSelectedGalleries;
         }
         if (deleteButton instanceof HTMLButtonElement) {
             deleteButton.disabled = activeRequest || !hasSelection;
         }
         if (selectAllButton instanceof HTMLButtonElement) {
-            selectAllButton.disabled = activeRequest;
+            selectAllButton.disabled = activeRequest || cards.length === 0;
         }
     }
 
@@ -707,10 +706,12 @@ export function setupPictureManager() {
     }
 
         /**
-     * Adds selected image IDs and shared request metadata to a FormData object.
+     * Adds selected physical item IDs and shared request metadata to a form.
      *
      * @param {FormData} formData Request body to populate.
      * @param {string[]} imageIds Selected image IDs.
+     * @param {string[]} galleryIds Selected direct physical gallery IDs.
+     * @return {void} Populates the bounded selection values and mutation credentials.
      */
     function appendBaseFormData(formData, imageIds, galleryIds = []) {
         formData.append('csrf_token', csrfToken);
@@ -762,23 +763,26 @@ export function setupPictureManager() {
      *
      * @param {string} destinationGalleryId Destination gallery ID.
      * @param {string[]|null} explicitImageIds Optional explicit dragged image IDs.
+     * @return {Promise<void>} Moves the selected item type and presents the verified result.
      */
     async function moveSelectedToGallery(destinationGalleryId, explicitImageIds = null) {
         const imageIds = Array.isArray(explicitImageIds) && explicitImageIds.length > 0
             ? explicitImageIds.map((imageId) => String(imageId)).filter((imageId) => imageId !== '')
             : selectedIdsInPageOrder();
+        const galleryIds = explicitImageIds === null ? selectedGalleryIdsInPageOrder() : [];
+        const movingGalleries = galleryIds.length > 0;
         if (activeRequest) {
             return;
         }
-        if (imageIds.length === 0) {
-            setStatus(i18n('picture_manager.select_photo_first', 'Select at least one photo first.'), 'error');
+        if (imageIds.length === 0 && !movingGalleries) {
+            setStatus(i18n('picture_manager.select_item_first', 'Select at least one photo or physical gallery first.'), 'error');
             return;
         }
-        if (!Array.isArray(explicitImageIds) && selectedGalleryIdsInPageOrder().length > 0) {
-            setStatus(i18n('picture_manager.move_copy_photos_only', 'Move and copy currently apply only to selected photos. Clear selected galleries first.'), 'error');
+        if (movingGalleries && (!canMoveGalleries || imageIds.length > 0)) {
+            setStatus(i18n('picture_manager.move_one_item_type', 'Select only photos or only galleries to move.'), 'error');
             return;
         }
-        if (!destinationGalleryId) {
+        if (!destinationGalleryId || destinationGalleryId === sourceGalleryId || galleryIds.includes(destinationGalleryId)) {
             setStatus(i18n('picture_manager.choose_destination_first', 'Choose a destination gallery first.'), 'error');
             return;
         }
@@ -788,18 +792,35 @@ export function setupPictureManager() {
         }
 
         const formData = new FormData();
-        appendBaseFormData(formData, imageIds);
+        appendBaseFormData(formData, imageIds, galleryIds);
         formData.append('destination_gallery_id', destinationGalleryId);
 
         setRequestActive(true);
-        setStatus(i18n('picture_manager.moving_selected', 'Moving {count} selected photo(s)...', {count: imageIds.length}), 'working');
+        const working = movingGalleries
+            ? i18n('picture_manager.moving_galleries', 'Moving selected galleries…')
+            : i18n('picture_manager.moving_selected', 'Moving {count} selected photo(s)...', {count: imageIds.length});
+        setStatus(working, 'working');
         try {
             const payload = await postManagerAction(moveUrl, formData);
+            if (movingGalleries) {
+                const result = await completeGalleryMove(payload);
+                if (!eventController.signal.aborted) {
+                    clearSelection();
+                    setRequestActive(false);
+                }
+                setPanelExpanded(true);
+                const message = result.synchronized ? payload.message : i18n(
+                    'admin.side_panel.sync_failed_after_success',
+                    'The gallery was saved, but the refreshed public view could not be verified. The server change was kept; continue working or reopen the page later.',
+                );
+                setStatus(message, result.synchronized && !payload.partial ? 'ok' : 'error');
+                return;
+            }
             setStatus(payload.message || i18n('picture_manager.move_complete', 'Selected photos were moved.'), 'ok');
             reloadAfterSuccess(payload);
         } catch (error) {
             setStatus(error instanceof Error ? error.message : i18n('picture_manager.move_failed', 'Image move failed.'), 'error');
-            setRequestActive(false);
+            if (!eventController.signal.aborted) setRequestActive(false);
         }
     }
 
@@ -807,6 +828,7 @@ export function setupPictureManager() {
      * Copies the current selection into an existing destination gallery.
      *
      * @param {string} destinationGalleryId Destination gallery ID.
+     * @return {Promise<void>} Reports the copy result or a recoverable refusal.
      */
     async function copySelectedToGallery(destinationGalleryId) {
         const imageIds = selectedIdsInPageOrder();
@@ -818,7 +840,7 @@ export function setupPictureManager() {
             return;
         }
         if (selectedGalleryIdsInPageOrder().length > 0) {
-            setStatus(i18n('picture_manager.move_copy_photos_only', 'Move and copy currently apply only to selected photos. Clear selected galleries first.'), 'error');
+            setStatus(i18n('picture_manager.copy_photos_only', 'Copy applies to selected photos.'), 'error');
             return;
         }
         if (!destinationGalleryId) {
@@ -1057,6 +1079,7 @@ export function setupPictureManager() {
      * Moves the dragged selection when dropped onto a valid subgallery target.
      *
      * @param {DragEvent} event Drop event from a subgallery card.
+     * @return {void} Admits only the photo drag path.
      */
     function handleTargetDrop(event) {
         const target = dropTargetAt(event.clientX, event.clientY)
@@ -1073,7 +1096,7 @@ export function setupPictureManager() {
             return;
         }
         const explicitImageIds = publicPhotoImageIdsFromDataTransfer(event.dataTransfer || null);
-        moveSelectedToGallery(destinationGalleryId, explicitImageIds.length > 0 ? explicitImageIds : null);
+        moveSelectedToGallery(destinationGalleryId, explicitImageIds);
     }
 
         /**
@@ -1236,6 +1259,7 @@ export function setupPictureManager() {
     document.addEventListener(PUBLIC_PHOTO_MOVE_EVENT, handleExternalDropMove, signalOptions);
 
     setPanelExpanded(false);
+    setRequestActive(false);
     syncSelectionState();
 
     activePictureManager = {

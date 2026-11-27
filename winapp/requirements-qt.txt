@@ -1,0 +1,17 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: winapp/requirements-qt.txt
+# Module Type: Optional Qt source dependencies
+# Purpose: Install the replaceable Qt libraries for the source launcher.
+# Responsibilities: Keep binary-wheel policy limited to Qt dependencies.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+-c constraints.txt
+# Purpose: Keep native Qt dependencies on their qualified binary wheels.
+# Type: package version requirement. Units: semantic version. Scope: Qt source.
+# Consumers: source Qt frontend and the unified frozen build.
+# Rationale: retain the current Qt 6.10.3 line and avoid compiling native Qt.
+--only-binary=PySide6-Essentials,shiboken6
+PySide6-Essentials==6.10.3
+shiboken6==6.10.3

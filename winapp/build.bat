@@ -21,7 +21,7 @@ rem PHP_GALLERY_PYTHON may select an exact 64-bit Python executable.
 if defined PHP_GALLERY_PYTHON goto selected_python
 where py >nul 2>nul
 if errorlevel 1 goto path_python
-py -3 "%~dp0build_installer.py" %*
+py -3.14 "%~dp0build_installer.py" %*
 exit /b %errorlevel%
 
 :selected_python

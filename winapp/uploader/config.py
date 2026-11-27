@@ -24,11 +24,54 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
 from .flight_jobs import read_document
 from .gallery_media_cache import GalleryMediaCache, MEDIA_CACHE_MAX_BYTES
-from .localization import DEFAULT_LANGUAGE, LANGUAGE_NAMES
+from .localization import DEFAULT_LANGUAGE, LANGUAGE_NAMES, gettext
 from .state_store import atomic_write_json
 from .thumbnail_batch_protocol import PRODUCTION_MAX_ITEMS
 
 APP_PROFILE_NAME = "PHPGalleryUploader"
+
+# Purpose: Share the established worker admission limits and preset counts.
+# Type: int and tuple[int, ...]. Units: workers. Scope: WinApp import settings.
+# Consumers: Tk and Qt worker selectors and upload/thumbnail policy.
+# Rationale: Thumbnail preparation can use up to 32 workers while FIFO sends
+# one upload at a time. These are the existing Tk choices within those bounds.
+MAX_THUMBNAIL_WORKERS = 32
+MAX_UPLOAD_WORKERS = 1
+WORKER_COUNT_PRESETS = (1, 2, 4, 6, 8, 12, 16, 24, 32)
+
+
+def worker_choices(maximum: int) -> list[tuple[int, str]]:
+    """Present the stable worker counts and localized automatic choice.
+
+    Args:
+        maximum (int): Highest numeric choice allowed for this operation.
+    Returns:
+        list[tuple[int, str]]: Persisted count and display caption in reference
+            order. Zero is the existing automatic selection.
+    """
+    choices = [(0, gettext("Auto"))]
+    choices.extend((count, str(count)) for count in WORKER_COUNT_PRESETS if count <= maximum)
+    return choices
+
+
+def ai_backend_labels() -> dict[str, str]:
+    """Describe the selectable AI providers and modes in the current locale.
+
+    Returns:
+        dict[str, str]: Stable backend codes mapped to display labels.
+    """
+    return {
+        "auto": gettext("Auto"),
+        "pillow": "Pillow",
+        "transformers": "Transformers",
+        "ollama": "Ollama",
+        "external": gettext("External command"),
+    }
+
+# Purpose: Convert user-facing archive size limits to their durable byte values.
+# Type: int. Units: bytes per GiB. Scope: both WinApp Settings forms.
+# Consumers: WatcherConfig editors. Rationale: IEC binary units match legacy preferences.
+BYTES_PER_GIB = 1024 ** 3
 LANGUAGE_FILE = "ui-language.json"
 THUMBNAIL_BATCH_FILE = "thumbnail-download.json"
 

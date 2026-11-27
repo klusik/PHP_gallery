@@ -14,16 +14,20 @@
 
 import json
 import math
+import os
 import subprocess
 import sys
 import time
+import unittest
 from collections import OrderedDict
 from pathlib import Path
 from typing import TypeAlias, TypeGuard
 
 from scripts.audit_winapp_report import AuditReport
 from scripts.audit_winapp_report import PartitionCoverageProof, PartitionProcess
-from scripts.audit_winapp_report import discover_canonical_suite, flatten_suite
+from scripts.audit_winapp_report import (
+    VISUAL_PARITY_CLASS_ID, discover_canonical_suite, flatten_suite,
+)
 from scripts.audit_winapp_report import write_complete_report
 
 
@@ -56,17 +60,23 @@ CHILD_REASON_LIMIT = 16384
 # separate from the other measured owners and the canonical remainder.
 PARTITION_ISOLATED_MODULES = frozenset({"test_native_gallery_viewer"})
 
-# Purpose: Isolate measured benchmark and preload classes in separate children.
+# Purpose: Isolate measured native classes and the crash-prone Tk shell class.
 # Type: tuple[str, ...]. Units: unittest module/class identities.
 # Scope: partitioned WinApp. Consumers: partition_test_ids().
 # Rationale: the two filesystem cohorts and real-session preload benchmark each
 # approach the existing child deadline and must not share another slow owner.
 # The durable dense-return case has the same filesystem cost and its own class.
+# Paired native visual captures keep their existing child deadline. The real
+# Tk centered-panel focus test repeatedly segfaulted Linux/Xvfb partitions 7
+# in hosted runs 310 and 8621, losing 537 otherwise-discovered identities;
+# isolating its class gives it a fresh Tcl/Tk process without removing focus.
 PARTITION_ISOLATED_CLASSES = (
     "test_gallery_read_linking.ThumbnailCacheSmallBenchmarkTests",
     "test_gallery_read_linking.ThumbnailCacheLargeBenchmarkTests",
     "test_gallery_preload.GalleryPreloadWorkerTests",
     "test_native_gallery_dense_return.NativeGalleryDenseReturnTests",
+    "test_gui_visual_parity.VisualParityTests",
+    "test_ui_shell.EmbeddedShellTests",
 )
 
 
@@ -74,16 +84,86 @@ PARTITION_ISOLATED_CLASSES = (
 # Type: int. Units: remainder child processes. Scope: partitioned WinApp.
 # Consumers: partition_test_ids(). Rationale: two roughly 730-test shards
 # repeatedly reached the 90-second child cap on Windows. Three whole-class
-# buckets reduce aggregation while retaining the five isolated measured groups.
+# buckets reduce aggregation while retaining six isolated groups.
 PARTITION_REMAINDER_SHARD_COUNT = 3
 
+# Purpose: Spread costly native, FIFO and I/O owners across the remainder.
+# Type: dict[str, int]. Units: equivalent ordinary test cases.
+# Scope: remainder class balancing. Consumers: partition_test_ids().
+# Rationale: use about one case per 100 ms of measured class time. Windows
+# runs 45751101072 and 45751719204 showed these classes taking 6 to 30 seconds,
+# and the count-only split exceeded the unchanged 90-second child deadline.
+# Run 45781059052 measured about 50 seconds for the real paired windows and
+# Czech states together. The full paired visual owner now has a fresh child
+# deadline; other measured classes keep their hosted-cost weights.
+# The incomplete Watcher integration class includes its remaining cases from
+# the complete run. Other classes retain their actual case count.
+# Windows run 45805805998 measured 19.8 seconds for the thumbnail session
+# class and 11.4 seconds for the clean-source environment check. The same
+# remainder partition then reached its unchanged deadline during teardown.
+# Tk-only run 45932615592 spent 17.48 seconds across the first 16 recovery
+# cases, 12.88 in queue tests, and 18.88 in native localization in the same
+# overdue child. Recovery retains an allowance for its last case. The full
+# Windows run 45860420889 spent 12.84 seconds on the retry progress case and
+# ~24 seconds inside the native Qt cohorts. The complete ordinary suite also
+# uses this distribution for its core-only Tk environment.
+PARTITION_REMAINDER_CLASS_WEIGHTS = {
+    "test_uploader_fifo.UploaderFifoTests": 225,
+    "test_localization.NativeLocalizationTests": 190,
+    "test_gallery_load_progress.NativeGalleryLoadProgressTests": 150,
+    "test_qt_backend.QtBackendTests": 260,
+    "test_watch_recovery_integration.WatchRecoveryIntegrationTests": 100,
+    "test_watch_recovery.WatchRecoveryTests": 190,
+    "test_watch_queue.WatchQueueTests": 130,
+    "test_gallery_retry_progress.GalleryRetryProgressTests": 130,
+    "test_flight_watch_drain.WatchDrainTests": 85,
+    "test_thumbnail_batch_session.ThumbnailBatchSessionTests": 200,
+    "test_source_backend_environment.SourceBackendEnvironment": 115,
+    "test_flight_report.FlightReportTests": 65,
+    "test_native_thumbnail_batch.NativeThumbnailBatchTests": 65,
+    "test_canvas_gallery_grid.CanvasGalleryGridTests": 60,
+}
 
-def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
-    """Isolate measured owners or balance whole classes when policies are absent.
+# Purpose: Balance the ordinary remainder of the Qt visual-delegated owner.
+# Type: dict[str, int]. Units: equivalent ordinary test cases.
+# Scope: winapp-partitioned-no-visual. Consumers: partition_nonvisual_test_ids().
+# Rationale: run 45991503477 reached the child cap after 35.8 seconds in
+# QtBackendTests and 3.8 seconds in the wide viewport class. The 41- and
+# 4-second weights completed all nine shards on 45993687942. Its Tk-only job
+# showed a different cost profile because it cannot run the Qt cases.
+PARTITION_VISUAL_DELEGATED_CLASS_WEIGHTS = {
+    **PARTITION_REMAINDER_CLASS_WEIGHTS,
+    "test_qt_backend.QtBackendTests": 410,
+    "test_qt_backend.QtWidePhotosViewportTests": 40,
+}
+
+# The baseline checkout supplies its own canonical adapter. Use a separate
+# interpreter to keep its imported modules independent of the tested source.
+BASELINE_INVENTORY_PROGRAM = """import json
+import unittest
+from scripts.audit_winapp_report import discover_canonical_suite, flatten_suite
+
+cases = flatten_suite(discover_canonical_suite())
+if unittest.defaultTestLoader.errors:
+    raise RuntimeError('Baseline canonical discovery failed.')
+print(json.dumps([case.id() for case in cases]))
+"""
+
+
+def partition_test_ids(
+    test_ids: list[str], count: int, *,
+    isolated_classes: tuple[str, ...] = PARTITION_ISOLATED_CLASSES,
+    class_weights: dict[str, int] = PARTITION_REMAINDER_CLASS_WEIGHTS,
+) -> list[list[str]]:
+    """Isolate measured owners and balance whole classes by estimated cost.
 
     Args:
         test_ids (list[str]): Canonical ordered unittest IDs.
         count (int): Required partition count.
+        isolated_classes (tuple[str, ...]): Complete measured-class set to
+            isolate when the configured class-preserving shape is available.
+        class_weights (dict[str, int]): Case-equivalent cost per measured class
+            for this suite. Unlisted classes use their discovered case count.
     Returns:
         list[list[str]]: Disjoint class-preserving IDs in stable shard order;
             the measured module and classes each occupy separate
@@ -103,16 +183,16 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
     if len(classes) < count:
         raise ValueError("Canonical inventory has fewer classes than partitions.")
 
-    # The viewer module contributes one isolated group; remainder buckets are
-    # class-balanced only after all five measured groups have been removed.
+    # The viewer module and six isolated classes occupy separate groups;
+    # remainder buckets are class-balanced only after those seven groups.
     isolation_group_count = (
-        len(PARTITION_ISOLATED_CLASSES) + 1
+        len(isolated_classes) + 1
         + PARTITION_REMAINDER_SHARD_COUNT
     )
     if count == isolation_group_count:
         viewer_ids: list[str] = []
         benchmark_ids_by_class: dict[str, list[str]] = {
-            class_id: [] for class_id in PARTITION_ISOLATED_CLASSES
+            class_id: [] for class_id in isolated_classes
         }
         remaining_ids: list[str] = []
         for test_id in test_ids:
@@ -126,7 +206,7 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
                 remaining_ids.append(test_id)
         isolated_ids = [
             benchmark_ids_by_class[class_id]
-            for class_id in PARTITION_ISOLATED_CLASSES
+            for class_id in isolated_classes
         ]
         if not viewer_ids or not all(isolated_ids) or not remaining_ids:
             raise ValueError(
@@ -134,21 +214,58 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
             )
         remainder_shards = partition_test_ids(
             remaining_ids, PARTITION_REMAINDER_SHARD_COUNT,
+            class_weights=class_weights,
         )
         shards = [viewer_ids, *isolated_ids, *remainder_shards]
         return shards
 
     shards: list[list[str]] = [[] for _ in range(count)]
     weights = [0] * count
-    indexed_classes = list(enumerate(classes.values()))
-    for _, class_tests in sorted(
-        indexed_classes, key=lambda item: (-len(item[1]), item[0]),
-    ):
+    weighted_classes = [
+        (max(len(ids), class_weights.get(class_id, 0)), ids)
+        for class_id, ids in classes.items()
+    ]
+    # Stable sort preserves original class discovery order for equal weights.
+    for weight, class_tests in sorted(weighted_classes, key=lambda item: -item[0]):
         target = min(range(count), key=lambda index: (weights[index], index))
         shards[target].extend(class_tests)
-        weights[target] += len(class_tests)
+        weights[target] += weight
     positions = {test_id: index for index, test_id in enumerate(test_ids)}
     return [sorted(shard, key=positions.__getitem__) for shard in shards]
+
+
+def partition_nonvisual_test_ids(
+    test_ids: list[str],
+) -> tuple[list[list[str]], list[str]]:
+    """Partition canonical IDs except the separately audited visual class.
+
+    Args:
+        test_ids (list[str]): Complete standard unittest discovery order.
+    Returns:
+        tuple[list[list[str]], list[str]]: Nine class-preserving ordinary
+            shards and the exact delegated visual-class identities.
+    Raises:
+        ValueError: Canonical discovery lacks or duplicates the visual class.
+    """
+    delegated = [
+        test_id for test_id in test_ids
+        if test_id.rpartition('.')[0] == VISUAL_PARITY_CLASS_ID
+    ]
+    if not delegated or len(delegated) != len(set(delegated)):
+        raise ValueError('Canonical discovery has no unique visual test identities.')
+    delegated_set = set(delegated)
+    ordinary_ids = [test_id for test_id in test_ids if test_id not in delegated_set]
+    ordinary_isolates = tuple(
+        class_id for class_id in PARTITION_ISOLATED_CLASSES
+        if class_id != VISUAL_PARITY_CLASS_ID
+    )
+    expected_count = (
+        len(ordinary_isolates) + 1 + PARTITION_REMAINDER_SHARD_COUNT
+    )
+    return partition_test_ids(
+        ordinary_ids, expected_count, isolated_classes=ordinary_isolates,
+        class_weights=PARTITION_VISUAL_DELEGATED_CLASS_WEIGHTS,
+    ), delegated
 
 
 def validate_child_report(
@@ -424,25 +541,108 @@ def merge_reports(
     return merged, merged["successful"]
 
 
+def verify_baseline_inventory(
+    output: Path, report: AuditReport, child_timeout: int,
+) -> bool:
+    """Compare reported Tk regression outcomes against immutable baseline IDs.
+
+    Args:
+        output (Path): Main report location in the central audit directory.
+        report (AuditReport): Current complete or failed native partition report.
+        child_timeout (int): Existing seconds available to a discovery child.
+    Returns:
+        bool: True when every baseline test reached the current report, or this
+            run has no baseline inventory input.
+    Raises:
+        RuntimeError: Hosted checkout identity or complete discovery cannot be proved.
+    """
+    baseline_path = os.environ.get("PHP_GALLERY_WINAPP_BASELINE_DIR")
+    if not baseline_path:
+        return True
+    expected_base = os.environ.get("PHP_GALLERY_SOURCE_BASE", "")
+    expected_source = os.environ.get("ISSUE_445_SHA", "")
+    root = Path.cwd().resolve(strict=True)
+    baseline = Path(baseline_path).resolve(strict=True)
+    if (os.environ.get("GITHUB_ACTIONS") != "true"
+            or not baseline.is_relative_to(root / "cache")
+            or not expected_base or not expected_source or expected_base == expected_source):
+        raise RuntimeError("Immutable baseline inventory requires isolated hosted checkouts.")
+    for checkout, expected in ((baseline, expected_base), (root, expected_source)):
+        observed = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=checkout, timeout=child_timeout,
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if observed != expected:
+            raise RuntimeError("A native regression checkpoint changed its source revision.")
+    discovered = subprocess.run(
+        [sys.executable, "-c", BASELINE_INVENTORY_PROGRAM], cwd=baseline,
+        timeout=child_timeout, capture_output=True, text=True, check=True,
+    )
+    baseline_ids = json.loads(discovered.stdout)
+    if (not isinstance(baseline_ids, list) or not baseline_ids
+            or not all(isinstance(item, str) and item.startswith("test_") for item in baseline_ids)
+            or len(baseline_ids) != len(set(baseline_ids))):
+        raise RuntimeError("Baseline canonical discovery produced invalid or missing test IDs.")
+    observed_tests = {test["id"]: test for test in report["tests"]}
+    missing = sorted(set(baseline_ids) - observed_tests.keys())
+    skipped = {
+        identity: observed_tests[identity]["reason"] for identity in baseline_ids
+        if identity in observed_tests and observed_tests[identity]["status"] == "SKIP"
+    }
+    proof = {
+        "status": "PASS" if not missing else "FAIL",
+        "source_sha": expected_source,
+        "baseline_sha": expected_base,
+        "baseline_test_ids": baseline_ids,
+        "missing_baseline_ids": missing,
+        "current_skips_among_baseline_ids": skipped,
+        "current_test_count": len(observed_tests),
+    }
+    output.with_name("winapp-baseline-inventory.json").write_text(
+        json.dumps(proof, indent=2), encoding="utf-8",
+    )
+    if missing:
+        print(f"Baseline WinApp regression identities absent: {missing}", file=sys.stderr)
+    return not missing
+
+
 def main(arguments: list[str]) -> int:
     """Run canonical WinApp partitions serially and write one complete report.
 
     Args:
-        arguments (list[str]): Output path, partition count and per-child timeout.
+        arguments (list[str]): Output path, partition count, per-child timeout,
+            and optional ``--delegate-visual`` mode.
     Returns:
         int: Zero only when all complete child reports prove and pass full discovery.
     """
-    if len(arguments) != 3:
+    if len(arguments) not in (3, 4):
         return 2
     output_path = Path(arguments[0]).expanduser().resolve()
     try:
         partition_count = int(arguments[1])
         child_timeout = int(arguments[2])
-        if output_path.exists() or child_timeout < 1:
+        delegate_visual = len(arguments) == 4 and arguments[3] == '--delegate-visual'
+        if (len(arguments) == 4 and not delegate_visual
+                or output_path.exists() or child_timeout < 1):
             return 2
-        cases = flatten_suite(discover_canonical_suite())
-        expected_ids = [case.id() for case in cases]
-        shards = partition_test_ids(expected_ids, partition_count)
+        suite = discover_canonical_suite()
+        if unittest.defaultTestLoader.errors:
+            details = '\n'.join(unittest.defaultTestLoader.errors)
+            raise ValueError('Canonical WinApp discovery failed:\n' + details)
+        cases = flatten_suite(suite)
+        canonical_ids = [case.id() for case in cases]
+        if delegate_visual:
+            shards, delegated_ids = partition_nonvisual_test_ids(canonical_ids)
+            if len(shards) != partition_count:
+                raise ValueError(
+                    'The delegated visual partition count does not match policy.'
+                )
+            delegated_set = set(delegated_ids)
+            expected_ids = [test_id for test_id in canonical_ids if test_id not in delegated_set]
+        else:
+            expected_ids = canonical_ids
+            delegated_ids = []
+            shards = partition_test_ids(expected_ids, partition_count)
         run_directory = output_path.parent / (output_path.stem + "-partitions")
         run_directory.mkdir(parents=True, exist_ok=False)
         reports: list[AuditReport | None] = []
@@ -499,11 +699,15 @@ def main(arguments: list[str]) -> int:
         merged, successful = merge_reports(
             reports, process_records, expected_ids, duration,
         )
+        if delegate_visual:
+            merged['partition_proof']['delegated_test_ids'] = delegated_ids
+            merged['partition_proof']['canonical_test_ids'] = canonical_ids
         merged["partition_processes"] = process_records
         write_complete_report(output_path, merged)
         for record in process_records:
             print(json.dumps(record, sort_keys=True), file=sys.stderr)
-        return 0 if successful else 1
+        baseline_complete = verify_baseline_inventory(output_path, merged, child_timeout)
+        return 0 if successful and baseline_complete else 1
     except Exception as error:
         print(
             f"Partitioned WinApp coordinator failed: {type(error).__name__}: {error}",

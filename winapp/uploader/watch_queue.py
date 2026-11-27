@@ -331,7 +331,7 @@ class WatchQueueStore:
         with self.lock:
             self._publish(self._new_document(initial))
 
-    def restore(self, *, for_close: bool = False) -> None:
+    def restore(self, *, for_close: bool = False, read_only: bool = False) -> None:
         """Verify target, order and source containment before resuming a journal.
 
         Version-one queues retain their original boundary. Multiple pending
@@ -341,6 +341,9 @@ class WatchQueueStore:
         Args:
             for_close (bool): Allow an empty v2 journal interrupted before the
                 initial scan only so it can be closed under its original leases.
+            read_only (bool): Inspect the verified queue without publishing
+                normalization. The desktop bootstrap uses this to check owner
+                compatibility before any operator command is admitted.
         Returns:
             None: Loads verified v2 records or conservatively upgrades v1 data.
 
@@ -601,7 +604,10 @@ class WatchQueueStore:
                                       or row['retained_stop']
                                       or row['order_verified'] is not True)):
                 raise ValueError('Completed capture lacks its final queue barrier.')
-            self._publish(row)
+            if read_only:
+                self.data = row
+            else:
+                self._publish(row)
             self.scan_generation = int(row.get('scan_generation', 0))
 
     def _allows_source(self, value: str) -> bool:

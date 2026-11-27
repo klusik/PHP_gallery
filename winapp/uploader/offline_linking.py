@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Event
+from typing import Callable
 from urllib.parse import urlencode
 
 import json
@@ -32,6 +33,8 @@ import stat
 
 from .server_discovery import _unique_object
 from .app_linking import (
+    ADMIN_PRELOAD_CAPABILITY, GALLERY_TREE_CAPABILITY,
+    SLIDING_ACCESS_CAPABILITY, THUMBNAIL_BATCH_CAPABILITY,
     CLIENT_ID,
     GALLERIES_SCOPE,
     IDENTITY_SCOPE,
@@ -56,10 +59,12 @@ from .app_linking import (
     _issuer_valid,
     _request_json,
     _valid_token,
-    LinkingError, LinkingReconnectRequired, LinkingRefreshRejected, LinkingSession,
+    LinkedIdentity, LinkingError, LinkingReconnectRequired, LinkingRefreshRejected, LinkingSession,
     discover_linking_capabilities,
 )
-from .credential_store import CREDENTIAL_ACCOUNT_ID_MAX, NativeCredentialStore
+from .credential_store import (
+    CREDENTIAL_ACCOUNT_ID_MAX, CredentialStoreUnavailable, NativeCredentialStore,
+)
 
 # Purpose: Bound a rotated access credential to the current server policy.
 # Type: int. Units: seconds. Scope: one newly rotated access bearer.
@@ -242,15 +247,18 @@ def rotate_offline_access(
 
     Raises:
         OfflineLinkingError: Binding, identity, transport or secure storage fails.
+        CredentialStoreUnavailable: The native credential is absent or
+            inaccessible before any new refresh fence was attempted.
         LinkingRefreshRejected: A rolling refresh was definitively refused.
     """
     if not _binding_valid(issuer, account_id, scope):
         raise OfflineLinkingError('Offline connection is invalid.')
+    fence_attempted = False
     try:
         with store.refresh_transaction(issuer, account_id) as transaction:
             record = transaction.read_current()
             if record is None:
-                raise OfflineLinkingError('Offline credential is unavailable.')
+                raise CredentialStoreUnavailable('Offline credential is unavailable.')
             refresh = _unpack_refresh(record, scope)
             if cancelled is not None and cancelled.is_set():
                 raise OfflineLinkingError('Offline connection was cancelled.')
@@ -259,6 +267,7 @@ def rotate_offline_access(
                 'refresh_token': refresh,
                 'client_id': CLIENT_ID,
             }).encode('ascii')
+            fence_attempted = True
             transaction.begin_rotation()
             started = time.monotonic()
             response = _request_json(
@@ -310,7 +319,11 @@ def rotate_offline_access(
         if scope.endswith(ROLLING_SCOPE_SUFFIX):
             raise
         raise OfflineLinkingError('Offline refresh did not complete safely.') from None
-    except Exception:
+    except Exception as error:
+        if not fence_attempted and isinstance(error, CredentialStoreUnavailable):
+            # A separate browser approval can proceed without touching the
+            # saved grant when local access fails before any rotation work.
+            raise
         # A timeout or malformed reply may follow a committed server rotation.
         # Never expose exception text, repeat the token request or clear a fence.
         raise OfflineLinkingError('Offline refresh did not complete safely.') from None
@@ -509,7 +522,7 @@ def remove_offline_binding(path: Path, binding: OfflineBinding) -> None:
 
 def remove_saved_offline_link(
     store: NativeCredentialStore, path: Path, binding: OfflineBinding,
-    *, capture_refresh: bool = False,
+    *, capture_refresh: bool = False, verify: Callable[[], None] | None = None,
 ) -> bytes | None:
     """Forget one saved link and capture a safely readable refresh record.
 
@@ -518,6 +531,8 @@ def remove_saved_offline_link(
         path (Path): Exact dedicated or legacy restart hint path.
         binding (OfflineBinding): Approved issuer, Admin and scope to remove.
         capture_refresh (bool): Read the current record for remote revocation.
+        verify (Callable[[], None] | None): Optional verification of caller-specific
+            hint ownership while the metadata lock excludes replacements.
 
     Returns:
         bytes | None: Record for one remote revocation, or None when no
@@ -528,6 +543,8 @@ def remove_saved_offline_link(
         CredentialStoreError: The native vault or its lock cannot be accessed.
     """
     with store.binding_transaction(binding.issuer, binding.account_id):
+        if verify is not None:
+            verify()
         if load_offline_binding(path, binding.issuer) != binding:
             raise OfflineLinkingError('Saved binding changed.')
         record = None
@@ -656,3 +673,60 @@ def enable_rolling_renewal(
             raise LinkingReconnectRequired('Sign in to the gallery again.') from None
 
     session.enable_renewal(renew)
+
+
+def saved_offline_hint_path(legacy_path: Path, issuer: str, scope: str) -> Path:
+    """Resolve the original hint owner for a verified offline scope.
+
+    Args:
+        legacy_path (Path): Profile's existing global offline-link file.
+        issuer (str): Exact canonical issuer of the consent.
+        scope (str): Existing approved offline scope.
+    Returns:
+        Path: Issuer-specific rolling hint or the supported legacy global hint.
+    """
+    if scope.endswith(ROLLING_SCOPE_SUFFIX):
+        return offline_binding_path(legacy_path, issuer)
+    return legacy_path
+
+
+def restore_saved_offline_session(
+    store: NativeCredentialStore, path: Path, binding: OfflineBinding, cancelled: Event,
+) -> tuple[LinkingSession, LinkedIdentity] | None:
+    """Restore exactly the same approved session through the shared native vault.
+
+    Args:
+        store (NativeCredentialStore): Current user's secure storage owner.
+        path (Path): Exact non-secret hint path for this known scope.
+        binding (OfflineBinding): Trusted issuer, account and original approval.
+        cancelled (Event): Current operation's network lifetime.
+    Returns:
+        tuple[LinkingSession, LinkedIdentity] | None: Verified live session and
+            identity, or None when discovery cannot admit that grant.
+    Raises:
+        LinkingError: The grant was refused or the identity could not be verified.
+        RuntimeError: Secure rotation or local binding confirmation did not complete.
+    """
+    capabilities = discover_linking_capabilities(binding.issuer, cancelled)
+    required = 'rolling_access' if binding.scope.endswith(ROLLING_SCOPE_SUFFIX) else 'offline_access'
+    if cancelled.is_set() or required not in capabilities:
+        return None
+    access = rotate_saved_offline_access(store, path, binding, cancelled)
+    session = LinkingSession(
+        access.issuer, access.token, access.expires_at, access.scope,
+        admin_preload_supported=ADMIN_PRELOAD_CAPABILITY in capabilities,
+        gallery_tree_supported=GALLERY_TREE_CAPABILITY in capabilities,
+        thumbnail_batch_supported=THUMBNAIL_BATCH_CAPABILITY in capabilities,
+        sliding_access_supported=SLIDING_ACCESS_CAPABILITY in capabilities,
+    )
+    try:
+        identity = session.identity()
+        if (identity.user_id != binding.account_id or identity.username != access.username
+                or access.issuer != binding.issuer or access.scope != binding.scope
+                or cancelled.is_set()):
+            raise LinkingError('Offline identity is unavailable.')
+        enable_rolling_renewal(session, store, path, binding)
+        return session, identity
+    except Exception:
+        session.close()
+        raise

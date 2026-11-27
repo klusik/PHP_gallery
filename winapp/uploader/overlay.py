@@ -13,28 +13,13 @@ import tkinter as tk
 from tkinter import ttk
 
 from uploader.localization import gettext
+from uploader.ui_layout import (
+    OVERLAY_ACTION_COLUMNS, OVERLAY_HEIGHT_PX, OVERLAY_MARGIN_PX, OVERLAY_WIDTH_PX,
+)
 from uploader.ui_theme import (
     Button, RaisedDialogSurface, hide_inline_tooltip, icon_button,
 )
 from uploader.flight_report_translations import tr
-
-# Purpose: Leave a visible edge of the owning workspace around a panel.
-# Type: int. Units: logical pixels. Scope: in-window panel placement.
-# Consumers: OverlayPanel.fit. Rationale: 12 px separates the context from its host.
-OVERLAY_MARGIN_PX = 12
-# Purpose: Keep ordinary progress readable without spanning a desktop.
-# Type: int. Units: logical pixels. Scope: default overlay width.
-# Consumers: OverlayPanel. Rationale: 760 px fits translated two-column actions.
-OVERLAY_WIDTH_PX = 760
-# Purpose: Bound preferred panel height while leaving short windows usable.
-# Type: int. Units: logical pixels. Scope: default overlay height.
-# Consumers: OverlayPanel. Rationale: 580 px fits progress and recovery actions.
-OVERLAY_HEIGHT_PX = 580
-# Purpose: Share compact action rows without clipping translated labels.
-# Type: int. Units: columns. Scope: contextual overlay action groups.
-# Consumers: layout_actions. Rationale: at most two columns preserve hierarchy;
-# wider labels span both columns without forcing short labels onto separate rows.
-OVERLAY_ACTION_COLUMNS = 2
 
 
 def layout_actions(

@@ -18,6 +18,7 @@ require_once dirname(__DIR__) . '/scripts/generate_production_files.php';
 
 use function Gallery\Core\release_file_policy_is_integrity_path;
 use function Gallery\Core\release_file_policy_is_safe_relative_path;
+use function Gallery\Core\release_file_policy_is_winapp_backend_path;
 use function Gallery\Core\release_file_policy_paths;
 use function Gallery\Core\release_file_policy_validate_path_list;
 use function Gallery\Core\release_file_policy_verify_tree;
@@ -157,10 +158,23 @@ try {
         'winapp/uploader/resources/locale/de/LC_MESSAGES/winapp.po',
         'winapp/uploader/resources/locale/sv/LC_MESSAGES/winapp.po',
     ];
+    $backend = [
+        'winapp/constraints.txt',
+        'winapp/requirements-core.txt',
+        'winapp/requirements-qt.txt',
+        'winapp/uploader.spec',
+        'winapp/qt_installer_tools.py',
+        'winapp/frozen_windows_libraries.py',
+        'winapp/QT-LICENSE.txt',
+        'winapp/licenses/qt/GPL-3.0-only.txt',
+        'winapp/licenses/qt/LGPL-3.0-only.txt',
+        'winapp/uploader/resources/qml/Photos.qml',
+    ];
+    sort($backend, SORT_STRING);
     $sourceReview = ['tests/policy_fixture.php'];
     $legacyPackagePaths = array_merge($production, $companion, $resources);
     sort($legacyPackagePaths, SORT_STRING);
-    $packagePaths = array_merge($legacyPackagePaths, $locales);
+    $packagePaths = array_merge($legacyPackagePaths, $locales, $backend);
     sort($packagePaths, SORT_STRING);
     foreach (array_merge($packagePaths, $sourceReview) as $relative) {
         production_file_policy_mkdir(dirname(
@@ -182,6 +196,7 @@ try {
         'companion_files' => $companion,
         'companion_resource_files' => $resources,
         'companion_locale_files' => $locales,
+        'companion_backend_files' => $backend,
         'updater_files' => $updater,
         'source_review_files' => $sourceReview,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
@@ -205,7 +220,28 @@ try {
         release_file_policy_read($source)['companion_locale_files'] === $locales,
         'The locale inventory lost exact WinApp catalog membership.',
     );
-    foreach (array_merge($resources, $locales) as $resource) {
+    production_file_policy_assert(
+        release_file_policy_read($source)['companion_backend_files'] === $backend,
+        'The backend inventory lost exact build and Qt runtime membership.',
+    );
+    foreach ($backend as $path) {
+        production_file_policy_assert(
+            release_file_policy_is_winapp_backend_path($path),
+            'The backend allowlist rejected an approved path: ' . $path,
+        );
+    }
+    foreach ([
+        'winapp/requirements.txt',
+        'winapp/requirements-benchmark.txt',
+        'winapp/settings.json',
+        'winapp/dist/Setup.exe',
+    ] as $path) {
+        production_file_policy_assert(
+            !release_file_policy_is_winapp_backend_path($path),
+            'The backend allowlist accepted an unapproved path: ' . $path,
+        );
+    }
+    foreach (array_merge($resources, $locales, $backend) as $resource) {
         production_file_policy_assert(
             !\Gallery\Core\release_file_policy_is_updater_path($resource),
             'Companion resources entered CMS replacement or deletion ownership.',
@@ -367,6 +403,7 @@ try {
         $oldInventory['companion_files'],
         $oldInventory['companion_resource_files'],
         $oldInventory['companion_locale_files'],
+        $oldInventory['companion_backend_files'],
     );
     $oldInventory['production_files'] = $legacyPackagePaths;
     file_put_contents($inventoryPath, json_encode(
@@ -376,6 +413,10 @@ try {
     production_file_policy_assert(
         release_file_policy_read($source)['companion_files'] === [],
         'An already-published schema-1 inventory without companion_files was refused.',
+    );
+    production_file_policy_assert(
+        release_file_policy_read($source)['companion_backend_files'] === [],
+        'An already-published schema-1 inventory without companion_backend_files was refused.',
     );
     production_file_policy_assert(
         release_file_policy_paths($source) === $legacyPackagePaths,
@@ -390,6 +431,7 @@ try {
     unset(
         $publishedResources['companion_resource_files'],
         $publishedResources['companion_locale_files'],
+        $publishedResources['companion_backend_files'],
     );
     file_put_contents($inventoryPath, json_encode(
         $publishedResources,
@@ -425,6 +467,7 @@ try {
         'production_files',
         'companion_files',
         'companion_resource_files',
+        'companion_backend_files',
         'updater_files',
     ] as $oldField) {
         $tampered = $original;
@@ -490,6 +533,53 @@ try {
     ): void {
         release_file_policy_read($source);
     }, 'A resource field expanded CMS activation ownership.');
+    foreach ([
+        null,
+        'winapp/constraints.txt',
+        false,
+        [$backend[1], $backend[0]],
+        [$backend[0], $backend[0]],
+        ['winapp/requirements.txt'],
+        ['winapp/requirements-benchmark.txt'],
+        ['winapp/uploader/media.py'],
+        ['winapp/settings.json'],
+        ['winapp/dist/Setup.exe'],
+        ['app/example.php'],
+    ] as $invalidBackend) {
+        $tampered = $original;
+        $tampered['companion_backend_files'] = $invalidBackend;
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
+            release_file_policy_read($source);
+        }, 'A malformed, unapproved, duplicate, or unordered backend list was accepted.');
+    }
+    foreach ([
+        'production_files',
+        'companion_files',
+        'companion_resource_files',
+        'companion_locale_files',
+        'updater_files',
+    ] as $wrongField) {
+        $tampered = $original;
+        // Isolate the field rule from duplicate-path validation.
+        unset($tampered['companion_backend_files']);
+        $tampered[$wrongField][] = $backend[0];
+        sort($tampered[$wrongField], SORT_STRING);
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
+            release_file_policy_read($source);
+        }, 'A backend file entered a non-backend inventory field: ' . $wrongField);
+    }
     foreach ([null, 'winapp/SimConnect.dll', false] as $invalidList) {
         $tampered = $original;
         $tampered['companion_files'] = $invalidList;
@@ -509,6 +599,9 @@ try {
         'winapp/SimConnect.dll',
         'WINAPP/SimConnect.dll',
         'winapp/../config.php',
+        'winapp/constraints.txt',
+        'winapp/requirements-core.txt',
+        'winapp/uploader.spec',
         'winapp/settings.json',
         'winapp/build/generated.py',
         'winapp/uploader/.private.py',

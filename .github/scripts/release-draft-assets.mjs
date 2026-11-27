@@ -290,7 +290,13 @@ export function fillDraftAssets(record,completion,releaseId,files,adapters={}) {
         for (let page=1;page<=10;page++) {
             const part=call(endpoint+`/assets?per_page=100&page=${page}`);
             if (!Array.isArray(part)) throw new Error('BLOCKED incomplete release asset inventory.');
-            rows.push(...part);if (part.length<100) return rows;
+            rows.push(...part);
+            if (part.length<100) {
+                if (rows.some(asset=>/^PHPGalleryUploader-\d+\.\d+\.\d+-Qt-Setup\.exe$/.test(asset.name ?? ''))) {
+                    throw new Error('BLOCKED retired public Qt installer flavor remains attached.');
+                }
+                return rows;
+            }
         }
         throw new Error('BLOCKED release asset inventory exceeded bound.');
     };

@@ -962,7 +962,9 @@ jobs:
           $installers = @(Get-ChildItem -LiteralPath winapp/dist -Filter '*.exe' -File -Recurse)
           # One installer and one update descriptor form the release attachment pair.
           $metadata = @(Get-ChildItem -LiteralPath winapp/dist -Filter 'winapp-update.json' -File -Recurse)
-          if ($installers.Count -ne 1 -or $metadata.Count -ne 1) { throw 'BLOCKED ambiguous installer output.' }
+          $version = (Get-Content -LiteralPath winapp/VERSION -Raw).Trim()
+          $expectedInstaller = "PHPGalleryUploader-$version-Setup.exe"
+          if ($installers.Count -ne 1 -or $installers[0].Name -cne $expectedInstaller -or $metadata.Count -ne 1) { throw 'BLOCKED noncanonical or ambiguous unified installer output.' }
           $artifactDirectory = Join-Path $env:RUNNER_TEMP 'winapp-release'
           New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
           Copy-Item -LiteralPath $installers[0].FullName -Destination $artifactDirectory

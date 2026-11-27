@@ -1977,7 +1977,7 @@ class FlightUITests(unittest.TestCase):
             ui.recorder = Mock(directory=Path(temporary) / "current-flight")
             ui.select_report = Mock()
             operation = Mock(local_reports=True)
-            with patch.object(flight_ui, "FinalizationWorker", return_value=operation) as factory:
+            with patch.object(flight_workflow, "FinalizationWorker", return_value=operation) as factory:
                 ui.create_local_pdf()
             self.assertEqual(("", ""), factory.call_args.args[1:3])
             self.assertTrue(factory.call_args.kwargs["local_reports"])
@@ -2052,7 +2052,7 @@ class FlightUITests(unittest.TestCase):
                 operation = Mock(local_reports=True)
                 operation.start.side_effect = lambda: seen.append(load_dispatch(directory))
                 with patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
-                    flight_ui, "FinalizationWorker", return_value=operation,
+                    flight_workflow, "FinalizationWorker", return_value=operation,
                 ) as factory:
                     ui.create_local_pdf()
                 confirm.assert_not_called()

@@ -184,9 +184,10 @@ function production_files_git_index(string $root): array
  *     companion_files:list<string>,
  *     companion_resource_files:list<string>,
  *     companion_locale_files:list<string>,
+ *     companion_backend_files:list<string>,
  *     updater_files:list<string>,
  *     source_review_files:list<string>
- * } Refreshed inventory with additive resources readable by installed updaters.
+ * } Refreshed inventory with additive fields readable by installed updaters.
  * @throws RuntimeException When an approved path is missing or is a symlink/submodule.
  */
 function production_files_build_inventory(string $root): array
@@ -195,6 +196,7 @@ function production_files_build_inventory(string $root): array
     $companion = [];
     $companionResources = [];
     $companionLocales = [];
+    $companionBackend = [];
     $updater = [];
     $sourceReview = [];
     foreach (production_files_git_index($root) as $record) {
@@ -269,6 +271,11 @@ function production_files_build_inventory(string $root): array
         )) {
             // Do not extend companion_files beyond installed readers' allowlist.
             $companionResources[] = $relative;
+        } elseif (\Gallery\Core\release_file_policy_is_winapp_backend_path(
+            $relative,
+        )) {
+            // Keep build and Qt runtime inputs in their strict additive field.
+            $companionBackend[] = $relative;
         } elseif (\Gallery\Core\release_file_policy_is_winapp_source_path(
             $relative,
         )) {
@@ -285,6 +292,7 @@ function production_files_build_inventory(string $root): array
     sort($companion, SORT_STRING);
     sort($companionResources, SORT_STRING);
     sort($companionLocales, SORT_STRING);
+    sort($companionBackend, SORT_STRING);
     sort($updater, SORT_STRING);
     sort($sourceReview, SORT_STRING);
     $production =
@@ -297,6 +305,8 @@ function production_files_build_inventory(string $root): array
         );
     $companionLocales =
         \Gallery\Core\release_file_policy_validate_path_list($companionLocales);
+    $companionBackend =
+        \Gallery\Core\release_file_policy_validate_path_list($companionBackend);
     $updater = \Gallery\Core\release_file_policy_validate_path_list($updater);
     $sourceReview =
         \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
@@ -305,6 +315,7 @@ function production_files_build_inventory(string $root): array
         $companion,
         $companionResources,
         $companionLocales,
+        $companionBackend,
         $sourceReview,
     );
     sort($all, SORT_STRING);
@@ -317,6 +328,7 @@ function production_files_build_inventory(string $root): array
             $companionResources,
         )),
         'companion_locale_files' => $companionLocales,
+        'companion_backend_files' => $companionBackend,
         'updater_files' => array_values(array_unique($updater)),
         'source_review_files' => array_values(array_unique($sourceReview)),
     ];
@@ -419,13 +431,14 @@ try {
     $companionCount =
         count($inventory['companion_files'])
         + count($inventory['companion_resource_files'])
-        + count($inventory['companion_locale_files']);
+        + count($inventory['companion_locale_files'])
+        + count($inventory['companion_backend_files']);
     echo
         'Wrote app/production-files.json ('
             . (count($inventory['production_files']) + $companionCount)
             . ' production files including '
             . $companionCount
-            . ' companion files/resources, '
+            . ' companion files/resources/backend inputs, '
             . count($inventory['source_review_files'])
             . " source-review files).\n";
 } catch (RuntimeException $exception) {

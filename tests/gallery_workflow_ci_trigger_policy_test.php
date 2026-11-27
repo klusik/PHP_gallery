@@ -463,24 +463,19 @@ namespace {
             )
             && str_contains($portableOwner, "PHP_GALLERY_REQUIRE_PILLOW: '1'")
             && str_contains($portableOwner, 'uses: actions/setup-python@v6')
-            && str_contains($portableOwner, "python-version: '3.14'")
+            && str_contains($portableOwner, "python-version: '3.14.10'")
             && str_contains(
                 $portableOwner,
-                'Install declared image, PDF and localization test dependencies',
+                'Install declared WinApp core test dependencies',
             )
             && str_contains(
                 $portableOwner,
-                '("pillow", "reportlab", "pypdf", "polib")',
+                'python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt',
             )
-            && str_contains(
-                $portableOwner,
-                'if len(runtime_requirements) != 4:',
-            )
-            && str_contains($portableOwner, 'winapp/requirements.txt')
-            && str_contains(
-                $portableOwner,
-                'sys.executable, "-m", "pip", "install"',
-            )
+            && str_contains($portableOwner, 'python -m pip check')
+            && !str_contains($portableOwner, 'winapp/requirements.txt')
+            && !str_contains($portableOwner, 'winapp/requirements-qt.txt')
+            && !str_contains($portableOwner, 'winapp/requirements-build.txt')
             && str_contains(
                 $portableOwner,
                 "- name: Central portable Node and WinApp coverage\n        env:\n          PHP_GALLERY_PYTHON: \${{ steps.python.outputs.python-path }}\n        run: php scripts/audit.php --profile=portable",
@@ -495,6 +490,21 @@ namespace {
             ),
         'Manifest delegation requires same-candidate preflight, shared source and portable owners, and the native aggregate gate.',
     );
+    $winappCore = (string) file_get_contents(dirname(__DIR__) . '/winapp/requirements-core.txt');
+    $winappConstraints = (string) file_get_contents(dirname(__DIR__) . '/winapp/constraints.txt');
+    check(
+        preg_match('/^-c constraints\.txt\r?$/m', $winappCore) === 1
+            && preg_match('/^[[:blank:]]*(?:-r|PySide6|shiboken6|PyInstaller)/im', $winappCore) === 0,
+        'The portable manifest must inherit exact shared constraints without including Qt or the frozen builder.',
+    );
+    foreach (['Pillow', 'reportlab', 'pypdf', 'polib'] as $portableDependency) {
+        $package = preg_quote($portableDependency, '/');
+        check(
+            preg_match('/^' . $package . '[<>=!~]/im', $winappCore) === 1
+                && preg_match('/^' . $package . '==[0-9]+\.[0-9]+\.[0-9]+\r?$/im', $winappConstraints) === 1,
+            "The portable manifest must select and constrain {$portableDependency} for its owned fixtures.",
+        );
+    }
     $packageOwner = $jobBlocks['production-package'] ?? '';
     check(
         str_contains($packageOwner, "os: ubuntu-24.04\n            php: '8.1'")
