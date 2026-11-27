@@ -106,6 +106,10 @@ class CredentialStoreUnavailable(CredentialStoreError):
     """Report that the current platform cannot provide the required vault."""
 
 
+class CredentialRefreshPending(CredentialStoreError):
+    """Report an unresolved refresh fence without exposing credential data."""
+
+
 class _FileTime(ctypes.Structure):
     """Match the two DWORD fields in the Windows FILETIME structure."""
 
@@ -792,10 +796,11 @@ class NativeCredentialStore:
             None: No pending refresh marker is present.
 
         Raises:
-            CredentialStoreError: A marker exists or its presence cannot be read.
+            CredentialRefreshPending: A verified marker blocks credential access.
+            CredentialStoreError: Marker presence cannot be read safely.
         """
         if self._api.read(target + _PENDING_SUFFIX) is not None:
-            raise CredentialStoreError('Credential refresh needs recovery.')
+            raise CredentialRefreshPending('Credential refresh needs recovery.')
 
     def refresh_transaction(
         self, issuer: str, account_id: int,

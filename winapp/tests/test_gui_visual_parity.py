@@ -1364,14 +1364,20 @@ class VisualParityTests(unittest.TestCase):
                             checks.assertEqual([VISUAL_SESSION_ID], archive["selected_flight_ids"])
                         checks.assertEqual(tk_archive["flight_ids"], qt_archive["flight_ids"])
                         checks.assertEqual(tk_archive["flight_labels"], qt_archive["flight_labels"])
-                        required_archive_actions = [
-                            tr("en", "report_flights_only"),
-                            tr("en", "report_folder"),
-                            tr("en", "create_local_pdf"),
-                            tr("en", "report_create_upload"),
-                        ]
-                        for archive in (tk_archive, qt_archive):
+                        for backend, archive in (("tk", tk_archive), ("qt", qt_archive)):
                             geometry = archive["action_geometry"]
+                            local_key = (
+                                "report_generate_only" if backend == "qt"
+                                else "create_local_pdf"
+                            )
+                            required_archive_actions = [
+                                tr("en", "report_flights_only"),
+                                tr("en", "report_folder"),
+                                tr("en", local_key),
+                                tr("en", "report_create_upload"),
+                            ]
+                            if backend == "qt":
+                                checks.assertIn(tr("en", "report_send_only"), geometry, archive)
                             for caption in (
                                 gettext("Refresh"), gettext("Open saved PDF"),
                                 tr("en", "cancel_pdf"), tr("en", "upload_saved_pdf"),
@@ -1393,8 +1399,16 @@ class VisualParityTests(unittest.TestCase):
                                 checks.assertLessEqual(
                                     tree_y + tree_height, min(local[1], upload[1]),
                                 )
-                                checks.assertGreater(local[0], tree_x + tree_width // 2)
-                                checks.assertLess(local[0], upload[0])
+                                checks.assertGreaterEqual(local[0], tree_x)
+                                checks.assertLessEqual(upload[0] + upload[2], tree_x + tree_width)
+                                if backend == "qt":
+                                    sent = geometry.get(tr("en", "report_send_only"))
+                                    if sent is not None:
+                                        checks.assertLessEqual(local[0] + local[2], sent[0])
+                                        checks.assertLessEqual(sent[0] + sent[2], upload[0])
+                                else:
+                                    checks.assertGreater(local[0], tree_x + tree_width // 2)
+                                    checks.assertLess(local[0], upload[0])
                 if identity[1] == "photos" and geometry_comparable:
                     tk_grid, qt_grid = tk_row["photo_grid"], qt_row["photo_grid"]
                     checks.assertEqual(

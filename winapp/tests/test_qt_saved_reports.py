@@ -109,14 +109,17 @@ class QtSavedReportCatalogTests(NativeQtTestCase):
         self.assertEqual(2, proxy.rowCount())
 
     def test_archive_actions_start_compact_and_idle(self) -> None:
-        """Keep secondary archive actions available without idle clutter.
+        """Expose separate actions and preserve the send-only selection.
 
         Returns:
-            None: Cancel waits for rendering and saved-PDF upload stays in the menu.
+            None: The visible send action passes only its selected edition to upload.
         """
         with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected = (root / 'flight-a', (('rev-1', 'en'),), False, True)
             reports = QtFlightReports(
-                Path(temporary), Mock(return_value=None), capture=Mock(), redact=str,
+                root, Mock(return_value=selected[0]), capture=Mock(), redact=str,
+                upload_selection=Mock(return_value=selected),
             )
             self.addCleanup(reports.close)
 
@@ -128,6 +131,10 @@ class QtSavedReportCatalogTests(NativeQtTestCase):
             self.assertTrue(reports.status.isHidden())
             self.assertFalse(reports.create_button.isHidden())
             self.assertFalse(reports.create_upload_button.isHidden())
+            self.assertFalse(reports.send_button.isHidden())
+            with patch.object(reports, 'upload_selected') as upload:
+                reports.send_button.click()
+                upload.assert_called_once_with(*selected)
 
     def test_report_hierarchy_keeps_editions_under_newest_revision(self) -> None:
         """Keep the saved-flight→revision→language ordering used by the tree.
@@ -228,10 +235,10 @@ class QtSavedReportCatalogTests(NativeQtTestCase):
             )
             self.assertIsInstance(view.flight_only, ToggleSwitch)
             self.assertEqual(
-                tr(current_language(), 'report_watcher_off'), view.flight_target.text(),
+                tr(current_language(), 'report_no_upload_destination'), view.flight_target.text(),
             )
             self.assertEqual(
-                tr(current_language(), 'report_start_watcher'),
+                tr(current_language(), 'report_upload_target_unavailable'),
                 view.flight_target_hint.text(),
             )
             self.assertEqual(

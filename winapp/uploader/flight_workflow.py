@@ -69,10 +69,10 @@ class FlightProgress:
 
 @dataclass(frozen=True, repr=False)
 class WatchedReportTarget:
-    """Capture the active Watcher's gallery, display name and request authority.
+    """Capture a verified report destination, display name and request authority.
 
     The legacy folder may be unknown until inventory validates the captured key.
-    Exactly one transport is supplied by the GUI host for an active Watcher.
+    The GUI host supplies exactly one transport for the confirmed destination.
     """
 
     label: str

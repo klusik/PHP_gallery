@@ -97,6 +97,7 @@ class TableRow:
     identity: str
     values: tuple[str, ...]
     detail: str = ""
+    recording_ended: bool = False
 
 
 @dataclass(frozen=True)
@@ -818,6 +819,7 @@ class QtOperatorViews:
         self._open_log = open_log
         self._report_target: Callable[[], tuple[str, str] | None] | None = None
         self._report_busy: Callable[[], bool] | None = None
+        self._saved_flight_load_dispatch: Callable[[Path], None] | None = None
         self._report_catalog_identity: str | None = None
         self._flight_page_offset = 0
         self._flight_page_total = 0
@@ -873,6 +875,12 @@ class QtOperatorViews:
         )
         self.flight_folder_button.setObjectName('savedReportFolderButton')
         flight_toolbar_layout.addWidget(self.flight_folder_button)
+        self.saved_flight_simbrief_button = ActionButton(
+            tr(current_language(), 'simbrief_load_quick'),
+            self._load_selected_flight_dispatch,
+        )
+        self.saved_flight_simbrief_button.setObjectName('savedFlightLoadSimBrief')
+        self.saved_flight_simbrief_button.hide()
         self._saved_report_menu = QMenu(self.flights)
         self._saved_report_menu.addAction(gettext('Open saved PDF'), self.open_pdf)
         self._saved_upload_action = self._saved_report_menu.addAction(
@@ -881,6 +889,7 @@ class QtOperatorViews:
         self._saved_upload_action.setEnabled(False)
         self._simbrief_load_action = self._saved_report_menu.addAction(
             tr(current_language(), 'simbrief_load'),
+            self._load_selected_flight_dispatch,
         )
         self._simbrief_load_action.setVisible(False)
         self._simbrief_attach_action = self._saved_report_menu.addAction(
@@ -948,6 +957,7 @@ class QtOperatorViews:
         self.report_tree.setMinimumWidth(sum(width for _section, width in FLIGHT_REPORT_COLUMNS))
         self.report_tree.itemActivated.connect(self._open_report_item)
         self.report_tree.currentItemChanged.connect(self._flight_selection_changed)
+        self.report_tree.itemSelectionChanged.connect(self._sync_saved_flight_simbrief_action)
         self.flights.table.hide()
         self.flights.layout_body.insertWidget(
             self.flights.layout_body.indexOf(flight_toolbar) + 1, self.report_tree, stretch=1,
@@ -994,7 +1004,7 @@ class QtOperatorViews:
 
     def configure_saved_report_actions(
         self, *, upload: Callable[[], None] | None,
-        load_dispatch: Callable[[], None] | None,
+        load_dispatch: Callable[[Path], None] | None,
         attach_dispatch: Callable[[], None] | None,
         finish: Callable[[], None] | None,
         report_busy: Callable[[], bool] | None,
@@ -1004,14 +1014,15 @@ class QtOperatorViews:
 
         Args:
             upload (Callable[[], None] | None): Existing report upload action.
-            load_dispatch (Callable[[], None] | None): Saved-flight SimBrief fetch.
+            load_dispatch (Callable[[Path], None] | None): Fetch for the exact
+                selected saved-flight directory.
             attach_dispatch (Callable[[], None] | None): Existing selected-flight
                 OFP attachment action, or None without Capture support.
             finish (Callable[[], None] | None): Existing Watcher Finish action,
                 or None without Capture support.
             report_busy (Callable[[], bool] | None): Existing report worker state.
             report_target (Callable[[], tuple[str, str] | None] | None): Read-only
-                active Watcher target label provider, or None without Capture.
+                verified report destination provider, or None without Capture.
         Returns:
             None: Saved Reports gains no duplicate writer or authorization owner.
         """
@@ -1020,9 +1031,8 @@ class QtOperatorViews:
         self._saved_upload_action.setEnabled(upload is not None)
         if upload is not None:
             self._saved_upload_action.triggered.connect(upload)
+        self._saved_flight_load_dispatch = load_dispatch
         self._simbrief_load_action.setVisible(load_dispatch is not None)
-        if load_dispatch is not None:
-            self._simbrief_load_action.triggered.connect(load_dispatch)
         self._simbrief_attach_action.setVisible(attach_dispatch is not None)
         if attach_dispatch is not None:
             self._simbrief_attach_action.triggered.connect(attach_dispatch)
@@ -1032,22 +1042,23 @@ class QtOperatorViews:
         self.refresh_flight_target()
 
     def refresh_flight_target(self) -> None:
-        """Show the active Watcher destination for saved-report delivery.
+        """Show the verified destination for saved-report delivery.
 
         Returns:
             None: Displays only the current safe label, never its binding token.
         """
         target = self._report_target() if self._report_target is not None else None
         if target is None:
-            text = tr(current_language(), 'report_watcher_off')
-            hint = tr(current_language(), 'report_start_watcher')
+            text = tr(current_language(), 'report_no_upload_destination')
+            hint = tr(current_language(), 'report_upload_target_unavailable')
         else:
             text = target[1]
-            hint = tr(current_language(), 'report_watched_gallery')
+            hint = tr(current_language(), 'report_upload_destination')
         if self.flight_target.text() != text:
             self.flight_target.setText(text)
         if self.flight_target_hint.text() != hint:
             self.flight_target_hint.setText(hint)
+        self._sync_saved_flight_simbrief_action()
 
     @staticmethod
     def _format_started_utc(timestamp: str) -> str:
@@ -1133,6 +1144,50 @@ class QtOperatorViews:
                 detail += '\n' + row.detail
         self.flight_detail.setText(detail)
         self.flight_folder_button.setEnabled(row is not None)
+        self._sync_saved_flight_simbrief_action()
+
+    def _sync_saved_flight_simbrief_action(self) -> None:
+        """Gate the visible quick action to one stopped saved flight.
+
+        Returns:
+            None: Hides the action for ambiguous, unfinished or unavailable
+                selections and disables it while report work owns the workspace.
+        """
+        directory = self._selected_saved_flight_directory()
+        available = directory is not None and self._saved_flight_load_dispatch is not None
+        busy = self._report_busy is not None and self._report_busy()
+        self.saved_flight_simbrief_button.setVisible(available)
+        self.saved_flight_simbrief_button.setEnabled(available and not busy)
+        self._simbrief_load_action.setEnabled(available and not busy)
+
+    def _load_selected_flight_dispatch(self) -> None:
+        """Load SimBrief only for the currently selected saved-flight root.
+
+        Returns:
+            None: Rechecks selection, stopped state and report ownership before
+                delegating to the existing capture handler.
+        """
+        if self._report_busy is not None and self._report_busy():
+            return
+        directory = self._selected_saved_flight_directory()
+        action = self._saved_flight_load_dispatch
+        if directory is not None and action is not None:
+            action(directory)
+
+    def _selected_saved_flight_directory(self) -> Path | None:
+        """Resolve one stopped flight from the explicit tree selection.
+
+        Returns:
+            Path | None: One stopped flight owning all selected rows, or None
+                when the selection is missing, ambiguous or still recording.
+        """
+        selected = self.report_tree.selectedItems()
+        root = self._flight_root(selected[0]) if selected else None
+        if root is None or any(self._flight_root(item) is not root for item in selected[1:]):
+            return None
+        identity = root.data(0, Qt.ItemDataRole.UserRole)[1]
+        row = self._flight_rows.get(identity)
+        return Path(identity) if row is not None and row.recording_ended else None
 
     def open_selected_report_folder(self) -> None:
         """Organize and open the selected session's retained-PDF directory.
@@ -1371,7 +1426,8 @@ class QtOperatorViews:
                     'error' if row.error else 'completed' if row.completed
                     else 'saved' if row.recording_ended else 'unfinished'
                 )),
-            ), self._sanitize(row.error)) for row in flights) if flights is not None else None,
+            ), self._sanitize(row.error), row.recording_ended) for row in flights)
+            if flights is not None else None,
             flight_offset=flight_offset,
             flight_total=flight_total,
             log=log,

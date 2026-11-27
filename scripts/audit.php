@@ -185,7 +185,7 @@ const AUDIT_WINAPP_PACKAGING_METRICS_TIMEOUT_SECONDS = 1200;
  * Retain the original complete WinApp unittest discovery deadline.
  * @var int
  * Units: seconds. Scope: one complete WinApp regression child.
- * Consumers: audit_run_winapp() when nativeOnly is false.
+ * Consumers: audit_run_winapp() for full unittest discovery.
  * Rationale: preserve the existing 90-second complete-suite deadline;
  * the separate native-only diagnostic does not replace mandatory coverage.
  */
@@ -208,8 +208,8 @@ const AUDIT_WINAPP_PARTITIONED_TIMEOUT_SECONDS = 480;
  * Bound hosted Windows Tk diagnostic discovery without treating runner lag as
  * a functional failure or accepting an incomplete structured result.
  * @var int
- * Units: seconds. Scope: one native-only WinApp diagnostic child.
- * Consumers: audit_run_winapp() when nativeOnly is true.
+ * Units: seconds. Scope: one focused native WinApp diagnostic child.
+ * Consumers: audit_run_winapp() for the native viewer and SimBrief preview.
  * Rationale: 114 mounted native tests previously passed in 61.91, 80.07 and
  * 86.32 seconds, then exceeded the 90-second budget on a later Windows
  * runner. 150 seconds gives finite scheduling headroom; failures, partial
@@ -244,6 +244,7 @@ if ($options['help']) {
       php scripts/audit.php --suite=winapp-partitioned
       php scripts/audit.php --suite=winapp-partitioned-no-visual
       php scripts/audit.php --suite=winapp-visual-parity
+      php scripts/audit.php --suite=winapp-simbrief-preview
       php scripts/audit.php --suite=gallery-request
       php scripts/audit.php --suite=thumbnail-batch-viewer
       php scripts/audit.php --suite=issue-362-c1-tree-http
@@ -279,6 +280,7 @@ if ($options['help']) {
       winapp-partitioned  Complete WinApp inventory in ten serial class-preserving processes.
       winapp-partitioned-no-visual  Hosted Qt ordinary inventory in nine processes.
       winapp-visual-parity  Exact visual class delegated by the split inventory report.
+      winapp-simbrief-preview  Exact Qt Photos before-and-after SimBrief preview.
       thumbnail-batch-viewer  Owned exact-SHA Windows Tk thumbnail benchmark.
       issue-362-c1-tree-http Current-SHA disposable gallery tree diagnostics.
       issue-362-c1-photos-workspace Current-SHA Windows PhotosWorkspace diagnostics.
@@ -362,6 +364,7 @@ $knownSuites = [
     'winapp-partitioned',
     'winapp-partitioned-no-visual',
     'winapp-visual-parity',
+    'winapp-simbrief-preview',
     'winapp-native',
     'mutation-contracts',
     'version-audit',
@@ -1707,19 +1710,22 @@ function audit_run_node_suite(
 }
 
 /**
- * Run the Windows companion unittest tree and validate its named outcome report.
+ * Run the selected Windows companion suite and validate its named outcome report.
  *
  * @param list<string>|null $python Python executable and option prefix, or null when no usable interpreter is configured.
- * @return array{id:'winapp'|'winapp-native',label:'WinApp regression'|'WinApp native viewer diagnostic',status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Normalized task result; a missing interpreter includes named problems, missing test source produces explicit SKIP, and a completed run includes the validated report and process evidence.
- * @param bool $nativeOnly Run the explicitly labeled native-viewer diagnostic; false preserves complete discovery and its existing timeout.
+ * @param 'winapp'|'winapp-native'|'winapp-simbrief-preview' $taskId Full discovery, native viewer diagnostic, or the exact SimBrief Photos preview.
+ * @return array{id:'winapp'|'winapp-native'|'winapp-simbrief-preview',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Normalized task result with explicit missing prerequisites or the validated test report and process outcome.
  */
-function audit_run_winapp(?array $python, bool $nativeOnly = false): array
+function audit_run_winapp(?array $python, string $taskId = 'winapp'): array
 {
     global $root, $runDirectory, $persistReports;
     $started = microtime(true);
     $testDirectory = $root . '/winapp/tests';
-    $taskId = $nativeOnly ? 'winapp-native' : 'winapp';
-    $label = $nativeOnly ? 'WinApp native viewer diagnostic' : 'WinApp regression';
+    $label = audit_suite_console_label($taskId);
+    $nativeOnly = $taskId === 'winapp-native';
+    $selectedTestIds = $taskId === 'winapp-simbrief-preview'
+        ? [\PhpGallery\Audit\AUDIT_WINAPP_SIMBRIEF_PREVIEW_TEST_ID]
+        : null;
     if (!is_dir($testDirectory)) {
         return task_result(
             $taskId,
@@ -1754,8 +1760,23 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
     if ($nativeOnly) {
         $command[] = '--native-only';
     }
+    $idsPath = null;
+    if ($selectedTestIds !== null) {
+        $idsPath = $runDirectory . '/winapp-preview-ids.json';
+        if (file_put_contents($idsPath, json_encode($selectedTestIds, JSON_THROW_ON_ERROR)) === false) {
+            return task_result(
+                $taskId,
+                $label,
+                STATUS_BLOCKED,
+                microtime(true) - $started,
+                [],
+                'Could not retain the exact WinApp preview selection.',
+            );
+        }
+        $command[] = '--test-ids-file=' . $idsPath;
+    }
     $reportExistedBeforeRun = file_exists($reportPath);
-    $timeoutSeconds = $nativeOnly
+    $timeoutSeconds = $nativeOnly || $selectedTestIds !== null
         ? AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS
         : AUDIT_WINAPP_TIMEOUT_SECONDS;
     $process = run_process($command, $root, $timeoutSeconds);
@@ -1780,12 +1801,18 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
             'duration_seconds' => (float) ($process['duration'] ?? 0.0),
         ],
         $nativeOnly,
+        false,
+        false,
+        $selectedTestIds,
     );
     $adapterReportPath = $persistReports && $reportProduced
         ? relative_path($reportPath, $root)
         : null;
     if (!$persistReports && $reportProduced) {
         @unlink($reportPath);
+    }
+    if (!$persistReports && $idsPath !== null) {
+        @unlink($idsPath);
     }
     $details = [
         'report_file' => $adapterReportPath,
@@ -1824,6 +1851,12 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
         . ' unexpected success';
     if (!$evaluated['valid']) {
         $summary = 'Structured WinApp report unavailable or invalid.';
+    }
+    if ($selectedTestIds !== null && $status === STATUS_PASS
+        && $counts['passed'] !== count($selectedTestIds)) {
+        $status = STATUS_FAIL;
+        $summary = 'The exact WinApp preview case did not pass.';
+        $evaluated['problems'][] = $summary;
     }
     return task_result(
         $taskId,
@@ -3926,6 +3959,7 @@ function audit_suite_console_label(string $suiteId): string
         'winapp-partitioned' => 'WinApp complete regression (ten serial class partitions)',
         'winapp-partitioned-no-visual' => 'WinApp ordinary regression (nine partitions; visual class delegated)',
         'winapp-visual-parity' => 'WinApp delegated paired visual regression',
+        'winapp-simbrief-preview' => 'WinApp SimBrief Photos preview',
         'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -4109,7 +4143,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         'winapp-partitioned' => audit_run_winapp_partitioned($python),
         'winapp-partitioned-no-visual' => audit_run_winapp_partitioned($python, true),
         'winapp-visual-parity' => audit_run_winapp_visual_parity($python),
-        'winapp-native' => audit_run_winapp($python, true),
+        'winapp-simbrief-preview', 'winapp-native' => audit_run_winapp($python, $suiteId),
         'mutation-contracts' => audit_run_php_command(
             'mutation-contracts',
             'Admin mutation contracts',

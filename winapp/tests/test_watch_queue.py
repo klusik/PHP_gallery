@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Exercise real journal writes using controlled clocks and isolated sources.
 #   - Reject stale transitions and retain force-finished recovery evidence.
+#   - Recover a write-ahead uncertain head after its owned Python child exits.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Exercise queue state through durable transitions rather than source-string checks."""
@@ -13,9 +14,11 @@
 import hashlib
 import json
 import os
-import tempfile
+import subprocess
 import sys
+import tempfile
 import threading
+import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -34,6 +37,24 @@ from uploader import state_store
 # Consumers: test_concurrent_refresh_preserves_identity.
 # Rationale: Three seconds detects a deadlock while permitting slow hosted disks.
 QUEUE_FIXTURE_JOIN_SECONDS = 3.0
+
+# Purpose: Bound restoration and durable publication by one isolated child.
+# Type: float. Units: seconds. Scope: one WatchQueueStore child readiness wait.
+# Consumers: WatchQueueTests.test_child_termination_restores_uncertain_head.
+# Rationale: Fifteen seconds covers a cold interpreter and journal fsync on CI.
+QUEUE_CHILD_READY_TIMEOUT_SECONDS = 15.0
+
+# Purpose: Poll the child's readback marker without waiting on an unowned handle.
+# Type: float. Units: seconds. Scope: one readiness polling interval.
+# Consumers: WatchQueueTests.test_child_termination_restores_uncertain_head.
+# Rationale: 20 ms bounds marker latency without a busy loop.
+QUEUE_CHILD_POLL_INTERVAL_SECONDS = 0.02
+
+# Purpose: Bound reap after terminating the exact owned fixture child.
+# Type: float. Units: seconds. Scope: one child termination and cleanup.
+# Consumers: WatchQueueTests.test_child_termination_restores_uncertain_head.
+# Rationale: Five seconds is ample for a killed local Python process to exit.
+QUEUE_CHILD_REAP_TIMEOUT_SECONDS = 5.0
 
 
 class WatchQueueTests(unittest.TestCase):
@@ -158,6 +179,106 @@ class WatchQueueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             recovered.update(second, state='inventory')
         self.assertEqual(first.item_id, recovered.head().item_id)
+
+    def test_child_termination_restores_uncertain_head(self) -> None:
+        """Recover the committed FIFO after killing its blocked writer process.
+
+        Returns:
+            None: Verified dispatch becomes an uncertain head without changing
+                queue generations, successor order, source paths or source bytes.
+        """
+        first_source = self.source('child-head.png', 1.0, b'uncertain-head-bytes')
+        second_source = self.source('child-successor.png', 2.0, b'fifo-successor-bytes')
+        self.assertEqual(2, self.journal.reconcile([first_source, second_source]))
+        original_items = self.journal.items()
+        original_pending = [item.source.path for item in original_items]
+        original_bytes = {
+            item.source.path: Path(item.source.path).read_bytes()
+            for item in original_items
+        }
+        original_identity = [
+            (item.item_id, item.sequence, item.source.identity, item.source.signature)
+            for item in original_items
+        ]
+        original_scan_generation = self.journal.data['scan_generation']
+        head_hash = hashlib.sha256(original_bytes[first_source.path]).hexdigest()
+        ready_path = self.root / 'child-ready'
+        child_program = '''
+import sys
+from pathlib import Path
+
+from uploader.watch_queue import WatchQueueStore
+
+journal_path = Path(sys.argv[1])
+journal = WatchQueueStore(
+    journal_path, sys.argv[2], Path(sys.argv[3]), False,
+)
+journal.restore()
+head = journal.head()
+if head is None:
+    raise RuntimeError('The private FIFO head could not be restored.')
+digest = sys.argv[5]
+journal.update(head, state='dispatching', phase='upload', sha256=digest)
+marked = WatchQueueStore.read_journal(journal_path)['items'][0]
+if (marked['item_id'], marked['state'], marked['sha256']) != (
+    head.item_id, 'dispatching', digest,
+):
+    raise RuntimeError('Write-ahead publication readback did not match.')
+Path(sys.argv[4]).touch()
+sys.stdin.buffer.read(1)
+'''
+        child = subprocess.Popen(
+            [
+                sys.executable, '-c', child_program, str(self.journal.path),
+                self.journal.binding, str(self.folder), str(ready_path), head_hash,
+            ],
+            cwd=WINAPP_DIR, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE, text=True,
+        )
+        child_stderr = ''
+        ready = False
+        try:
+            deadline = time.monotonic() + QUEUE_CHILD_READY_TIMEOUT_SECONDS
+            while (not ready_path.is_file() and child.poll() is None
+                   and time.monotonic() < deadline):
+                time.sleep(QUEUE_CHILD_POLL_INTERVAL_SECONDS)
+            ready = ready_path.is_file() and child.poll() is None
+        finally:
+            if child.poll() is None:
+                child.kill()
+            try:
+                child.wait(timeout=QUEUE_CHILD_REAP_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=QUEUE_CHILD_REAP_TIMEOUT_SECONDS)
+            if child.stderr is not None:
+                child_stderr = child.stderr.read()
+            for stream in (child.stdin, child.stdout, child.stderr):
+                if stream is not None:
+                    stream.close()
+        self.assertTrue(
+            ready,
+            f'Child did not publish verified readiness; stderr={child_stderr!r}',
+        )
+        self.assertNotEqual(0, child.returncode)
+
+        recovered = self.store()
+        recovered.restore()
+        self.assertEqual(original_scan_generation, recovered.data['scan_generation'])
+        self.assertEqual(
+            original_identity,
+            [(item.item_id, item.sequence, item.source.identity, item.source.signature)
+             for item in recovered.items()],
+        )
+        self.assertEqual(original_pending, recovered.data['pending'])
+        self.assertEqual('uncertain', recovered.head().state)
+        self.assertEqual('upload', recovered.head().phase)
+        self.assertEqual(head_hash, recovered.head().sha256)
+        self.assertEqual('observed', recovered.items()[1].state)
+        self.assertEqual(
+            original_bytes,
+            {path: Path(path).read_bytes() for path in original_pending},
+        )
 
     def test_finish_waits_for_last_writer_and_fresh_reconciliation(self) -> None:
         """Include pre-cutoff writers while excluding genuinely later screenshots.

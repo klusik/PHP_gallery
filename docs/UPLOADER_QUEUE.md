@@ -237,6 +237,14 @@ persisted upload acknowledgement. Missing media, permission failures and absent
 receipt evidence remain explicit unknowns. A thumbnail, gallery ordinal,
 matching hash or inventory absence cannot confirm an upload.
 
+Qt Watcher progress opens the same review via **Force Continue…** when the
+current head requires a decision and the transport has ended. The unknown
+result has its own heading. A known blocker, such as missing authorization or
+a missing source, shows its reason. A scheduled transport retry keeps waiting
+until its deadline. The local preview and decision controls are available while
+the optional remote read completes. Closing the evidence view cancels that
+read. Both desktop backends use the same linked-target and receipt owner.
+
 **Confirm already uploaded (receipt)** requires the exact durable acknowledgement
 for that head. **Skip photo** is a separate explicit decision: it records
 `skipped_by_user`, retains the local source and uncertainty history, and counts

@@ -1812,7 +1812,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.8.0. Release verification uses the
+This guide applies to PHP Gallery Version 1.8.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2350,7 +2350,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery in nine serial partitions. It performs no integration,
+central complete discovery in its registered serial partitions. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
 
@@ -2376,6 +2376,37 @@ publication repair and preserved originals.
 `test_watch_recovery_integration.py` uses the actual Watcher, linked history and
 native leases with a synthetic transfer boundary, including first dispatch of
 the blocked new source, receipt mismatch and repair after linked publication.
+It also checks that remote comparison stays with the bound target and drops
+cancelled or rebound results without changing the original source or journal.
+The combined 503 fixture replays acknowledgement 443, an ambiguous dispatch
+of 444 and 80 later accepted originals. It checks the exact journal bytes
+across read-only inspection and verifies that only explicit skip admits 445.
+The existing Qt backend matrix runs the native uncertain Finish and comparison
+case in `test_qt_backend.py`. It verifies action availability at the transport
+boundary, a loaded local preview while the comparison is working, and that
+the comparison leaves receipt confirmation unavailable. Distinct preview
+pixels carry through to the two native labels. At 420×390, unbroken target
+identifiers and filenames must wrap without a horizontal scrollbar, while
+vertical scrolling keeps both preview images reachable above the fixed decision
+controls. The desktop and narrow captures are `watcher-review.png` and
+`watcher-review-narrow.png` in the Qt native artifact.
+
+The opt-in Windows SimBrief preview in `issue-445-winapp.yml` retains
+`01-nacist-simbrief.png` and `02-simbrief-nacten.png` for review. The
+`[simbrief-preview]` commit marker enables it on the SimBrief feature branch.
+The central `winapp-simbrief-preview` suite checks the exact named Qt case. It
+supplies the same synthetic linked Photos view to both captures and drives
+the actual load action.
+
+The Finish fixtures distinguish unknown results, known blockers, and scheduled
+transport retry. The manual upload overlap fixture keeps the exact same-target
+uncertainty marker for identical bytes and for a changed original. It checks
+the warning, retained source bytes and refusal before network dispatch.
+`test_child_termination_restores_uncertain_head` terminates an isolated Python
+child after the write-ahead dispatch record has been persisted and read back.
+It verifies the uncertain head, successor order and both original files after
+a new owner restores the journal. Physical suspend and power loss require
+separate evidence.
 Restart recovery fixtures cover the Photos action and queue refresh when the
 worker is absent, coalesced exact-target verification, and local closure under
 the native pipeline and target leases. A failed plan write retains the original
@@ -10203,31 +10234,42 @@ The full 16-process pilot [44016215794](https://github.com/klusik/PHP_gallery/ac
 
 
 
-### Planned issue 399 cache-capacity comparison
+### Issue 399 decoded-thumbnail capacity comparison
 
-A separate cache profile is planned as `issue_399_tk_cache_protocol.json`; it is
-not yet implemented or selected, and no capacity results exist. Any pilot limited
-to the small policy will check bridge/control feasibility only, not be an A/B or
-large-cache qualification. The profile will compare
-16 MiB / 256 decoded entries with 256 MiB / 4,096 entries on the same exact
-application SHA, changing only the session-shared decoded-thumbnail memory
-limits. Disk and photo-detail quotas, validation and TTL remain unchanged. It
-will fix one renderer per run, separately covering native widgets and Canvas.
-Each run will cover 100, 500 and 2,000 photos in cold/warm states with ten
-matched independent process pairs per cell. Full down-and-back and repeated
-sweeps must request all N thumbnails; a separate switch must return to and
-fully sweep the original N-photo gallery. The current 100-photo lifecycle sample
-cannot stand in for the larger cache traversal.
+A leading `[tk-cache]` commit on `feature/399-virtualized-canvas-gallery`
+selects the separate `issue_399_tk_cache_protocol.json` profile in **Issue 361
+Tk performance benchmark**. The central audit pairs 16 MiB / 256 decoded
+entries with 256 MiB / 4,096 decoded entries from one exact application SHA.
+Each Windows job fixes one renderer, extent and phase. The complete suite
+covers native and Canvas at 100, 500 and 2,000 photos, with ten independent
+AB/BA pairs on the same VM per regime. Each of the six sweep jobs runs 40
+children (cold and warm). Each separate warm gallery-return job runs 20, for
+360 children overall. All trials use the existing 21:9 card format to reach
+the full extent in the native Windows grid.
 
-Planned per-process summaries include cache hits/misses/evictions/decode
-attempts, PhotoImage publication P95/P99, CPU and peak RSS. GUI events are not
-independent samples and will not be pooled. The profile keeps the central audit,
-ten-pair minimum, 90-second child timeout, 2,400-second driver timeout and
-20,000-event cap. Missing observations, incomplete full sweeps, truncation or
-timeouts block qualification without reducing n or inventing zeros. The 5,000-
-photo case remains nonblocking stress. See [the issue 399 experiment record]
-(docs/performance/issue_399_virtualized_canvas.md) for the current G4 NO-GO and
-separate pending design.
+The first cold sweep starts with an empty decoded cache. The warm case primes
+the same full sweep outside the measurement and remounts the viewer using the
+same cache owner. Both directions have to show real Tk images for all N
+descriptors. A fresh return-phase child primes a complete sweep, opens another
+gallery, then measures the full original-N load and traversal on return. This
+keeps both phases inside unchanged deadlines without pooling their samples.
+All mounting uses the actual Tk viewer and a deterministic offline fixture for
+the supported public thumbnail batch path. The fixture exercises production
+decode, asynchronous publication and cache admission without timing real HTTP.
+The fixture's per-photo authority callbacks retain no mocking call history, so
+the reported working set does not include a growing test-call ledger.
+Only the decoded-cache capacity differs between paired treatments.
+
+Each job retains raw samples and independent-process statistics for
+hits, misses, evictions, decode attempts, PhotoImage publication p95/p99, CPU
+and peak working set. Raw events cover the declared capacity metrics without
+duplicating GUI and worker resize traces from the older scroll workload.
+The 90-second child limit, 2,400-second driver limit and
+20,000 measured-event cap remain in force. Missing, truncated or incomplete
+trials fail qualification. Keep renderer and extent strata separate, and
+retain every failure. The 5,000-photo case remains separate stress. The
+[issue 399 experiment record](docs/performance/issue_399_virtualized_canvas.md)
+keeps the original G4 NO-GO and its distinct scroll-only protocol.
 
 
 The issue-scoped `issue-361-winapp-functional.yml` workflow runs the canonical

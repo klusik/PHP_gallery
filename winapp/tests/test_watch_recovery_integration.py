@@ -11,6 +11,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Exercise Watcher recovery with production queue, state and lease owners."""
 
+from copy import deepcopy
 import queue
 import os
 import sys
@@ -26,6 +27,8 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from test_flight_watch_drain import load_main_module
+from uploader.app_linking import LinkingResponseError
+from uploader.capture_session import CaptureReview, inspect_watch_folder
 from uploader.models import JsonValue
 from uploader.watch_queue import WatchQueueItem, observe_watch_source
 
@@ -158,6 +161,166 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
         path = self.folder / name
         path.write_bytes(content)
         return path
+
+    def test_remote_observation_requires_current_capture_and_never_confirms_head(self) -> None:
+        """Exercise preview reads through the real linked queue and capture port.
+
+        Returns:
+            None: Current media may be observed, while cancellation, target
+                replacement and missing receipt leave the journal unchanged.
+        """
+        worker = self.make_worker('optional-preview')
+        source = self.add_source('pending.png', b'disposable source')
+        journal = worker._queue
+        journal.reconcile([observe_watch_source(source, 1.0)])
+        head = journal.head()
+        assert head is not None
+        journal.update(head, state='uncertain', phase='upload', http_status=503)
+        coordinator = worker.recovery_coordinator
+        snapshot = coordinator.snapshot()
+        assert snapshot is not None
+        review = CaptureReview(snapshot, False, False)
+        port = SimpleNamespace(worker=worker)
+        session = self.target.session
+        session.media_page = mock.Mock(return_value=SimpleNamespace(
+            photos=(SimpleNamespace(image_id=97),), next_after=None,
+        ))
+        session.media_photo = mock.Mock(return_value=(b'media', 'image/png'))
+        cancelled = threading.Event()
+        before = journal.path.read_bytes()
+        read = self.main.DesktopCapture.review_remote
+        self.assertEqual((b'media', 'observation'), read(port, review, cancelled))
+        session.media_photo.assert_called_once_with(
+            self.target.gallery_id, 97, True, cancelled=cancelled,
+            cache_eligible=False, preload_eligible=False,
+        )
+        cancelled.set()
+        self.assertIsNone(read(port, review, cancelled))
+        session.media_page.assert_called_once()
+        self.assertFalse(coordinator.can_confirm_receipt(snapshot))
+        self.assertEqual(before, journal.path.read_bytes())
+
+        def replace_target_during_read(
+            gallery_id: int, image_id: int, thumbnail: bool, *,
+            cancelled: threading.Event, cache_eligible: bool, preload_eligible: bool,
+        ) -> tuple[bytes, str]:
+            """Withdraw the target after guarded synthetic transport began.
+
+            Args:
+                gallery_id (int): Exact requested linked gallery.
+                image_id (int): The last observed image in that gallery.
+                thumbnail (bool): This route requests a bounded preview.
+                cancelled (threading.Event): Review cancellation fence.
+                cache_eligible (bool): Public cache admission from this read.
+                preload_eligible (bool): Private preload admission from this read.
+
+            Returns:
+                tuple[bytes, str]: Media that is stale when returned to the worker.
+            """
+            worker.linked_target = None
+            return b'late original preview', 'image/png'
+
+        session.media_photo.side_effect = replace_target_during_read
+        self.assertIsNone(read(port, review, threading.Event()))
+        self.assertEqual(before, journal.path.read_bytes())
+        self.assertTrue(source.exists())
+
+    def test_503_after_sequence_443_keeps_all_later_sources_in_original_order(self) -> None:
+        """Replay 81 pending originals through the real linked Watcher consumer.
+
+        Returns:
+            None: A post-dispatch 503 cannot replay the head or admit its successor.
+                Inspection preserves the journal, and explicit skip allows #445.
+        """
+        # Exact historical sequence and later FIFO count from the reported incident.
+        last_acknowledged = 443
+        later_pending = 80
+        head_sequence = last_acknowledged + 1
+        paths = [
+            self.add_source(f'{sequence:03}.png', f'original {sequence}'.encode('ascii'))
+            for sequence in range(1, head_sequence + later_pending + 1)
+        ]
+        worker = self.make_worker('original-503-incident')
+        journal = worker._queue
+        journal.reconcile([
+            observe_watch_source(path, float(sequence))
+            for sequence, path in enumerate(paths, start=1)
+        ])
+        persisted = deepcopy(journal.data)
+        for acknowledged in persisted['items'][:last_acknowledged]:
+            acknowledged['state'] = 'acknowledged'
+            acknowledged['sha256'] = 'a' * 64
+            acknowledged['disposition'] = 'uploaded'
+        persisted['pending'] = [
+            item['source']['path'] for item in persisted['items'][last_acknowledged:]
+        ]
+        journal._publish(persisted)
+        dispatches: list[Path] = []
+        returned = threading.Event()
+        returned.set()
+
+        def transfer(
+            url: str, path: Path, metadata: dict[str, str], file_hash: str, size: int,
+        ) -> dict[str, JsonValue]:
+            """Dispatch one original and simulate a proxy losing only the first reply.
+
+            Args:
+                url (str): Synthetic gallery installation endpoint.
+                path (Path): Exact source admitted by the real queue.
+                metadata (dict[str, str]): Additional request metadata captured by the worker.
+                file_hash (str): Verified upload bytes from preparation.
+                size (int): Exact byte count captured during preparation.
+
+            Returns:
+                dict[str, JsonValue]: Fresh insert acknowledgement for the next original.
+
+            Raises:
+                LinkingResponseError: The first request completed with ambiguous 503.
+            """
+            worker._mark_watch_dispatch()
+            dispatches.append(path)
+            if path == paths[last_acknowledged]:
+                raise LinkingResponseError(
+                    'linking', 'app_linking_upload', 503, 'html', 'http_status',
+                    operation_finished=returned,
+                )
+            return {
+                'ok': True, 'success': True, 'gallery_id': self.target.gallery_id,
+                'uploaded': 1, 'scanned': 1, 'image_ids': [head_sequence + 1],
+                'filenames': [path.name], 'upload_evidence': 'fresh_insert_v1',
+            }
+
+        worker.upload_watched_file = transfer
+        worker._consume_head(self.folder, self.target.issuer)
+        coordinator = worker.recovery_coordinator
+        snapshot = coordinator.snapshot()
+        assert snapshot is not None
+        self.assertEqual(
+            (head_sequence, last_acknowledged, later_pending + 1, 'uncertain', 503),
+            (snapshot.sequence, snapshot.last_confirmed_sequence, snapshot.pending_count,
+             snapshot.state, snapshot.http_status),
+        )
+        before = journal.path.read_bytes()
+        inspection = inspect_watch_folder(self.folder, {'.png'}, False, threading.Event())
+        assert inspection is not None
+        self.assertEqual(len(paths), inspection.supported)
+        self.assertEqual(before, journal.path.read_bytes())
+        worker._consume_head(self.folder, self.target.issuer)
+        self.assertEqual([paths[last_acknowledged]], dispatches)
+        self.assertFalse(coordinator.can_confirm_receipt(snapshot))
+
+        coordinator.skip_head(snapshot)
+        worker.apply_recovery_decision()
+        worker._consume_head(self.folder, self.target.issuer)
+        self.assertEqual(paths[last_acknowledged:last_acknowledged + 2], dispatches)
+        items = journal.items()
+        self.assertEqual('skipped_by_user', items[last_acknowledged].disposition)
+        self.assertEqual('acknowledged', items[head_sequence].state)
+        remaining = journal.head()
+        assert remaining is not None
+        self.assertEqual(head_sequence + 2, remaining.sequence)
+        self.assertEqual(snapshot.session_id, journal.data['session_id'])
+        self.assertTrue(all(path.is_file() for path in paths))
 
     def test_earlier_unknown_blocks_then_reviews_and_sends_same_head_once(self) -> None:
         """Review A without resolving it, then first-dispatch B in FIFO order.

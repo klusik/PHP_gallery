@@ -18,6 +18,7 @@ import sys
 import tempfile
 from threading import Event
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, call, patch
 
@@ -36,7 +37,8 @@ from uploader.desktop_connection import (
     revoke_saved_gallery_grant,
 )
 from uploader.flight_jobs import (
-    ImportBindings, SessionPlan, WatcherContinuation, WorkspaceLease, pending_sessions,
+    ImportBindings, ReportRevision, SessionPlan, WatcherContinuation, WorkspaceLease,
+    pending_sessions,
 )
 from uploader.gui_backend_profile import inspect_gui_profile_work
 from uploader.import_commands import ImportSource
@@ -1290,6 +1292,63 @@ class BackendPreferenceTests(unittest.TestCase):
                             owner.prepare_report_creation(directory, target.binding())
                 finally:
                     owner.close()
+
+    def test_idle_saved_pdf_delivery_owns_its_exact_gallery_and_edition(self) -> None:
+        """Prepare a send-only operation under live linked upload authority.
+
+        Returns:
+            None: The worker receives the selected edition and holds its own
+                workspace. Disconnected mode refuses a new operation.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder).resolve()
+            root = profile / 'flights'
+            directory = root / 'saved-flight'
+            directory.mkdir(parents=True)
+            SessionPlan(directory, 'a' * 64, (), False, completed=True).save()
+            (directory / 'session.json').write_text(
+                '{"recording_ended":true}', encoding='ascii',
+            )
+            session = MagicMock(spec=LinkingSession)
+            session.approved_scope.return_value = READ_UPLOAD_OFFLINE_SCOPE
+            target = LinkedUploadTarget(session, 'https://gallery.example.test', 1, 1, 'Fixture gallery')
+            record = ModeRecord(
+                'a' * 32, 'b' * 32, 'linked', 'c' * 64, target.issuer,
+                target.user_id, READ_UPLOAD_OFFLINE_SCOPE, target.gallery_id,
+            )
+            coordinator = MagicMock()
+            coordinator.view.return_value = SimpleNamespace(state='linked_active', record=record)
+            pdf = directory / 'reports' / 'saved-en.pdf'
+            revision = ReportRevision(
+                'revision', {'en': pdf, 'cs': pdf.with_name('saved-cs.pdf')},
+            )
+            with (patch.object(MAIN, 'CONFIG_DIR', profile),
+                  patch.object(MAIN, 'report_revisions', return_value=(revision,))):
+                owner = MAIN.DesktopCapture(MagicMock(), MAIN.WatcherConfig, coordinator, lambda: target)
+                self.assertEqual((target.binding(), 'Fixture gallery'), owner.report_target())
+                worker, lease = owner.prepare_report_upload(
+                    directory, (('revision', 'en'),), target.binding(),
+                )
+                try:
+                    self.assertIsNotNone(lease)
+                    self.assertIsNone(owner.worker)
+                    self.assertTrue(worker.saved_upload)
+                    self.assertFalse(worker.local_reports)
+                    self.assertIs(target, worker.linked_target)
+                    self.assertEqual({'en': pdf}, worker.saved_revisions[0].files)
+                    with self.assertRaises(RuntimeError):
+                        WorkspaceLease(root)
+                finally:
+                    if lease is not None:
+                        lease.release()
+                coordinator.view.return_value = SimpleNamespace(
+                    state='linked_disconnected', record=record,
+                )
+                self.assertIsNone(owner.report_target())
+                with self.assertRaises(ValueError):
+                    owner.prepare_report_upload(
+                        directory, (('revision', 'en'),), target.binding(),
+                    )
 
     def test_startup_handshake_never_accepts_unrelated_nonce(self) -> None:
         """Reject unrelated ready evidence from a previous or foreign child.

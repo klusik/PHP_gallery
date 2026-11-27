@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.8.0}
+\newcommand{\version}{1.8.1}
 \newcommand{\manualdate}{27 November 2026}
 
 \hypersetup{
@@ -1900,6 +1900,11 @@ After submitting a~decision, \ui{Hide (saving decision)} only hides progress;
 the~already authorized durable publication finishes normally.
 In~a~short window, evidence scrolls while the~decision and~close controls
 remain visible below it.
+In~Qt, \ui{Force Continue…} opens this review when the~current Watcher
+item requires a~decision and~the~active request has ended. Progress shows
+the~reason for a~known block and~labels an~unknown upload result explicitly.
+The~local preview and~available decisions are~ready while the~optional
+comparison loads.
 After a~worker restart, \ui{Continue} also releases safe pending
 work in~the~same session, preserving its~retry deadline.
 Explicit recovery after a~failed Stop save also restores reconciliation
@@ -2664,7 +2669,9 @@ and~checks the~server identity. If~the~same verified server explicitly rejects
 an~expired or~revoked rolling credential, WinApp discards that saved credential.
 Choose \ui{Connect website} to~approve a~new link in~the~browser. Startup leaves
 approval to~you. An~uncertain
-response or~storage failure blocks reuse of~the~old credential. Review server
+response or~storage failure blocks reuse of~the~old credential. If~a~pending
+refresh blocks the~saved upload connection at~startup, Qt Photos offers
+\ui{Reapprove saved link} for~that account, gallery and~scope. Review server
 links and~use \ui{Forget saved link} before linking again if~needed. Local forget
 does not~revoke the~server grant, and~the~current session may~remain active.
 The~saved \texttt{pgu\_} key remains independent. Real Windows and~power-loss
@@ -3102,7 +3109,8 @@ appear as expandable groups, always numerically descending (v5, v4, v3),
 regardless of column sorting. Refresh retains expanded flights/versions and
 selected files. This display does not move or rename files on disk.
 
-For a~stopped flight, \ui{Create local PDF} creates
+For a~stopped flight, \ui{Generate PDFs only} in~Qt or
+\ui{Create local PDF} in~Tk creates
 a~numbered version under \filepath{reports/}. Earlier PDFs, raw samples,
 and upload receipts remain intact. No key is~required, no upload/revoke occurs,
 and another running flight continues. Partial reports remain incomplete; active,
@@ -3167,6 +3175,10 @@ separately in~PHP Gallery Admin. An~active linked session uses the~browser
 approval for uploads. After restart the~verified saved address prefills
 reconnection.
 
+In~Qt, \ui{Abandon flight} beside Finish in~Watcher closes the~current linked
+capture after confirmation. In-flight requests settle first. The~recording,
+unsent photos, existing PDFs and~receipts stay available locally.
+
 In legacy API-key mode, \ui{Abandon flight} in~Watcher, Import and~progress
 offers explicit local recovery after a~gallery is~deleted or~its~key revoked.
 After confirmation, workers stop and~in-flight requests settle; pending delivery
@@ -3180,8 +3192,10 @@ keeps the~key and~recovery available for~retry.
 Start Watcher on~the~destination gallery with a~linked account or an~API key.
 \ui{Create and upload} saves a~new revision locally and~sends it~to~the~gallery
 shown beside the~action. After a~failed upload, retry sends the~same revision.
-For retained PDFs, select a~stopped flight and~choose \ui{Upload saved PDFs}
-from the~ellipsis. The~picker shows each revision, date and~languages.
+For retained PDFs, select a~stopped flight and~choose \ui{Send PDFs only}
+in~Qt or \ui{Upload saved PDFs} from the~ellipsis. In~Qt a~connected upload
+gallery also works while Watcher is~idle. The~picker confirms the~destination
+and~shows each revision, date and~languages.
 Ctrl/Shift selects several revisions or~individual files from one flight.
 Existing PDFs are~sent as~saved and~another flight can~continue. Separate
 \filepath{upload-receipts.json} retains acknowledged checksums; retries
@@ -3934,11 +3948,16 @@ identity gear. Enter one pilot ID or username; only a successful OFP fetch saves
 the identity. Loading is explicit and never required for recording. The staged
 plan is consumed by the next session; plans attached during recording belong
 only to that session. No previous flight plan is automatically reused.
-Saved flights also offer loading the~latest OFP directly into the~selected
-flight,
-or attaching an archived SimBrief JSON/XML export. A PDF-only OFP cannot supply
-machine-readable dispatch data. Create a new local PDF version afterwards;
-existing PDFs and delivery receipts remain intact.
+In~the~Qt interface on~Windows, \ui{Load SimBrief} appears in~Watcher
+and~above the~photos in~an~upload-capable linked gallery when WinApp detects
+a~flight simulator. During a~linked Watcher capture, the~Photos action appears
+in~the~watched gallery. The~loaded airport pair appears beside the~button.
+
+Select one stopped flight and~use \ui{Load SimBrief} beside
+\ui{Generate PDFs only} in~Qt. Confirm that the~latest OFP belongs to~the~selected
+flight. The~saved-flight menu also accepts an~archived SimBrief JSON/XML export.
+Create a~new local PDF revision to~use the~stored plan for~report calculations
+and~comparisons. Existing PDFs and~delivery receipts remain intact.
 Reports include recorded OpenStreetMap route maps independently of SimBrief.
 An attached OFP adds a separate planned route, planned passengers and ramp fuel.
 These values never replace measured telemetry. Coordinates come from the OFP
@@ -10568,6 +10587,8 @@ union before merging actual outcomes. Missing, timed-out, malformed, duplicate
 or~unsuccessful evidence fails. The~ordinary full-suite owner keeps its
 existing single-process behavior and~limit. Earlier full-process and~two-,
 three- and~four-partition timeouts remain failed runs.
+The~optional \codeword{winapp-simbrief-preview} suite runs the~Photos scenario
+on~Windows and~retains screenshots before and~after loading a~test plan.
 Selected-child logs flush the~full failure traceback immediately after each
 FAIL/ERROR terminal record, preserving its~reason if~a~later timeout prevents
 the~final JSON report.

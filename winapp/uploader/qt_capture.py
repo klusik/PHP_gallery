@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from math import ceil
 from pathlib import Path
 from queue import Empty
+import re
 from threading import Event
 import time
 from typing import Callable, Literal
@@ -23,7 +24,7 @@ from PySide6.QtGui import QImage, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QMainWindow,
-    QLineEdit, QMessageBox, QProgressBar, QTableWidget, QTableWidgetItem, QToolTip,
+    QLineEdit, QMessageBox, QProgressBar, QScrollArea, QTableWidget, QTableWidgetItem, QToolTip,
     QVBoxLayout, QWidget,
 )
 
@@ -49,6 +50,7 @@ from .ui_layout import (
     OVERLAY_ACTION_COLUMNS, OVERLAY_HEIGHT_PX, OVERLAY_MARGIN_PX, OVERLAY_WIDTH_PX,
     WORKSPACE_ACTION_HEIGHT, WORKSPACE_CARD_INSETS, WORKSPACE_COMPACT_ACTION_HEIGHT,
 )
+from .watch_recovery import RECOVERY_DIGEST_PREFIX_CHARS, sanitize_recovery_label
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,29 @@ SUCCESS_AUTOCLOSE_SECONDS = 3
 # Type: tuple[int, int]. Units: Qt progress values. Scope: Watcher startup only.
 # Consumers: QtCapture. Rationale: Qt's 0..0 range paints a native busy indicator.
 WATCHER_START_PROGRESS_RANGE = (0, 0)
+# Purpose: Give Qt wrap opportunities inside unbroken recovery metadata.
+# Type: int. Units: characters. Scope: rendered recovery labels only.
+# Consumers: QtCapture._show_review. Rationale: Sixteen characters keep hashes
+# recognizable while preventing them from setting a wider scroll-area minimum.
+RECOVERY_LABEL_BREAK_CHARS = 16
 ReviewResult = tuple[CaptureReview, QImage | None]
+RemoteReviewResult = tuple[QImage | None, str]
+
+
+def wrap_recovery_display_text(value: str) -> str:
+    """Add invisible break opportunities inside long rendered tokens.
+
+    Args:
+        value (str): Sanitized recovery text prepared for native display.
+
+    Returns:
+        str: Same visible text with wrap opportunities in long tokens.
+    """
+    return re.sub(
+        rf"(\S{{{RECOVERY_LABEL_BREAK_CHARS}}})(?=\S)",
+        r"\1" + "\u200b",
+        value,
+    )
 
 
 def capture_progress_indeterminate(state: CaptureStatus, busy: bool) -> bool:
@@ -127,13 +151,14 @@ def capture_progress_timing(state: CaptureStatus, now: float) -> str:
 
 
 @dataclass(frozen=True)
-class SavedDispatchResult:
-    """Carry a successful saved-flight route back to the Qt thread."""
+class DispatchResult:
+    """Carry an accepted SimBrief route and its saved-flight context."""
 
     caption: str
+    saved: bool = False
 
 
-CaptureResult = str | bool | ReviewResult | SavedDispatchResult | CaptureUtcPreferenceResult
+CaptureResult = str | bool | ReviewResult | DispatchResult | CaptureUtcPreferenceResult
 
 
 def capture_presence_demanded(
@@ -217,6 +242,7 @@ class QtCapture(QWidget):
     reports_requested = Signal()
     saved_dispatch_attached = Signal()
     simbrief_context_changed = Signal(bool)
+    simbrief_route_changed = Signal(str)
     capture_target_changed = Signal(object)
     dispatch_status_changed = Signal(str)
     capture_actions_changed = Signal()
@@ -262,6 +288,8 @@ class QtCapture(QWidget):
         self._reported_busy = False
         self._reported_watcher_activity = False
         self._queue_backpressure = False
+        self._queue_review_state = ''
+        self._queue_dispatch_active = False
         self._reported_queue_waiting = False
         self._pending = pending
         self._linked_upload_selected = False
@@ -280,9 +308,11 @@ class QtCapture(QWidget):
         self._previous_utc_sync: bool | None = None
         self._header_state: tuple[str, str, str, bool] | None = None
         self._capture_target: tuple[str, int, int] | None = None
+        self._reported_dispatch_route: str | None = None
         self._rendered_controls: tuple[object, ...] | None = None
         self._import_action_state: tuple[object, ...] | None = None
         self._review_dialog: QDialog | None = None
+        self._review_remote_view: tuple[QLabel, QLabel] | None = None
         self._progress_dialog: RaisedSurface | None = None
         self._progress_container: QWidget | None = None
         self._progress_previous_focus: QWidget | None = None
@@ -306,6 +336,9 @@ class QtCapture(QWidget):
         )
         self._retained_summary_lane = QtReadLane[RetainedQueueSummary](
             self._show_retained_summary, self._retained_summary_finished, self,
+        )
+        self._review_preview_lane = QtReadLane[RemoteReviewResult](
+            self._show_review_remote, self._finish_review_preview, self,
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(*CAPTURE_WORKSPACE_INSETS)
@@ -332,6 +365,10 @@ class QtCapture(QWidget):
         self.finish_button = ActionButton(
             tr(self.language, 'finish_flight'), self.finish, icon='check',
         )
+        self.abandon_button = ActionButton(
+            tr(self.language, 'abandon'), self.abandon_capture, icon='close',
+        )
+        self.abandon_button.setObjectName('watcherAbandonFlight')
         self.connection_action_button = ActionButton(
             '', self._perform_idle_connection_action,
         )
@@ -342,6 +379,7 @@ class QtCapture(QWidget):
         )
         flight_actions = QHBoxLayout()
         flight_actions.addWidget(self.finish_button)
+        flight_actions.addWidget(self.abandon_button)
         flight_actions.addStretch()
         target_layout.addLayout(flight_actions)
         layout.addWidget(target_card)
@@ -477,6 +515,15 @@ class QtCapture(QWidget):
         flight_progress_row.addWidget(self.record)
         flight_progress_row.addWidget(self.flight_settings_button)
         flight_progress_row.addStretch()
+        self.watcher_simbrief_button = ActionButton(
+            tr(self.language, 'simbrief_load_quick'), self.load_simbrief,
+            icon='cloud',
+        )
+        self.watcher_simbrief_button.setObjectName('watcherSimbriefLoad')
+        self.watcher_simbrief_button.setProperty('workspaceAction', True)
+        self.watcher_simbrief_button.setMinimumHeight(WORKSPACE_COMPACT_ACTION_HEIGHT)
+        self.watcher_simbrief_button.hide()
+        flight_progress_row.addWidget(self.watcher_simbrief_button)
         flight_progress_row.addWidget(self.flight_preview)
         self.progress_button = ActionButton(
             tr(self.language, 'flight_progress'), self.progress_requested.emit,
@@ -587,7 +634,7 @@ class QtCapture(QWidget):
             self.choose_folder_button, self.folder_settings_button, self.reset_button,
             self.watcher_help_button, self.start_button, self.resume_button,
             self.refresh_button, self.inspect_folder_button,
-            self.finish_button, self.interrupt_button,
+            self.finish_button, self.abandon_button, self.interrupt_button,
             self.close_button, self.retry_access_button, self.retry_revocation_button,
         )
         for current, following in zip(focus_order, focus_order[1:]):
@@ -1120,17 +1167,24 @@ class QtCapture(QWidget):
             self._progress_gauge.setAccessibleName(title)
             self._progress_activity.setAccessibleName(title)
         retained_only = self._retained_only(state)
-        running = capture_progress_indeterminate(state, self._busy)
+        needs_review = state.watcher_worker_active and bool(self._queue_review_state)
+        running = capture_progress_indeterminate(state, self._busy) and not needs_review
         idle_review = state.phase == 'idle' and not running and not state.progress_total
         review_only = retained_only or idle_review
-        if state.progress_total:
+        if needs_review:
+            phase = (
+                recovery_text(self.language, 'watch_needs_attention')
+                if self._queue_review_state == 'uncertain'
+                else tr(self.language, 'phase_error')
+            )
+        elif state.progress_total:
             phase = tr(self.language, 'phase_' + state.phase)
         elif review_only or state.phase == 'idle':
             phase = tr(self.language, 'review_pending_uploads')
         else:
             phase = self.watcher_state.text()
         self._progress_phase.setText(phase)
-        timing = capture_progress_timing(state, time.monotonic())
+        timing = '' if needs_review else capture_progress_timing(state, time.monotonic())
         if self._progress_timing.text() != timing:
             self._progress_timing.setText(timing)
         self._progress_timing.setVisible(bool(timing))
@@ -1215,11 +1269,16 @@ class QtCapture(QWidget):
         self._progress_status.setVisible(bool(progress_status))
         continue_available = bool(
             state.resume_available or self._pending or state.more_retained
-            or state.context_cleanup_failed
+            or state.context_cleanup_failed or needs_review
         )
+        self._progress_continue.setText(
+            recovery_text(self.language, 'force_continue_watch') if needs_review
+            else self.resume_button.text(),
+        )
+        self._progress_continue.setToolTip(self.review_button.toolTip() if needs_review else '')
         self._progress_continue.setVisible(continue_available)
         self._progress_continue.setEnabled(
-            self.resume_button.isEnabled() if state.resume_available
+            self.resume_button.isEnabled() if state.resume_available and not needs_review
             else self.review_button.isEnabled(),
         )
         self._progress_close.setVisible(self._pending and not state.alive)
@@ -1325,7 +1384,10 @@ class QtCapture(QWidget):
             None: Delegates to the exact existing owner without bypassing review.
         """
         state = self.commands.snapshot()
-        if state.resume_available:
+        if state.watcher_worker_active and self._queue_review_state:
+            if not self._queue_dispatch_active:
+                self.review()
+        elif state.resume_available:
             self.resume_checkpoint()
         elif (self._pending or state.more_retained
               or state.context_cleanup_failed or state.error):
@@ -1358,6 +1420,14 @@ class QtCapture(QWidget):
             None: Replays the last projected value without reading worker state.
         """
         self.capture_target_changed.emit(self._capture_target)
+
+    def replay_simbrief_route(self) -> None:
+        """Replay the current capture-owned SimBrief route after subscription.
+
+        Returns:
+            None: Sends only the latest route observed from CaptureStatus.
+        """
+        self.simbrief_route_changed.emit(self._reported_dispatch_route or '')
 
     def replay_watcher_activity(self) -> None:
         """Send the cached Watcher thread state after the shell subscribes.
@@ -1422,6 +1492,7 @@ class QtCapture(QWidget):
         self._flight_context = flight
         self._rendered_controls = None
         self.simbrief_context_changed.emit(flight)
+        self.watcher_simbrief_button.setVisible(flight)
         self.record.setText(self._capture_text('record_flight'))
         progress_caption = self._capture_text('flight_progress')
         self.progress_button.setAccessibleName(progress_caption)
@@ -1537,6 +1608,22 @@ class QtCapture(QWidget):
             self.dispatch_status_changed.emit(gettext('Wait for the current operation to finish.'))
             return
         self.toggle_dispatch(parent=self.window())
+
+    def load_simbrief(self) -> None:
+        """Load the latest plan from the Photos or Watcher flight context.
+
+        Returns:
+            None: Loads the plan for the current recording or next capture.
+        """
+        if not self.simbrief_available():
+            return
+        state = self.commands.snapshot()
+        if self._busy or self.protected() or state.finishing:
+            self.dispatch_status_changed.emit(
+                gettext('Wait for the current operation to finish.'),
+            )
+            return
+        self._prompt_dispatch(self.window())
 
     def busy(self) -> bool:
         """Return whether the view or its owner still guards accepted work.
@@ -1736,7 +1823,7 @@ class QtCapture(QWidget):
         self._submit(lambda: self.commands.complete_legacy_revocation(operation))
 
     def abandon_capture(self) -> None:
-        """Confirm local retention or retry the exact legacy key cleanup.
+        """Confirm local retention or retry the exact pending closure.
 
         Returns:
             None: Leaves original files and closes the selected capture cohort.
@@ -1747,7 +1834,7 @@ class QtCapture(QWidget):
             self.status.setText(gettext('Wait for the current operation to finish.'))
             return
         if state.abandon_cleanup_pending:
-            self._submit(self.commands.complete_legacy_abandon)
+            self._submit(self.commands.abandon_capture)
             return
         if (not (state.legacy_mode or state.linked_mode)
                 or not (state.capturing or self._pending or state.more_retained)):
@@ -1815,9 +1902,7 @@ class QtCapture(QWidget):
         if state.dispatch_route:
             self.clear_dispatch()
             return
-        identity = self._dispatch_identity(parent or self)
-        if identity is not None:
-            self._submit(lambda: self.commands.load_dispatch(identity), dispatch=True)
+        self._prompt_dispatch(parent or self)
 
     def change_dispatch_identity(self) -> None:
         """Replace the remembered identity and fetch its explicit OFP.
@@ -1829,9 +1914,7 @@ class QtCapture(QWidget):
         if self._busy or self.protected() or state.finishing:
             self.dispatch_status.setText(gettext('Wait for the current operation to finish.'))
             return
-        identity = self._dispatch_identity(self, replace_existing=True)
-        if identity is not None:
-            self._submit(lambda: self.commands.load_dispatch(identity), dispatch=True)
+        self._prompt_dispatch(self, replace_existing=True)
 
     def _dispatch_identity(
         self, parent: QWidget, *, replace_existing: bool = False,
@@ -1863,17 +1946,21 @@ class QtCapture(QWidget):
             return None
         return identity
 
-    def _prompt_dispatch(self, parent: QWidget) -> None:
+    def _prompt_dispatch(self, parent: QWidget, *, replace_existing: bool = False) -> None:
         """Request the remembered identity or prompt before shared-client fetch.
 
         Args:
             parent (QWidget): Visible native window that owns the prompt.
+            replace_existing (bool): Prompt for a new identity even when one is saved.
         Returns:
             None: Schedules the same guarded DesktopCapture command as Flight UI.
         """
-        identity = self._dispatch_identity(parent)
+        identity = self._dispatch_identity(parent, replace_existing=replace_existing)
         if identity is not None:
-            self._submit(lambda: self.commands.load_dispatch(identity), dispatch=True)
+            self._submit(
+                lambda: DispatchResult(self.commands.load_dispatch(identity)),
+                dispatch=True,
+            )
 
     def clear_dispatch(self) -> None:
         """Detach the staged or actively recorded flight plan explicitly.
@@ -1900,28 +1987,42 @@ class QtCapture(QWidget):
         if path:
             self._submit(lambda: self.commands.attach_dispatch(flight, Path(path)), dispatch=True)
 
-    def load_saved_dispatch(self, flight: Path | None = None) -> None:
+    def load_saved_dispatch(
+        self, flight: Path | None = None, *, parent: QWidget | None = None,
+    ) -> None:
         """Fetch SimBrief and attach it to the exact saved-flight selection.
 
         Args:
             flight (Path | None): Captured selection, or the current saved row.
+            parent (QWidget | None): Saved Reports owner for confirmation dialogs.
         Returns:
-            None: The existing command lane performs bounded network and disk work.
+            None: Confirms the exact target before bounded provider and disk work.
         """
         selected = flight or self.selected_flight()
         if selected is None:
             self.dispatch_status.setText(tr(self.language, 'select_saved_flight'))
             return
         if self._busy or self.protected():
-            self.dispatch_status.setText(gettext('Wait for the current operation to finish.'))
+            message = gettext('Wait for the current operation to finish.')
+            self.dispatch_status.setText(message)
+            self.dispatch_status_changed.emit(message)
             return
-        identity = self._dispatch_identity(self.window())
+        dialog_parent = parent or self.window()
+        if QMessageBox.question(
+            dialog_parent, 'SimBrief', tr(self.language, 'simbrief_confirm'),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        identity = self._dispatch_identity(dialog_parent)
         if identity is None:
             return
-        self.dispatch_status.setText(tr(self.language, 'simbrief_loading'))
+        message = tr(self.language, 'simbrief_loading')
+        self.dispatch_status.setText(message)
+        self.dispatch_status_changed.emit(message)
         self._submit(
-            lambda: SavedDispatchResult(
-                self.commands.load_saved_dispatch(selected, identity),
+            lambda: DispatchResult(
+                self.commands.load_saved_dispatch(selected, identity), saved=True,
             ),
             dispatch=True,
         )
@@ -2106,11 +2207,15 @@ class QtCapture(QWidget):
                 self._utc_sync_enabled = bool(self._previous_utc_sync)
                 self._previous_utc_sync = None
                 self._set_utc_toggle(self._utc_sync_enabled)
-        elif isinstance(result, SavedDispatchResult):
-            self.dispatch_status.setText(
-                tr(self.language, 'simbrief_loaded') + '\n' + gettext(result.caption),
+        elif isinstance(result, DispatchResult):
+            key = 'simbrief_loaded' if result.saved else 'simbrief_ready'
+            status_text = (
+                tr(self.language, key) + ' · ' + gettext(result.caption)
             )
-            self.saved_dispatch_attached.emit()
+            self.dispatch_status.setText(status_text)
+            self.dispatch_status_changed.emit(status_text)
+            if result.saved:
+                self.saved_dispatch_attached.emit()
         else:
             self._show_review(*result)
 
@@ -2123,30 +2228,85 @@ class QtCapture(QWidget):
         Returns:
             None: Opens a modal native dialog with explicit decision buttons.
         """
+        if self._review_dialog is not None:
+            self._review_dialog.raise_()
+            return
         language = self.language
         title = recovery_text(language, 'watch_recovery_title')
         head = review.snapshot
         dialog = QDialog(self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.setObjectName('watchRecoveryReview')
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        body = QWidget(scroll)
+        evidence = QVBoxLayout(body)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, stretch=1)
         text = recovery_text(language, 'watch_recovery_local').format(
-            sequence=head.sequence, name=Path(head.source_path).name,
-            count=head.pending_count, target=head.target_binding,
+            sequence=head.sequence, name=sanitize_recovery_label(Path(head.source_path).name),
+            count=head.pending_count,
+            target=sanitize_recovery_label(review.target_label or head.target_binding),
         )
         if head.review_blocked_by_earlier_upload:
             text += '\n' + recovery_text(language, 'watch_recovery_prior_identity').format(
-                marker=head.prior_blocker_marker, name=Path(head.prior_blocker_path).name,
+                marker=head.prior_blocker_marker,
+                name=sanitize_recovery_label(Path(head.prior_blocker_path).name),
                 digest=head.prior_blocker_sha256, target=head.prior_blocker_target_binding,
             )
-        detail = QLabel(text)
+        text += '\n' + self.sanitize(sanitize_recovery_label(head.error))
+        detail = QLabel(wrap_recovery_display_text(text))
         detail.setTextFormat(Qt.TextFormat.PlainText)
         detail.setWordWrap(True)
-        layout.addWidget(detail)
-        preview = QLabel(recovery_text(language, 'watch_recovery_local_unavailable'))
+        detail.setMinimumWidth(0)
+        evidence.addWidget(detail)
+        absent = recovery_text(language, 'watch_recovery_none')
+        timestamp = lambda epoch: time.strftime(
+            '%Y-%m-%d %H:%M:%S', time.localtime(epoch),
+        ) if epoch else absent
+        facts = QLabel(wrap_recovery_display_text(
+            recovery_text(language, 'watch_recovery_file_details').format(
+                modified=timestamp(head.captured_at), size=head.source_size,
+                digest=head.sha256[:RECOVERY_DIGEST_PREFIX_CHARS],
+                binding=sanitize_recovery_label(head.target_binding),
+                confirmed=head.last_confirmed_sequence or absent,
+                confirmed_at=timestamp(head.last_confirmed_at),
+                progress=self.sanitize(sanitize_recovery_label(head.progress)) or absent,
+                progress_at=timestamp(head.progress_at), phase=head.phase or head.state,
+                http_status=head.http_status or absent,
+            ),
+        ))
+        facts.setTextFormat(Qt.TextFormat.PlainText)
+        facts.setWordWrap(True)
+        facts.setMinimumWidth(0)
+        evidence.addWidget(facts)
+        previews = QGridLayout()
+        previews.setColumnStretch(0, 1)
+        previews.setColumnStretch(1, 1)
+        remote_caption = QLabel(recovery_text(language, 'watch_recovery_loading'))
+        remote_caption.setObjectName('watchRecoveryRemoteCaption')
+        local_caption = QLabel(recovery_text(
+            language, 'watch_recovery_local_loaded' if image is not None
+            else 'watch_recovery_local_unavailable',
+        ))
+        for column, label in enumerate((remote_caption, local_caption)):
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            previews.addWidget(label, 0, column)
+        remote_image = QLabel()
+        remote_image.setObjectName('watchRecoveryRemoteImage')
+        remote_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview = QLabel()
+        preview.setObjectName('watchRecoveryLocalImage')
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if image is not None:
             preview.setPixmap(QPixmap.fromImage(image))
-        layout.addWidget(preview)
+        previews.addWidget(remote_image, 1, 0)
+        previews.addWidget(preview, 1, 1)
+        evidence.addLayout(previews)
+        evidence.addStretch()
 
         def decide(decision: CaptureDecision, caption: str) -> None:
             """Return the chosen decision together with the displayed evidence.
@@ -2176,11 +2336,97 @@ class QtCapture(QWidget):
         for decision, key, enabled in options:
             if enabled:
                 caption = recovery_text(language, key)
-                layout.addWidget(ActionButton(caption, lambda d=decision, s=caption: decide(d, s)))
-        layout.addWidget(ActionButton(recovery_text(language, 'watch_recovery_cancel'), dialog.reject))
+                button = ActionButton(caption, lambda d=decision, s=caption: decide(d, s))
+                button.setObjectName(f'watchRecovery-{decision}')
+                button.setAutoDefault(False)
+                layout.addWidget(button)
+        cancel = ActionButton(recovery_text(language, 'watch_recovery_cancel'), dialog.reject)
+        cancel.setDefault(True)
+        layout.addWidget(cancel)
         self._review_dialog = dialog
-        dialog.finished.connect(lambda _result: setattr(self, '_review_dialog', None))
+        self._review_remote_view = (remote_image, remote_caption)
+        dialog.finished.connect(self._close_review)
+        dialog.resize(OVERLAY_WIDTH_PX, OVERLAY_HEIGHT_PX)
         dialog.open()
+
+        def load_remote(
+            cancelled: Event, publish: Callable[[RemoteReviewResult], None],
+        ) -> None:
+            """Read and decode optional evidence without holding the decision lane.
+
+            Args:
+                cancelled (Event): Current dialog read lifetime.
+                publish (Callable[[RemoteReviewResult], None]): Delivers bounded
+                    image pixels and one localized evidence key.
+
+            Returns:
+                None: Releases the transport outcome independently of decisions.
+            """
+            try:
+                remote = self.commands.review_remote(review, cancelled)
+            except PermissionError:
+                publish((None, 'watch_recovery_remote_auth'))
+                return
+            except FileNotFoundError:
+                publish((None, 'watch_recovery_remote_missing'))
+                return
+            if cancelled.is_set():
+                return
+            if remote is None:
+                publish((None, 'watch_recovery_remote_unavailable'))
+                return
+            body_bytes, kind = remote
+            try:
+                pixels, _geometry = decode_photo(body_bytes, thumbnail=True)
+            except ValueError:
+                publish((None, 'watch_recovery_remote_decode'))
+                return
+            publish((pixels, f'watch_recovery_remote_{kind}'))
+
+        self._review_preview_lane.submit(load_remote)
+
+    def _show_review_remote(self, result: RemoteReviewResult) -> None:
+        """Present the current authorized comparison without changing actions.
+
+        Args:
+            result (RemoteReviewResult): Optional worker-decoded image and a
+                fixed locale key that describes its evidence class.
+
+        Returns:
+            None: Updates the optional comparison side of the open dialog.
+        """
+        if self._review_remote_view is None:
+            return
+        target, caption = self._review_remote_view
+        pixels, key = result
+        caption.setText(recovery_text(self.language, key))
+        if pixels is not None:
+            target.setPixmap(QPixmap.fromImage(pixels))
+
+    def _finish_review_preview(self, failure: str) -> None:
+        """Offer a terminal caption if the optional remote read fails.
+
+        Args:
+            failure (str): Empty success or a bounded worker error class.
+
+        Returns:
+            None: Leaves the local preview and decision availability intact.
+        """
+        if failure:
+            self._show_review_remote((None, 'watch_recovery_remote_transport'))
+
+    def _close_review(self, _result: int) -> None:
+        """Retire the matched review and its optional worker read.
+
+        Args:
+            _result (int): Qt dialog result already handled by its owner.
+
+        Returns:
+            None: Prevents late remote evidence from reaching another review.
+        """
+        self._review_preview_lane.cancel()
+        self._review_remote_view = None
+        self._review_dialog = None
 
     def _restore_preferences(self) -> None:
         """Reflect committed preferences without resubmitting them.
@@ -2222,7 +2468,10 @@ class QtCapture(QWidget):
         self._watch_start_requested = False
         if failure:
             label = self.dispatch_status if self._dispatch_feedback else self.status
-            label.setText(recovery_text(self.language, 'watch_recovery_decision_unexpected'))
+            message = recovery_text(self.language, 'watch_recovery_decision_unexpected')
+            label.setText(message)
+            if self._dispatch_feedback:
+                self.dispatch_status_changed.emit(message)
         self._dispatch_feedback = False
         self._preferences = FlightPreferences.load(self.root)
         self._restore_preferences()
@@ -2283,6 +2532,16 @@ class QtCapture(QWidget):
                         or detail.get('state') in ('retry_wait', 'uncertain', 'auth_required', 'blocked')
                         or bool(detail.get('reason'))
                     )
+                    queue_state = detail.get('state')
+                    head_phase = detail.get('head_phase')
+                    self._queue_review_state = (
+                        queue_state
+                        if queue_state in (
+                            'uncertain', 'blocked', 'auth_required', 'missing',
+                        ) or queue_state == 'retry_wait' and head_phase == 'source'
+                        else ''
+                    )
+                    self._queue_dispatch_active = detail.get('dispatch_active') is True
                     if detail.get('head_id'):
                         self.head.setText(recovery_text(self.language, 'watch_recovery_local').format(
                             sequence=detail.get('head_sequence'), name=detail.get('head_file'),
@@ -2302,6 +2561,9 @@ class QtCapture(QWidget):
             self.commands.reconcile_workers(retire_context=not self.protected())
         state = self.commands.snapshot()
         watcher_starting = self._watch_start_requested or state.watcher_starting
+        if state.dispatch_route != self._reported_dispatch_route:
+            self._reported_dispatch_route = state.dispatch_route
+            self.simbrief_route_changed.emit(state.dispatch_route)
         start_caption = (
             gettext('Starting Watcher…') if watcher_starting
             else gettext('Start Watcher')
@@ -2334,6 +2596,8 @@ class QtCapture(QWidget):
         busy = self._busy or state.alive
         if not state.alive:
             self._queue_backpressure = False
+            self._queue_review_state = ''
+            self._queue_dispatch_active = False
         if self._reported_queue_waiting != self._queue_backpressure:
             self._reported_queue_waiting = self._queue_backpressure
             self.queue_waiting.emit(self._queue_backpressure)
@@ -2350,6 +2614,7 @@ class QtCapture(QWidget):
         controls = (
             state, permitted, self._pending,
             self._linked_upload_selection_known, self._linked_upload_selected,
+            self._queue_review_state, self._queue_dispatch_active,
         )
         self._notify_import_actions(state, permitted)
         if self._rendered_controls == controls:
@@ -2370,7 +2635,14 @@ class QtCapture(QWidget):
         self.utc_status.setVisible(
             bool(self._flight_context) and self._utc_status_active,
         )
-        if watcher_starting:
+        needs_review = state.watcher_worker_active and bool(self._queue_review_state)
+        if needs_review:
+            watcher_status = (
+                recovery_text(self.language, 'watch_needs_attention')
+                if self._queue_review_state == 'uncertain'
+                else tr(self.language, 'phase_error')
+            )
+        elif watcher_starting:
             watcher_status = gettext('Starting Watcher…')
         elif state.capturing:
             watcher_status = gettext('Watcher is still running')
@@ -2402,11 +2674,32 @@ class QtCapture(QWidget):
             permitted and not state.finishing and self._legacy_revocation is not None,
         )
         self.finish_button.setEnabled(permitted and not state.finishing and (state.alive or self._pending))
+        abandon_visible = bool(
+            state.abandon_cleanup_pending
+            or (state.legacy_mode or state.linked_mode)
+            and (state.capturing or state.watcher_starting)
+            and not state.finishing
+        )
+        self.abandon_button.setVisible(abandon_visible)
+        self.abandon_button.setEnabled(
+            permitted and not state.watcher_starting and not state.finishing
+            and (state.capturing or state.abandon_cleanup_pending),
+        )
+        self.abandon_button.setText(
+            gettext('Retry') if state.abandon_cleanup_pending
+            else tr(self.language, 'abandon'),
+        )
         self.interrupt_button.setEnabled(permitted and state.interrupt_available)
         self.finish_button.setVisible(state.alive or self._pending)
         self.interrupt_button.setVisible(state.interrupt_available)
         self.refresh_button.setEnabled(permitted and state.capturing)
-        self.review_button.setEnabled(permitted and (state.alive or self._pending))
+        self.review_button.setEnabled(
+            permitted and (state.alive or self._pending) and not self._queue_dispatch_active,
+        )
+        self.review_button.setToolTip(
+            recovery_text(self.language, 'watch_recovery_transport_active')
+            if self._queue_dispatch_active else '',
+        )
         self.review_button.setVisible(state.alive or self._pending)
         self._refresh_action_visibility(state)
         self.close_button.setVisible(self._pending)
@@ -2433,6 +2726,16 @@ class QtCapture(QWidget):
         )
         if self.simbrief_button.text() != simbrief_caption:
             self.simbrief_button.setText(simbrief_caption)
+        watcher_simbrief_caption = (
+            tr(self.language, 'simbrief_loading_short')
+            if self._dispatch_feedback and self._busy
+            else tr(self.language, 'simbrief_load_quick')
+        )
+        if self.watcher_simbrief_button.text() != watcher_simbrief_caption:
+            self.watcher_simbrief_button.setText(watcher_simbrief_caption)
+        self.watcher_simbrief_button.setEnabled(
+            permitted and not state.finishing,
+        )
         self.simbrief_button.setEnabled(permitted and not state.finishing)
         self.simbrief_identity_button.setEnabled(permitted and not state.finishing)
         self.attach_dispatch_button.setEnabled(permitted and not state.finishing)
@@ -2475,6 +2778,7 @@ class QtCapture(QWidget):
             self._progress_container = None
         self._folder_inspection_lane.close()
         self._retained_summary_lane.close()
+        self._review_preview_lane.close()
         self._lane.close()
         if not self.busy():
             self.commands.close()

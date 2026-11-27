@@ -91,6 +91,11 @@ target and retained progress. Open **Resume…** in Watcher or **Force Continue�
 in Finish to review the exact pending local generation beside the authorized
 remote preview. A latest-gallery observation is identified separately from an
 upload receipt; unavailable sources or media remain visible failures.
+In Qt, Finish progress shows when the current head requires review. It names an
+unknown upload result explicitly and shows the reason for known blockers such
+as a missing source or authorization. **Force Continue…** is available after
+the current request ends. You can review the retained photo and use the
+permitted decisions while the optional remote comparison loads.
 **Confirm already uploaded (receipt)** requires an exact durable acknowledgement.
 **Skip photo** explicitly keeps the original and unknown history while allowing
 the next accepted item to continue. It is counted separately from successful
@@ -177,7 +182,9 @@ configured AI worker. Link for uploads and select a gallery explicitly in
 Photos before using delegated upload access. **Reconnect saved link** uses
 the existing Windows Credential Manager or macOS Keychain and verifies the
 same installation, account, upload scope and gallery. **Reapprove saved link**
-opens browser consent for that exact saved scope. **Forget saved link** removes
+opens browser consent for that exact saved scope. When an unfinished refresh
+blocks startup restoration of the saved upload link, Qt offers **Reapprove
+saved link** directly in Photos. **Forget saved link** removes
 the matching local credential. The Photos gallery action can start Watcher with
 temporary authority for that exact gallery. Photos provides authorized photo
 and gallery details, cache preload and retention. With Admin permission, it
@@ -613,10 +620,14 @@ website while an upload queue waits. Continue the original queue before changing
 the upload destination. **Continue** opens a photo review when a transfer
 result is uncertain.
 
-**Abandon flight…** is available beside Finish in Watcher and Import and in
-ordinary flight progress. Use it when the gallery was deleted, its key was
-revoked, or you want to leave the current connection without completing
-delivery.
+In Qt, **Abandon flight…** beside Finish in Watcher stops the current
+linked capture after confirmation. In-flight requests settle first. The
+recording, unsent photos and existing PDFs stay available locally, along with
+the receipts for photos already sent.
+
+In legacy API-key mode, **Abandon flight…** is also available in Import and
+ordinary flight progress. Use it to recover from a deleted gallery or an
+obsolete key.
 After explicit confirmation it stops recording and upload producers, waits for
 in-flight requests to settle, marks unresolved Watcher sessions as abandoned
 and removes the saved key from this PC after checking accepted imports. No
@@ -647,6 +658,8 @@ The **Folder** action opens retained files. **Show only flights** starts off
 and hides photo-only sessions when selected, keeping sessions with recorded
 samples or retained PDFs. The **…** menu contains saved-PDF upload, SimBrief,
 OFP attachment, refresh, the app log and the existing Finish action.
+In Qt, select one stopped flight to use **Load SimBrief** beside
+**Generate PDFs only**.
 Refresh reloads checkpoints without analyzing samples. Report work logs its
 session, phase, edition and failure details.
 
@@ -670,8 +683,9 @@ current flight, or the sole pending flight if none is current. It is never
 copied across several unrelated pending flights. Partial recordings also render
 with their incomplete/unknown evidence; no takeoff or landing is fabricated.
 
-Select a stopped session and choose **Create local PDF**. This reads saved
-raw data independently of its former gallery connection. It
+Select a stopped session and choose **Generate PDFs only** in Qt or
+**Create local PDF** in Tk. This reads saved raw data independently of its
+former gallery connection. It
 does not stop another active flight or upload/revoke anything. Each action
 automatically uses an already loaded OFP and creates four fresh numbered
 editions
@@ -715,8 +729,12 @@ Legacy inventory verifies the captured key and the server's
 `flight_reports_v1` capability. An upload failure leaves the local files
 available. Retry sends that same revision to the captured gallery.
 
-To send existing reports, select a stopped flight and choose **… → Upload saved
-PDFs…**. The picker shows each revision, its date and available languages.
+To send existing reports in Qt, select a stopped flight and choose **Send
+PDFs only…**. The picker confirms the selected editions and the upload
+gallery. A connected upload gallery also works with Watcher stopped. The
+**… → Upload saved PDFs…** menu opens the same picker in Qt and is also
+available in Tk with a live Watcher. The picker shows each revision, its date
+and available languages.
 Select one revision or use Ctrl/Shift to select several. In the catalog, Ctrl/Shift
 also selects complete revision groups or individual PDF files of one flight.
 The displayed destination is captured when the action is admitted. Existing
@@ -824,14 +842,24 @@ are never overwritten and unavailable fuel stays unavailable.
 
 ## Optional SimBrief and route maps (0.6.0)
 
-Optional SimBrief loading sits beside Begin/Finish flight, with an adjacent
-identity gear. Enter one pilot ID or username; only a successful OFP fetch saves
-the identity. Loading is explicit and never required for recording. The staged
-plan is consumed by the next session; plans attached during recording belong
-only to that session. No previous flight plan is automatically reused.
-The identity sheet uses the same dark controls as the main app, with inline
-validation, Enter to load and Escape to cancel. The main action switches from
-**Load SimBrief** to **Unload SimBrief**, with the accepted airport pair below.
+In Qt on Windows, **Load SimBrief** appears in Watcher and above the photos
+in an upload-capable linked gallery when WinApp detects a flight simulator,
+such as MSFS 2020/2024, X-Plane or Prepar3D. During a linked Watcher capture,
+the Photos action appears in the watched gallery. Enter a pilot ID or username
+on first use. WinApp remembers the identity after a successful OFP fetch and
+lets you change it in Flight settings. Loading is explicit. A plan loaded before
+recording is staged for the next session. A plan loaded during recording is saved
+to that session.
+
+In Qt Photos, **Load SimBrief** appears above the photo grid when WinApp
+detects a simulator in an upload-capable linked gallery. During a linked
+capture, the action belongs to the watched gallery. Once the plan loads, its
+airport pair appears next to the button.
+
+The Flight settings action switches from **Load from SimBrief** to
+**Unload SimBrief**, with the accepted airport pair below. In Legacy Tk, the
+identity sheet uses the same dark controls as the main app, with inline
+validation, Enter to load and Escape to cancel.
 Unload clears the staged/current plan, removes the current session's OFP
 snapshot and hides its route, allowing recording and new reports without
 SimBrief. It preserves older sessions and existing PDFs. While loading or
@@ -843,11 +871,12 @@ Historical OFP attachment appears in the selected flight's details. Successful
 loading updates that status/activity without opening a message box. Flight
 settings, history, progress and identity sheets open over their invoking window;
 confirmation/error dialogs use explicit ownership as well.
-Saved flights also offer loading the latest OFP directly into the selected
-flight,
-or attaching an archived SimBrief JSON/XML export. A PDF-only OFP cannot supply
-machine-readable dispatch data. Create a new local PDF version afterwards;
-existing PDFs and delivery receipts remain intact.
+For a saved flight, **Load SimBrief** fetches the latest plan. Confirm that it
+belongs to the selected flight. You can also attach an archived SimBrief
+JSON/XML export from the menu. **Generate PDFs only** in Qt uses the locally stored
+plan for report calculations and comparisons. Existing PDFs and delivery
+receipts remain intact.
+
 Reports include recorded OpenStreetMap route maps independently of SimBrief.
 An attached OFP adds a separate planned route, planned passengers and ramp fuel.
 These values never replace measured telemetry. Coordinates come from the OFP
@@ -2186,10 +2215,12 @@ The red REC indicator shows active capture. The Watcher rail, header, tray,
 Photos tree and cache markers share one pulse state while capture is active.
 A small filled red light marks the exact upload gallery in the Photos tree and
 at its heading. A hollow light marks a collapsed branch that hides that gallery.
-The context offers SimBrief when a flight simulator is detected. Finish a game
-to drain its screenshots, or finish a flight to save its available reports
-locally. Finishing revokes the temporary capture key and leaves the website
-linked. This action requires the server's temporary Watcher key migration.
+The SimBrief control above the photos is described under
+[Optional SimBrief and route maps](#optional-simbrief-and-route-maps-060).
+Finish a game to drain its screenshots, or finish a flight to save its
+available reports locally. Finishing revokes the temporary capture key and
+leaves the website linked. This action requires the server's temporary
+Watcher key migration.
 
 To create a root or child gallery in Photos, enter its name and choose
 **Create gallery**. The application takes over a confirmed result automatically;

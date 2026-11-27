@@ -87,7 +87,7 @@ from .localization import gettext, gettext_noop
 from .linked_create import BoundCreateReceipt, GalleryCreateJournal
 from .linked_upload import LinkedUploadTarget, verify_linked_upload_target
 from .offline_linking import (
-    OfflineBinding, enable_rolling_renewal, load_offline_binding,
+    OfflineBinding, OfflineRefreshPending, enable_rolling_renewal, load_offline_binding,
     remove_offline_binding, save_offline_binding, saved_offline_hint_path,
     store_approved_refresh,
 )
@@ -331,8 +331,21 @@ class LinkingProgress:
     failed: bool = False
 
 
+@dataclass(frozen=True)
+class SavedLinkRecovery:
+    """Carry the exact linked upload mode eligible for explicit recovery.
+
+    Attributes:
+        saved (ModeRecord): Captured linked destination whose native refresh
+            binding matched issuer, account and scope during startup restore.
+    """
+
+    saved: ModeRecord
+
+
 PhotosLoadResult = (
-    LinkedPhotos | LiveSiteCatalogue | PhotoCatalogue | LinkingProgress | PhotosUploadUpgrade
+    LinkedPhotos | LiveSiteCatalogue | PhotoCatalogue | LinkingProgress
+    | PhotosUploadUpgrade | SavedLinkRecovery
 )
 
 
@@ -450,9 +463,12 @@ class QtPhotos(QWidget):
         self._gallery_rename_busy = gallery_rename_busy
         self.simbrief_available: Callable[[], bool] | None = None
         self.simbrief_action: Callable[[], None] | None = None
+        self.load_simbrief_action: Callable[[], None] | None = None
         self._active_gallery_menu: QMenu | None = None
         self._live_sites_menu: QMenu | None = None
         self._gallery_context_demand = False
+        self._simbrief_grid_demand = False
+        self._gallery_presence_demand = False
         self._simbrief_menu_entry: QAction | None = None
         self._identity: tuple[str, int] | None = None
         self._parked_links: tuple[DesktopLinkedSite, ...] = ()
@@ -515,6 +531,7 @@ class QtPhotos(QWidget):
         self._attempt: LinkingAttempt | None = None
         self._authorization_active = False
         self._startup_browse = False
+        self._startup_saved_mode: ModeRecord | None = None
         self._selecting_saved_target = False
         self._scope_dialog: QDialog | None = None
         self._scope_issuer = ''
@@ -759,6 +776,32 @@ class QtPhotos(QWidget):
         format_row = QHBoxLayout(self._format_row)
         format_row.setContentsMargins(0, 0, 0, 0)
         format_row.setSpacing(4)
+        self._load_simbrief_button = ActionButton(
+            tr(self.language, 'simbrief_load_quick'), self._load_header_simbrief,
+            icon='cloud',
+        )
+        self._load_simbrief_button.setObjectName('photosLoadSimBrief')
+        self._load_simbrief_button.hide()
+        self._simbrief_status = QLabel()
+        self._simbrief_status.setObjectName('photosSimBriefRoute')
+        self._simbrief_status.setTextFormat(Qt.TextFormat.PlainText)
+        self._simbrief_status.setWordWrap(True)
+        self._simbrief_status.setMinimumWidth(0)
+        self._simbrief_status.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred,
+        )
+        self._simbrief_status.hide()
+        self._simbrief_route = ''
+        self._simbrief_row = QWidget()
+        self._simbrief_row.setObjectName('photosSimBriefRow')
+        simbrief_layout = QHBoxLayout(self._simbrief_row)
+        simbrief_layout.setContentsMargins(0, 0, 0, 0)
+        simbrief_layout.setSpacing(8)
+        simbrief_layout.addWidget(
+            self._load_simbrief_button, alignment=Qt.AlignmentFlag.AlignLeft,
+        )
+        simbrief_layout.addWidget(self._simbrief_status, stretch=1)
+        self._simbrief_row.hide()
         self._order_button = ActionButton(
             "↓" if self._newest else "↑", self.toggle_order,
         )
@@ -808,6 +851,7 @@ class QtPhotos(QWidget):
         self._center_layout = QVBoxLayout(self._center_panel)
         self._center_layout.setContentsMargins(*PHOTO_CARD_MARGINS)
         self._center_layout.addWidget(self._center_toolbar)
+        self._center_layout.addWidget(self._simbrief_row)
         self._folder_split = QSplitter(Qt.Orientation.Vertical)
         self._folder_split.setChildrenCollapsible(False)
         self._folder_split.setOpaqueResize(False)
@@ -1898,6 +1942,7 @@ class QtPhotos(QWidget):
         self._folder_section.setVisible(folders)
         self._photo_pane.setVisible(not folders or not known_empty)
         self._format_row.setVisible(enabled and self._gallery_has_photos is True and not detail)
+        self._sync_simbrief_grid_action()
         self._empty_gallery_message.setVisible(enabled and known_empty and not folders and not detail)
         self._sync_format_actions()
         self._sync_folder_format_actions()
@@ -1918,6 +1963,7 @@ class QtPhotos(QWidget):
             self._capture_target = target
             self._capture_pulse = True
             self._sync_capture_markers()
+            self._sync_simbrief_grid_action()
 
     def _refresh_tree_marker(self, gallery_id: int) -> None:
         """Compose observed cache, pin, and active Watcher states for one row.
@@ -2320,6 +2366,7 @@ class QtPhotos(QWidget):
         if active and self._lightbox_layout_restore is None:
             widgets = (
                 self._connect_card_outer, self._connect_card,
+                self._load_simbrief_button,
                 self._center_toolbar, self._format_row,
                 self._transport_row,
                 self._gallery_panel, self.progress, self.status, self._inspector_panel,
@@ -2546,6 +2593,7 @@ class QtPhotos(QWidget):
             self._viewport_timer.stop()
             self._cancel_thumbnail_group()
             self.progress.hide()
+        self._sync_simbrief_grid_action()
 
     def showEvent(self, event: QShowEvent) -> None:
         """Resume bounded viewport reads when the workspace becomes visible.
@@ -2564,6 +2612,7 @@ class QtPhotos(QWidget):
         if self._tree_order and self._gallery_id is not None:
             self._queue_gallery_cache_probe(self._tree_order)
         self._sync_capture_pulse()
+        self._sync_simbrief_grid_action()
 
     @Property(bool, notify=detailChanged)
     def detailOpen(self) -> bool:
@@ -2823,11 +2872,14 @@ class QtPhotos(QWidget):
         self.formatChanged.emit()
 
     def link(self) -> None:
-        """Ask which gallery the operator wants to authorize for browsing.
+        """Start explicit recovery or ask which gallery to authorize.
 
         Returns:
-            None: Starts a transient browser flow only on explicit acceptance.
+            None: Starts exact saved-link recovery or the normal browser flow.
         """
+        if self._startup_saved_mode is not None:
+            self._reapprove_startup_saved()
+            return
         self._authorize(False)
 
     def resume_saved_browse(self) -> None:
@@ -2845,21 +2897,24 @@ class QtPhotos(QWidget):
         if self.connections is None and not recent:
             return
         self._startup_browse = True
+        self._startup_saved_mode = None
+        self.link_button.setText(tr(self.language, 'linking_start'))
 
         def restore(
             cancelled: Event,
             publish: Callable[[
                 LinkedPhotos | LiveSiteCatalogue | PhotoCatalogue | LinkingProgress
+                | SavedLinkRecovery
             ], None],
         ) -> None:
             """Resolve the stored issuer and restore it without browser consent.
 
             Args:
                 cancelled (Event): Lifetime of this startup read.
-                publish (Callable[[LinkedPhotos | LiveSiteCatalogue | PhotoCatalogue | LinkingProgress], None]):
+                publish (Callable[[LinkedPhotos | LiveSiteCatalogue | PhotoCatalogue | LinkingProgress | SavedLinkRecovery], None]):
                     Current UI owner's catalogue sink.
             Returns:
-                None: Mounts the verified account, if a cached grant is available.
+                None: Mounts a verified account or publishes exact saved recovery.
             """
             try:
                 saved = self.connections.saved() if self.connections is not None else None
@@ -2870,7 +2925,25 @@ class QtPhotos(QWidget):
                 issuer = recent[0]
             if issuer:
                 publish(LinkingProgress(gettext('Checking the securely saved connection…')))
-                self._publish_saved_browse(issuer, cancelled, publish)
+                try:
+                    self._publish_saved_browse(issuer, cancelled, publish)
+                except OfflineRefreshPending:
+                    if saved is None or saved.mode != 'linked':
+                        raise
+                    if cancelled.is_set():
+                        return
+                    binding = saved_desktop_gallery_binding(
+                        self.profile / 'offline-link.json', issuer,
+                    )
+                    if (binding is None or binding.issuer != saved.issuer
+                            or binding.account_id != saved.account_id
+                            or binding.scope != saved.scope):
+                        raise
+                    logging.getLogger(__name__).warning(
+                        'Qt saved-link startup recovery offered: '
+                        'phase=restore; reason=OfflineRefreshPending',
+                    )
+                    publish(SavedLinkRecovery(saved))
 
         self._load.submit(restore)
 
@@ -3066,6 +3139,27 @@ class QtPhotos(QWidget):
         except RuntimeError:
             pass
         self.status_message('The securely saved gallery connection is unavailable.')
+
+    def _reapprove_startup_saved(self) -> None:
+        """Reapprove only the exact linked mode retained by failed startup restore.
+
+        Returns:
+            None: Starts explicit browser consent for the captured saved binding.
+        """
+        saved = self._startup_saved_mode
+        if (saved is None or saved.mode != 'linked' or self.busy()
+                or self._authorization_active or self._startup_browse):
+            return
+        try:
+            current = self.connections.saved() if self.connections is not None else None
+        except RuntimeError:
+            current = None
+        if current != saved:
+            self._startup_saved_mode = None
+            self.link_button.setText(tr(self.language, 'linking_start'))
+            self.status_message('The securely saved gallery connection is unavailable.')
+            return
+        self._authorize(True, saved, reapprove=True)
 
     def forget_uploads(self) -> None:
         """Remove the selected offline credential through its existing native owner.
@@ -4727,7 +4821,18 @@ class QtPhotos(QWidget):
             self.update_simbrief_context(self.simbrief_available())
             if not self._gallery_context_demand:
                 self._gallery_context_demand = True
-                self.gallery_context_changed.emit(True)
+                self._sync_gallery_context_demand()
+
+    def _sync_gallery_context_demand(self) -> None:
+        """Combine grid and menu visibility requests for simulator observation.
+
+        Returns:
+            None: Keeps presence polling demanded until both contexts end.
+        """
+        demanded = self._gallery_context_demand or self._simbrief_grid_demand
+        if self._gallery_presence_demand != demanded:
+            self._gallery_presence_demand = demanded
+            self.gallery_context_changed.emit(demanded)
 
     def update_simbrief_context(self, available: bool) -> None:
         """Toggle the host SimBrief action as its cached simulator status changes.
@@ -4735,10 +4840,76 @@ class QtPhotos(QWidget):
         Args:
             available (bool): The shared GamePresence observer detects a simulator.
         Returns:
-            None: Changes only an action in the existing open gallery menu.
+            None: Refreshes the quick action and any open gallery menu.
         """
         if self._simbrief_menu_entry is not None:
             self._simbrief_menu_entry.setVisible(available)
+        self._sync_simbrief_grid_action()
+
+    def set_simbrief_route(self, route: str) -> None:
+        """Show the capture owner's current bound SimBrief route in Photos.
+
+        Args:
+            route (str): Current CaptureStatus route, or empty when detached.
+        Returns:
+            None: Updates the plain-text success caption and grid visibility.
+        """
+        if self._simbrief_route == route:
+            return
+        self._simbrief_route = route
+        caption = (
+            tr(self.language, 'simbrief_ready') + ' · ' + route
+            if route else ''
+        )
+        self._simbrief_status.setText(caption)
+        self._simbrief_status.setAccessibleName(caption)
+        self._simbrief_status.setToolTip(caption)
+        self._sync_simbrief_grid_action()
+
+    def _sync_simbrief_grid_action(self) -> None:
+        """Show the quick action only for the current eligible linked photo grid.
+
+        Returns:
+            None: Demands cached simulator presence while the linked gallery grid
+                is visible, or releases that demand when its context ends.
+        """
+        session, gallery = self._session, self._gallery_id
+        available = self.simbrief_available
+        capture_matches = (
+            self._capture_target is None
+            or (self._identity is not None
+                and self._capture_target == (*self._identity, gallery))
+        )
+        eligible = bool(
+            self._photos_active and not self._local_photos_active
+            and self.isVisible() and self._lightbox_layout_restore is None
+            and session is not None
+            and gallery is not None and session.can_upload()
+            and self._owns_gallery(session, gallery) and capture_matches
+            and available is not None
+            and self.load_simbrief_action is not None
+        )
+        action_available = bool(
+            eligible and available is not None and available(),
+        )
+        self._load_simbrief_button.setVisible(action_available)
+        has_route = bool(eligible and self._simbrief_route)
+        self._simbrief_status.setVisible(has_route)
+        self._simbrief_row.setVisible(action_available or has_route)
+        if self._simbrief_grid_demand != eligible:
+            self._simbrief_grid_demand = eligible
+            self._sync_gallery_context_demand()
+
+    def _load_header_simbrief(self) -> None:
+        """Load a SimBrief plan through the current gallery's capture owner.
+
+        Returns:
+            None: Revalidates the displayed grant before delegating the load.
+        """
+        self._sync_simbrief_grid_action()
+        action = self.load_simbrief_action
+        if action is not None and self._load_simbrief_button.isVisible():
+            action()
 
     def _open_context_simbrief(self, session: LinkingSession, gallery: int) -> None:
         """Delegate the current menu action to the existing Flight prompt.
@@ -4775,7 +4946,7 @@ class QtPhotos(QWidget):
         """
         if self._active_gallery_menu is None and self._gallery_context_demand:
             self._gallery_context_demand = False
-            self.gallery_context_changed.emit(False)
+            self._sync_gallery_context_demand()
 
     def _open_web_gallery_editor(self, session: LinkingSession, gallery: int) -> None:
         """Open the reference browser editor using only the approved installation.
@@ -6040,11 +6211,20 @@ class QtPhotos(QWidget):
         Args:
             result (PhotosLoadResult): Current authorization, catalogue or progress result.
         Returns:
-            None: Mounts current authorized rows and retains the live viewer
-                when only its tree labels or parent paths changed.
+            None: Mounts authorized rows, exact startup recovery or retains the
+                live viewer when only its tree labels or parent paths changed.
         """
         if isinstance(result, PhotosUploadUpgrade):
             self._finish_admin_upload_upgrade(result)
+            return
+        if isinstance(result, SavedLinkRecovery):
+            if self._startup_browse:
+                self._startup_saved_mode = result.saved
+                self.link_button.setText(gettext('Reapprove saved link'))
+                self.status.setText(
+                    tr(self.language, 'linking_saved_refresh_pending'),
+                )
+                self._sync_connection_state()
             return
         if isinstance(result, LinkingProgress):
             if self._authorization_active or self._startup_browse:
@@ -6174,6 +6354,9 @@ class QtPhotos(QWidget):
         if self._identity != next_identity:
             self._cache_states.clear()
             self._gallery_pins.clear()
+        if self._startup_saved_mode is not None:
+            self._startup_saved_mode = None
+            self.link_button.setText(tr(self.language, 'linking_start'))
         self._session = result.session
         self._session.set_upload_pipeline_waiting(self._pipeline_waiting)
         self._identity = result.issuer, result.user_id
@@ -6433,13 +6616,15 @@ class QtPhotos(QWidget):
                 return
             self._catalogue_notice = None
             if restoring:
+                self._startup_saved_mode = None
+                self.link_button.setText(tr(self.language, 'linking_start'))
                 self.status.setText(gettext('Could not verify the saved link. Try again.'))
             else:
                 self.status.setText(
                     authorization_failure or gettext("Gallery connection is unavailable."),
                 )
             self._sync_authorization_dialog()
-        elif restoring:
+        elif restoring and self._startup_saved_mode is None:
             self.status.clear()
         elif self._session is not None and self._gallery_id is None:
             self.progress.hide()

@@ -561,14 +561,11 @@ snapshot still needs the full serial ascending API read: the disk tree cache has
 no photo IDs or titles, and the server exposes no reverse cursor. This does not
 claim to fix the historical cold-open delay or timeout. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
 
-## Planned decoded-thumbnail cache capacity experiment
+## Decoded-thumbnail cache capacity experiment
 
-The planned profile is named `issue_399_tk_cache_protocol.json`; it is not yet
-implemented or selected for a run, and no cache-capacity results exist. Any
-small-policy pilot would check bridge/control feasibility only, not be an A/B or
-large-cache qualification. The profile is intended to compare two allowlisted treatments on the same exact application
-SHA: 16 MiB / 256 entries and 256 MiB / 4,096 entries. Only the in-memory
-decoded-thumbnail limits would vary; both treatments use the same identity
+`issue_399_tk_cache_protocol.json` compares two allowlisted treatments on
+one exact application SHA, 16 MiB / 256 entries and 256 MiB / 4,096 entries.
+Only the in-memory decoded-thumbnail limits vary. Both treatments use the same identity
 index. One lazy decoded-PIL LRU is shared within the live Photos session, not a
 256 MiB allocation per viewer. Disk-cache and photo-detail quotas, validator
 rules and TTL remain unchanged. Session entries survive gallery switches and
@@ -579,23 +576,30 @@ remains eligible. Four-bytes-per-pixel accounting is conservative and excludes
 allocator, Tk and widget overhead; 256 MiB is a decoded-cache cap, not an RSS
 limit.
 
-The renderer would be fixed per run (native widgets, then Canvas), and the runs
-would remain separate. Each would compare 100, 500 and 2,000 photos in cold/warm
-states with ten independent matched process pairs per cell (60 pairs / 120 child
-processes). Cold would measure the first complete down-and-back thumbnail
-sweep. Warm would prime the same sweep outside measured timing, then measure a
-repeated sweep. Every sweep must request all N thumbnails; metadata admission
-alone does not fill the decoded-image cache. A separate gallery-switch phase
-must return to and fully reopen the original N-photo gallery, so the existing
-100-photo lifecycle sample cannot serve as a 2,000-photo capacity result.
+The [hosted profile](../../TESTING.md#issue-399-decoded-thumbnail-capacity-comparison)
+uses one job per renderer, extent and phase. The sweep jobs compare cold and
+warm with ten independent matched pairs per regime on one Windows host. Each sweep
+verifies the exact distinct photo indices painted into current Tk images down
+and back. Warm priming uses the same traversal before remounting with the
+retained decoded cache. The separate switch jobs prime a full sweep and then
+measure the full original catalogue after returning from a second gallery.
+The 21:9 card format lets the native Windows grid represent enough rows for
+the whole synthetic catalogue. The viewport and admitted synthetic image
+bodies are identical between treatments. The fixture uses verified public
+thumbnail batches so the existing steady production batch size participates.
+The benchmark covers the framed path at the synthetic media seam, with no
+real HTTP or server-side throughput measurement.
 
-The planned report would summarize per-process cache hits, misses, evictions,
-decode attempts, PhotoImage publication P95/P99, CPU and peak RSS; GUI events
-would not be pooled as independent samples. Source/treatment mismatches,
-missing counters, raw-event truncation or the existing 90-second child /
-2,400-second driver timeout would remain visible failures or blocks, with no
-lower repetition count or synthetic zero. The 5,000-photo case remains separate
-nonblocking stress. This unrun plan does not qualify or alter the historical G4 NO-GO. The
-2026-11-17 owner decision makes Canvas the persisted default for new/missing
-settings; native widgets remain available through saved False or environment
-override. No statistical PASS or accessibility claim follows from that choice.
+The report keeps per-process hits, misses, evictions, decode attempts, Tk
+publication p95/p99, CPU and peak working set. The 20,000-event cap and 90-second
+child / 2,400-second driver bounds apply. All twelve jobs need complete samples
+before there is a full capacity result. The 5,000-photo case remains separate
+nonblocking stress. The historical G4 NO-GO applies to the original renderer
+comparison. Canvas remains the persisted default within Legacy Tk for a new
+or missing renderer setting. Saved False or the environment override can
+select native widgets. Hardware presentation and accessibility require their
+own evidence.
+
+No TeX manual impact. This hosted benchmark exercises the two existing renderers
+and the current cache implementation in disposable processes. The manuals'
+product behavior, settings, compatibility and release procedures still apply.

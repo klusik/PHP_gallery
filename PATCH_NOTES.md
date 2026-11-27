@@ -1,5 +1,64 @@
 # Patch notes
 
+## Version 1.8.1
+
+PHP Gallery 1.8.1 includes WinApp 2.0.1 with SimBrief controls for linked
+galleries and saved flights, separate PDF actions, and Watcher recovery.
+
+### Highlights
+
+#### SimBrief and flight PDFs
+
+- Added **Load SimBrief** above the photos in an eligible linked gallery
+  when WinApp detects a supported flight simulator. The loaded airport pair
+  appears beside the button.
+- Added SimBrief loading for a selected saved flight. A new local PDF
+  revision uses the attached plan for its calculations and comparisons.
+- Added **Generate PDFs only** and **Send PDFs only…** for saved flights.
+  An already connected upload destination can receive the selected editions
+  while Watcher is stopped.
+
+#### Watcher and gallery access
+
+- Added **Abandon flight…** beside Finish. Closing the current linked capture
+  retains its recording, local files and receipts. An upload already in
+  progress can finish.
+- Added **Needs attention** and guarded **Force Continue** in Qt when Finish
+  encounters an uncertain upload. The recovery panel keeps the local preview
+  available during an optional comparison with the gallery copy.
+  [#381](https://github.com/klusik/PHP_gallery/issues/381)
+- Added explicit reapproval of the saved gallery link when a Windows
+  credential refresh was left pending.
+
+### Technical Details
+
+#### Capture and delivery
+
+- Bound report delivery to the confirmed gallery and selected PDF editions.
+  A stopped Watcher uses an independently leased flight workspace for
+  delivery and checks the gallery receipt status before sending each edition.
+- Added synthetic Windows captures of the Photos SimBrief controls before
+  and after loading. The Watcher recovery fixtures cover explicit resolution
+  of an uncertain HTTP 503 and subsequent FIFO delivery.
+  [#381](https://github.com/klusik/PHP_gallery/issues/381)
+
+#### Tk capacity measurements
+
+- Added paired Windows benchmarks of the Tk Canvas and native photo views
+  under different decoded-cache capacities. The 100- and 500-photo runs
+  completed and the 2,000-photo cases exceeded the benchmark deadline.
+  [#399](https://github.com/klusik/PHP_gallery/issues/399)
+
+### User Impact
+
+#### WinApp operators
+
+- A flight can be revisited after the simulator has exited. Operators can
+  prepare corrected local reports before deciding which editions to share
+  with the destination gallery.
+- When a transfer outcome is uncertain, operators can review the exact photo
+  and resolve it before continuing with the rest of the queue.
+
 ## Version 1.8.0
 
 PHP Gallery 1.8.0 includes WinApp 2.0.0 and adds subgallery moves to the web

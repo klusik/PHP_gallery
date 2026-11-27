@@ -26,7 +26,7 @@ from .flight_simbrief import DispatchPlan
 from .flight_workflow import FinalizationWorker
 from .linked_upload import LinkedTargetLease, LinkedUploadTarget, UploadPipelineLease
 from .watch_queue import WatchQueueStore
-from .watch_recovery import WatchRecoverySnapshot
+from .watch_recovery import WatchRecoveryRemote, WatchRecoverySnapshot
 
 CaptureDecision = Literal['receipt', 'skip', 'approve', 'earlier', 'continue']
 CaptureEvents = Queue[tuple[str, str] | dict[str, object]]
@@ -218,6 +218,7 @@ class CaptureReview:
     can_receipt: bool
     can_approve: bool
     preview: bytes | None = None
+    target_label: str = ''
 
 
 class CaptureCommands(Protocol):
@@ -367,6 +368,20 @@ class CaptureCommands(Protocol):
             CaptureReview | None: Exact current review evidence or no live owner.
         """
 
+    def review_remote(
+        self, review: CaptureReview, cancelled: Event,
+    ) -> WatchRecoveryRemote | None:
+        """Read optional remote evidence under the original recovery target.
+
+        Args:
+            review (CaptureReview): Exact snapshot held by the visible dialog.
+            cancelled (Event): Set when the dialog is dismissed or replaced.
+
+        Returns:
+            WatchRecoveryRemote | None: Authorized preview bytes and evidence
+                kind, or None when the request is stale or unavailable.
+        """
+
     def dispatch_identity(self) -> str:
         """Read the last successfully loaded SimBrief account identity.
 
@@ -439,23 +454,26 @@ class CaptureCommands(Protocol):
         """
 
     def report_target(self) -> tuple[str, str] | None:
-        """Project the active Watcher's confirmed report destination.
+        """Project an active Watcher or current verified upload destination.
 
         Returns:
-            tuple[str, str] | None: Exact binding and display name, when available.
+            tuple[str, str] | None: Exact binding and display name, when
+                available without restoring or starting a connection.
         """
 
     def prepare_report_upload(
         self, directory: Path, editions: tuple[tuple[str, str], ...], binding: str,
-    ) -> FinalizationWorker:
-        """Verify selected saved report editions and the active Watcher target.
+    ) -> tuple[FinalizationWorker, WorkspaceLease | None]:
+        """Verify saved editions and return their worker plus lease ownership.
 
         Args:
             directory (Path): Exact approved stopped flight.
             editions (tuple[tuple[str, str], ...]): Selected revision and language IDs.
             binding (str): Destination shown in the approval dialog.
         Returns:
-            FinalizationWorker: Existing unstarted delivery worker for those editions.
+            tuple[FinalizationWorker, WorkspaceLease | None]: Unstarted report-only
+                delivery worker and an independent lease to release after it ends;
+                None means the active capture owner retains the lease.
         """
 
     def prepare_report_creation(self, directory: Path, binding: str) -> FinalizationWorker:

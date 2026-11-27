@@ -5,6 +5,7 @@
 # Purpose: Run the opt-in Windows Tk performance protocol for issue 361.
 # Responsibilities:
 #   - Bind the selected benchmark stage and source SHAs to the exact event commit
+#   - Compare decoded cache capacities separately on one application commit
 #   - Install pinned benchmark-only Python dependencies
 #   - Invoke the benchmark exclusively through the central audit suite
 #   - Retain raw benchmark output and audit diagnostics on every outcome
@@ -1474,3 +1475,75 @@ jobs:
             if (publishedStatus !== 'PASS') {
               core.setFailed('Benchmark publication status is ' + publishedStatus + '.');
             }
+
+  cache-capacity:
+    name: Cache capacity (${{ matrix.renderer }}, ${{ matrix.scenario }}, ${{ matrix.phase }})
+    if: github.ref_name == 'feature/399-virtualized-canvas-gallery' && startsWith(github.event.head_commit.message, '[tk-cache]')
+    permissions:
+      contents: read
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: one renderer, extent and phase job.
+    # Consumers: Actions timeout. Rationale: 45 minutes retains the existing
+    # 40-minute driver deadline with time for hosted setup and artifacts.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [native, canvas]
+        scenario: [scroll100, scroll500, scroll2000]
+        phase: [sweep, reopen]
+    env:
+      PHP_GALLERY_TK_PERF_PROTOCOL: issue_399_tk_cache_protocol.json
+      PHP_GALLERY_TK_PERF_STAGE: compare
+      PHP_GALLERY_TK_PERF_BASELINE: ${{ github.sha }}
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_TK_CAPACITY_RENDERER: ${{ matrix.renderer }}
+      PHP_GALLERY_TK_CAPACITY_SCENARIO: ${{ matrix.scenario }}
+      PHP_GALLERY_TK_CAPACITY_PHASE: ${{ matrix.phase }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install the pinned Tk benchmark dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-benchmark.txt --constraint winapp/constraints.txt Pillow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run the central audit on the two cache treatments
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:GITHUB_SHA) {
+            throw 'Cache capacity checkout differs from the event SHA.'
+          }
+          $base = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $base -notmatch '^[0-9a-f]{40}$') {
+            throw 'Cache capacity checkout lacks the immutable main merge base.'
+          }
+          $env:PHP_GALLERY_SOURCE_BASE = $base
+          php scripts/audit.php --suite=watcher-tk-performance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain cache capacity samples and failures
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-399-cache-${{ matrix.renderer }}-${{ matrix.scenario }}-${{ matrix.phase }}-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: one cache job's evidence.
+          # Consumers: Actions artifact retention. Rationale: 14 days matches
+          # the original benchmark to keep the full review window available.
+          retention-days: 14

@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.8.0}
+\newcommand{\version}{1.8.1}
 \newcommand{\manualdate}{27.~listopadu~2026}
 
 \hypersetup{
@@ -2638,7 +2638,10 @@ Klient údaj jednou obmění a~ověří identitu serveru. Pokud stejný ověřen
 server výslovně odmítne vypršelý nebo odvolaný obnovovací údaj, WinApp tento
 uložený údaj odstraní. Nové propojení schvalte v~prohlížeči po volbě
 \ui{Připojit web}. Při spuštění zůstává schválení na vás. Nejistá odpověď
-nebo chyba úložiště zablokuje použití původního údaje. Zkontrolujte propojení
+nebo chyba úložiště zablokuje použití původního údaje. Pokud při spuštění
+nedokončená obnova blokuje uložené připojení k~nahrávání, Galerie v~Qt nabídne
+\ui{Znovu schválit uložené propojení} pro stejný účet, galerii a~rozsah
+oprávnění. Zkontrolujte propojení
 na serveru a~případně použijte \ui{Forget saved link} před novým propojením.
 Místní zapomenutí neruší serverový grant a~současná relace může zůstat aktivní.
 Uložený klíč \texttt{pgu\_} zůstává nezávislý. Skutečné Windows a~obnova po
@@ -2669,6 +2672,11 @@ kontextové tlačítko nabízí \ui{Stop Watcher}. Během dokončování otevře
 \ui{Show progress}. \ui{Přerušit} pozastaví přijaté nahrávání a~uchová
 frontu. Volbou \ui{Pokračovat} obnovíte upload do stejné galerie.
 Pokud původní propojení vyžaduje schválení, WinApp otevře připojení k~webu.
+Pokud položka Watcheru vyžaduje rozhodnutí, průběh v~Qt nabídne akci
+\ui{Pokračovat po kontrole…}, jakmile skončí aktivní požadavek. Průběh
+uvádí důvod známé překážky a~výslovně označuje neznámý výsledek nahrání.
+Místní náhled a~volby jsou dostupné během načítání vzdáleného náhledu.
+Samotné vzdálené pozorování nahrání nepotvrzuje.
 Akce \ui{Photo is OK — upload} znamená, že jste zobrazený zdroj zkontrolovali
 a~potvrdili, že je v~pořádku a~nejde o~duplikát. Uvolní pouze stejnou hlavu
 FIFO do běžného uploadu; server dál provádí své kontroly duplicit.
@@ -3088,7 +3096,8 @@ rozbalovací skupiny, vždy číselně sestupně (v5, v4, v3) bez ohledu na~řaz
 sloupců. Obnovení zachová rozbalené lety i~verze a~výběr souborů. Toto
 zobrazení nepřesouvá ani nepřejmenovává soubory na~disku.
 
-Pro zastavený let vytvoří \ui{Vytvořit místní PDF}
+Pro zastavený let vytvoří \ui{Jen generovat PDF} v~Qt nebo
+\ui{Vytvořit místní PDF} v~Tk
 novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
 vzorky i~potvrzení uploadu zůstanou zachované. Klíč není potřeba, nedojde
 k~uploadu ani zrušení klíče a~jiný běžící let pokračuje. Částečné zprávy
@@ -3154,6 +3163,11 @@ i~zastavení ponechá připojení pro další relaci. Serverové klíče spravuj
 v~administraci PHP Gallery. Propojená relace používá souhlas z~prohlížeče.
 Po~restartu dialog obnovy předvyplní ověřenou adresu.
 
+V~Qt tlačítko \ui{Opustit let} vedle dokončení ve~Watcheru po~potvrzení
+ukončí aktuální sledování propojené galerie. Rozpracované požadavky nejprve
+doběhnou. Záznam, neodeslané fotky, existující PDF a~potvrzení zůstanou dostupné
+místně.
+
 V~režimu API klíče \ui{Opustit let} ve~Watcheru, Importu a~průběhu
 umožňuje místní obnovu po~smazání galerie nebo zrušení klíče. Po~potvrzení
 se~zastaví pracovníci a~vyčká se~na~běžící požadavky; čekající doručení
@@ -3167,8 +3181,10 @@ a~možnost opakování.
 Spusťte Sledovátko na~cílové galerii s~propojeným účtem nebo API klíčem.
 \ui{Vytvořit a~nahrát} uloží novou revizi a~odešle ji~do~galerie uvedené
 vedle tlačítka. Po~selhání nahrávání se~opakuje odeslání téže revize.
-U~zastaveného letu zvolte pod třemi tečkami \ui{Nahrát uložená PDF}.
-Výběr ukáže revize, datum a~jazyky. Pomocí Ctrl/Shift vyberete více revizí
+U~zastaveného letu zvolte \ui{Jen odeslat PDF} v~Qt nebo pod třemi tečkami
+\ui{Nahrát uložená PDF}. Připojená galerie pro nahrávání v~Qt funguje i~při
+zastaveném Watcheru. Výběr potvrdí cíl a~ukáže revize, datum a~jazyky.
+Pomocí Ctrl/Shift vyberete více revizí
 nebo jednotlivá PDF jednoho letu. Odešlou se~uložené soubory a~jiný let
 může pokračovat. Samostatný \filepath{upload-receipts.json} zachová
 potvrzené kontrolní součty; opakování ověřuje stav na~serveru. Staré plány,
@@ -3908,11 +3924,18 @@ Volitelné načtení ze SimBriefu je vedle zahájení/dokončení letu; ozubené
 kolečko mění ID pilota nebo uživatelské jméno v jediném poli. Identita se uloží
 teprve po úspěšném načtení OFP. Záznam letu ji nevyžaduje. Předem načtený plán
 převezme pouze následující let, plán načtený během záznamu patří tomuto letu.
-U~vybraného uloženého letu lze přímo načíst nejnovější OFP nebo vybrat
-archivovaný
-export SimBrief JSON/XML. Samotný PDF dokument neposkytuje strukturovaná data.
-Následně vytvořte novou verzi místních PDF; starší PDF i potvrzení přenosu
-zůstávají.
+V~rozhraní Qt na~Windows se při detekci leteckého simulátoru objeví
+\ui{Načíst SimBrief} ve~Watcheru a~nad fotkami v~propojené galerii
+s~oprávněním k~nahrávání. Během sledování propojené galerie je~tlačítko
+nad fotkami dostupné ve~sledované galerii. Vedle tlačítka se po~načtení zobrazí
+kódy odletového a~cílového letiště.
+
+V~rozhraní Qt vyberte jeden ukončený let a~použijte \ui{Načíst SimBrief}
+vedle \ui{Jen generovat PDF}. Potvrďte, že~nejnovější OFP patří k~vybranému
+letu. Nabídka uloženého letu umožňuje také připojit archivovaný export SimBrief
+ve~formátu JSON/XML. Vytvořte novou místní revizi PDF, která použije uložený
+plán pro výpočty a~porovnání v~reportu. Starší PDF i~potvrzení přenosu
+zůstávají zachované.
 Reporty obsahují mapu zaznamenané trasy OpenStreetMap i bez OFP. OFP doplní
 samostatnou plánovanou trasu, plánovaný počet cestujících a palivo na stojánce;
 tyto údaje nenahrazují telemetrii. Souřadnice navlogu se uchovávají v omezené
@@ -10516,6 +10539,8 @@ Chybějící, neúplný, chybný, duplicitní, neúspěšný či překročený p
 neúspěch. Běžný vlastník úplné sady zachovává dosavadní samostatný proces
 i~limit; dřívější úplné, dvou-, tří- a~čtyřprocesové vypršení limitu zůstávají
 neúspěšnými běhy.
+Volitelná sada \codeword{winapp-simbrief-preview} spustí na~Windows scénář
+galerie a~uloží snímky před načtením a~po~načtení testovacího plánu.
 Log vybraného procesu ihned za~koncovým záznamem FAIL/ERROR vypíše celý
 traceback, takže při pozdějším vypršení limitu zůstane zachován důvod před
 dokončením závěrečného JSON reportu.
