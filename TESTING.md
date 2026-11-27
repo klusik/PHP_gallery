@@ -2350,7 +2350,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery in nine serial partitions. It performs no integration,
+central complete discovery in its registered serial partitions. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
 
@@ -2376,6 +2376,29 @@ publication repair and preserved originals.
 `test_watch_recovery_integration.py` uses the actual Watcher, linked history and
 native leases with a synthetic transfer boundary, including first dispatch of
 the blocked new source, receipt mismatch and repair after linked publication.
+It also checks that remote comparison stays with the bound target and drops
+cancelled or rebound results without changing the original source or journal.
+The combined 503 fixture replays acknowledgement 443, an ambiguous dispatch
+of 444 and 80 later accepted originals. It checks the exact journal bytes
+across read-only inspection and verifies that only explicit skip admits 445.
+The existing Qt backend matrix runs the native uncertain Finish and comparison
+case in `test_qt_backend.py`. It verifies action availability at the transport
+boundary, a loaded local preview while the comparison is working, and that
+the comparison leaves receipt confirmation unavailable. Distinct preview
+pixels carry through to the two native labels. At 420×390, unbroken target
+identifiers and filenames must wrap without a horizontal scrollbar, while
+vertical scrolling keeps both preview images reachable above the fixed decision
+controls. The desktop and narrow captures are `watcher-review.png` and
+`watcher-review-narrow.png` in the Qt native artifact.
+The Finish fixtures distinguish unknown results, known blockers, and scheduled
+transport retry. The manual upload overlap fixture keeps the exact same-target
+uncertainty marker for identical bytes and for a changed original. It checks
+the warning, retained source bytes and refusal before network dispatch.
+`test_child_termination_restores_uncertain_head` terminates an isolated Python
+child after the write-ahead dispatch record has been persisted and read back.
+It verifies the uncertain head, successor order and both original files after
+a new owner restores the journal. Physical suspend and power loss require
+separate evidence.
 Restart recovery fixtures cover the Photos action and queue refresh when the
 worker is absent, coalesced exact-target verification, and local closure under
 the native pipeline and target leases. A failed plan write retains the original

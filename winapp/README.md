@@ -91,6 +91,11 @@ target and retained progress. Open **Resume…** in Watcher or **Force Continue�
 in Finish to review the exact pending local generation beside the authorized
 remote preview. A latest-gallery observation is identified separately from an
 upload receipt; unavailable sources or media remain visible failures.
+In Qt, Finish progress shows when the current head requires review. It names an
+unknown upload result explicitly and shows the reason for known blockers such
+as a missing source or authorization. **Force Continue…** is available after
+the current request ends. You can review the retained photo and use the
+permitted decisions while the optional remote comparison loads.
 **Confirm already uploaded (receipt)** requires an exact durable acknowledgement.
 **Skip photo** explicitly keeps the original and unknown history while allowing
 the next accepted item to continue. It is counted separately from successful

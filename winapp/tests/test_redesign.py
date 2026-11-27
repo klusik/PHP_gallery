@@ -2071,61 +2071,92 @@ class LinkedUploadHistoryTests(unittest.TestCase):
         self.assertEqual(2, target.inventory.call_count)
 
     def test_uncertain_target_blocks_watcher_and_manual_upload(self) -> None:
-        """Prevent either producer sending B while an earlier A is unresolved.
+        """Retain the exact same-gallery marker across new and changed sources.
 
         Returns:
-            None: Both workflows retain the source and avoid all remote calls.
+            None: Same bytes and changed bytes remain blocked without dispatch.
         """
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source = root / 'b.jpg'
-            source.write_bytes(b'B')
-            target = mock.Mock()
-            target.binding.return_value = 'e' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
-                state = MAIN.LinkedUploadState(target)
-                state.mark_uncertain(root / 'a.jpg', 'a' * 64)
-                watcher = object.__new__(MAIN.WatcherThread)
-                initialize_watcher_fixture(watcher, MAIN, self)
-                watcher._once_work = None
-                watcher.linked_target = target
-                watcher.state = state
-                watcher.drain_only = True
-                watcher.accepted_paths = {source}
-                watcher.initial_paths = set()
-                watcher._admission_lock = threading.RLock()
-                watcher.events = MAIN.queue.Queue()
-                watcher.drain_event = threading.Event()
-                watcher.stop_event = threading.Event()
-                watcher.stability = mock.Mock()
-                watcher.stability.stable.return_value = True
-                watcher.persist_drain = mock.Mock()
-                watcher.remote_inventory = mock.Mock()
-                watcher.remote_inventory.refresh.return_value = True
-                watcher.remote_inventory.last_error = None
-                watcher.emit = mock.Mock()
-                watcher.scan_once(root, '')
-                self.assertFalse(watcher.stop_event.is_set())
-                self.assertEqual('blocked', watcher._queue.head().state)
-                self.assertEqual(
-                    'prior_upload_review', watcher._queue.head().phase,
-                )
-                watcher.remote_inventory.refresh.assert_not_called()
+        cases = (
+            ('same_bytes', b'A', False),
+            ('changed_file', b'B', True),
+        )
+        for case_name, candidate_bytes, change_original in cases:
+            with self.subTest(case=case_name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                uncertain_source = root / 'a.jpg'
+                uncertain_source.write_bytes(b'A')
+                target = mock.Mock()
+                target.binding.return_value = 'e' * 64
+                with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+                    state = MAIN.LinkedUploadState(target)
+                    original_digest = MAIN.sha256_file(uncertain_source)
+                    state.mark_uncertain(uncertain_source, original_digest)
+                    original_marker = state.recovery_marker()
+                    original_marker_bytes = state.path.read_bytes()
+                    if change_original:
+                        source = uncertain_source
+                        source.write_bytes(candidate_bytes)
+                    else:
+                        source = root / 'b.jpg'
+                        source.write_bytes(candidate_bytes)
 
-                manual = object.__new__(MAIN.ManualUploadThread)
-                manual._redirect_refused = threading.Event()
-                manual.linked_target = target
-                manual.linked_state = MAIN.LinkedUploadState(target)
-                manual.remote_inventory = mock.Mock()
-                manual.wait_if_paused = mock.Mock(return_value=True)
-                manual.update_item = mock.Mock()
-                manual.emit = mock.Mock()
-                manual.stop_event = threading.Event()
-                manual.upload_one('', source, 1, [], None, False)
-                self.assertTrue(manual.stop_event.is_set())
-                manual.remote_inventory.refresh.assert_not_called()
-                target.upload.assert_not_called()
-                self.assertEqual(b'B', source.read_bytes())
+                    candidate_digest = MAIN.sha256_file(source)
+                    watcher = object.__new__(MAIN.WatcherThread)
+                    initialize_watcher_fixture(watcher, MAIN, self)
+                    watcher._once_work = None
+                    watcher.linked_target = target
+                    watcher.state = state
+                    watcher.drain_only = True
+                    watcher.accepted_paths = {source}
+                    watcher.initial_paths = set()
+                    watcher._admission_lock = threading.RLock()
+                    watcher.events = MAIN.queue.Queue()
+                    watcher.drain_event = threading.Event()
+                    watcher.stop_event = threading.Event()
+                    watcher.stability = mock.Mock()
+                    watcher.stability.stable.return_value = True
+                    watcher.persist_drain = mock.Mock()
+                    watcher.remote_inventory = mock.Mock()
+                    watcher.remote_inventory.refresh.return_value = True
+                    watcher.remote_inventory.last_error = None
+                    watcher.upload_watched_file = mock.Mock()
+                    watcher.emit = mock.Mock()
+                    watcher.scan_once(root, '')
+
+                    queued = watcher._queue.head()
+                    self.assertFalse(watcher.stop_event.is_set())
+                    self.assertEqual('blocked', queued.state)
+                    self.assertEqual('prior_upload_review', queued.phase)
+                    self.assertEqual(
+                        'Earlier linked upload has an unknown result; review required.',
+                        queued.reason,
+                    )
+                    self.assertEqual(candidate_digest, queued.sha256)
+                    self.assertEqual(original_marker, state.recovery_marker())
+                    self.assertEqual(original_marker_bytes, state.path.read_bytes())
+                    watcher.remote_inventory.refresh.assert_not_called()
+                    watcher.upload_watched_file.assert_not_called()
+
+                    manual = object.__new__(MAIN.ManualUploadThread)
+                    manual._redirect_refused = threading.Event()
+                    manual.linked_target = target
+                    manual.linked_state = MAIN.LinkedUploadState(target)
+                    self.assertEqual(state.path, manual.linked_state.path)
+                    manual.remote_inventory = mock.Mock()
+                    manual.wait_if_paused = mock.Mock(return_value=True)
+                    manual.update_item = mock.Mock()
+                    manual.emit = mock.Mock()
+                    manual.stop_event = threading.Event()
+                    manual.upload_one('', source, 1, [], None, False)
+                    self.assertTrue(manual.stop_event.is_set())
+                    manual.emit.assert_any_call(
+                        'error', MAIN.LINKED_UPLOAD_UNCERTAIN_REASON,
+                    )
+                    manual.remote_inventory.refresh.assert_not_called()
+                    target.upload.assert_not_called()
+                    self.assertEqual(original_marker, manual.linked_state.recovery_marker())
+                    self.assertEqual(original_marker_bytes, state.path.read_bytes())
+                    self.assertEqual(candidate_bytes, source.read_bytes())
 
     def test_linked_thumbnail_snapshot_and_changed_source_block_upload(self) -> None:
         """Generate from captured A and refuse upload if the source becomes B.

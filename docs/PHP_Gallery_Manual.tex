@@ -1900,6 +1900,11 @@ After submitting a~decision, \ui{Hide (saving decision)} only hides progress;
 the~already authorized durable publication finishes normally.
 In~a~short window, evidence scrolls while the~decision and~close controls
 remain visible below it.
+In~Qt, \ui{Force Continue…} opens this review when the~current Watcher
+item requires a~decision and~the~active request has ended. Progress shows
+the~reason for a~known block and~labels an~unknown upload result explicitly.
+The~local preview and~available decisions are~ready while the~optional
+comparison loads.
 After a~worker restart, \ui{Continue} also releases safe pending
 work in~the~same session, preserving its~retry deadline.
 Explicit recovery after a~failed Stop save also restores reconciliation

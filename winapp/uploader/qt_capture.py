@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from math import ceil
 from pathlib import Path
 from queue import Empty
+import re
 from threading import Event
 import time
 from typing import Callable, Literal
@@ -23,7 +24,7 @@ from PySide6.QtGui import QImage, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QMainWindow,
-    QLineEdit, QMessageBox, QProgressBar, QTableWidget, QTableWidgetItem, QToolTip,
+    QLineEdit, QMessageBox, QProgressBar, QScrollArea, QTableWidget, QTableWidgetItem, QToolTip,
     QVBoxLayout, QWidget,
 )
 
@@ -49,6 +50,7 @@ from .ui_layout import (
     OVERLAY_ACTION_COLUMNS, OVERLAY_HEIGHT_PX, OVERLAY_MARGIN_PX, OVERLAY_WIDTH_PX,
     WORKSPACE_ACTION_HEIGHT, WORKSPACE_CARD_INSETS, WORKSPACE_COMPACT_ACTION_HEIGHT,
 )
+from .watch_recovery import RECOVERY_DIGEST_PREFIX_CHARS, sanitize_recovery_label
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,29 @@ SUCCESS_AUTOCLOSE_SECONDS = 3
 # Type: tuple[int, int]. Units: Qt progress values. Scope: Watcher startup only.
 # Consumers: QtCapture. Rationale: Qt's 0..0 range paints a native busy indicator.
 WATCHER_START_PROGRESS_RANGE = (0, 0)
+# Purpose: Give Qt wrap opportunities inside unbroken recovery metadata.
+# Type: int. Units: characters. Scope: rendered recovery labels only.
+# Consumers: QtCapture._show_review. Rationale: Sixteen characters keep hashes
+# recognizable while preventing them from setting a wider scroll-area minimum.
+RECOVERY_LABEL_BREAK_CHARS = 16
 ReviewResult = tuple[CaptureReview, QImage | None]
+RemoteReviewResult = tuple[QImage | None, str]
+
+
+def wrap_recovery_display_text(value: str) -> str:
+    """Add invisible break opportunities inside long rendered tokens.
+
+    Args:
+        value (str): Sanitized recovery text prepared for native display.
+
+    Returns:
+        str: Same visible text with wrap opportunities in long tokens.
+    """
+    return re.sub(
+        rf"(\S{{{RECOVERY_LABEL_BREAK_CHARS}}})(?=\S)",
+        r"\1" + "\u200b",
+        value,
+    )
 
 
 def capture_progress_indeterminate(state: CaptureStatus, busy: bool) -> bool:
@@ -262,6 +286,8 @@ class QtCapture(QWidget):
         self._reported_busy = False
         self._reported_watcher_activity = False
         self._queue_backpressure = False
+        self._queue_review_state = ''
+        self._queue_dispatch_active = False
         self._reported_queue_waiting = False
         self._pending = pending
         self._linked_upload_selected = False
@@ -283,6 +309,7 @@ class QtCapture(QWidget):
         self._rendered_controls: tuple[object, ...] | None = None
         self._import_action_state: tuple[object, ...] | None = None
         self._review_dialog: QDialog | None = None
+        self._review_remote_view: tuple[QLabel, QLabel] | None = None
         self._progress_dialog: RaisedSurface | None = None
         self._progress_container: QWidget | None = None
         self._progress_previous_focus: QWidget | None = None
@@ -306,6 +333,9 @@ class QtCapture(QWidget):
         )
         self._retained_summary_lane = QtReadLane[RetainedQueueSummary](
             self._show_retained_summary, self._retained_summary_finished, self,
+        )
+        self._review_preview_lane = QtReadLane[RemoteReviewResult](
+            self._show_review_remote, self._finish_review_preview, self,
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(*CAPTURE_WORKSPACE_INSETS)
@@ -1120,17 +1150,24 @@ class QtCapture(QWidget):
             self._progress_gauge.setAccessibleName(title)
             self._progress_activity.setAccessibleName(title)
         retained_only = self._retained_only(state)
-        running = capture_progress_indeterminate(state, self._busy)
+        needs_review = state.watcher_worker_active and bool(self._queue_review_state)
+        running = capture_progress_indeterminate(state, self._busy) and not needs_review
         idle_review = state.phase == 'idle' and not running and not state.progress_total
         review_only = retained_only or idle_review
-        if state.progress_total:
+        if needs_review:
+            phase = (
+                recovery_text(self.language, 'watch_needs_attention')
+                if self._queue_review_state == 'uncertain'
+                else tr(self.language, 'phase_error')
+            )
+        elif state.progress_total:
             phase = tr(self.language, 'phase_' + state.phase)
         elif review_only or state.phase == 'idle':
             phase = tr(self.language, 'review_pending_uploads')
         else:
             phase = self.watcher_state.text()
         self._progress_phase.setText(phase)
-        timing = capture_progress_timing(state, time.monotonic())
+        timing = '' if needs_review else capture_progress_timing(state, time.monotonic())
         if self._progress_timing.text() != timing:
             self._progress_timing.setText(timing)
         self._progress_timing.setVisible(bool(timing))
@@ -1215,11 +1252,16 @@ class QtCapture(QWidget):
         self._progress_status.setVisible(bool(progress_status))
         continue_available = bool(
             state.resume_available or self._pending or state.more_retained
-            or state.context_cleanup_failed
+            or state.context_cleanup_failed or needs_review
         )
+        self._progress_continue.setText(
+            recovery_text(self.language, 'force_continue_watch') if needs_review
+            else self.resume_button.text(),
+        )
+        self._progress_continue.setToolTip(self.review_button.toolTip() if needs_review else '')
         self._progress_continue.setVisible(continue_available)
         self._progress_continue.setEnabled(
-            self.resume_button.isEnabled() if state.resume_available
+            self.resume_button.isEnabled() if state.resume_available and not needs_review
             else self.review_button.isEnabled(),
         )
         self._progress_close.setVisible(self._pending and not state.alive)
@@ -1325,7 +1367,10 @@ class QtCapture(QWidget):
             None: Delegates to the exact existing owner without bypassing review.
         """
         state = self.commands.snapshot()
-        if state.resume_available:
+        if state.watcher_worker_active and self._queue_review_state:
+            if not self._queue_dispatch_active:
+                self.review()
+        elif state.resume_available:
             self.resume_checkpoint()
         elif (self._pending or state.more_retained
               or state.context_cleanup_failed or state.error):
@@ -2123,30 +2168,85 @@ class QtCapture(QWidget):
         Returns:
             None: Opens a modal native dialog with explicit decision buttons.
         """
+        if self._review_dialog is not None:
+            self._review_dialog.raise_()
+            return
         language = self.language
         title = recovery_text(language, 'watch_recovery_title')
         head = review.snapshot
         dialog = QDialog(self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.setObjectName('watchRecoveryReview')
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        body = QWidget(scroll)
+        evidence = QVBoxLayout(body)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, stretch=1)
         text = recovery_text(language, 'watch_recovery_local').format(
-            sequence=head.sequence, name=Path(head.source_path).name,
-            count=head.pending_count, target=head.target_binding,
+            sequence=head.sequence, name=sanitize_recovery_label(Path(head.source_path).name),
+            count=head.pending_count,
+            target=sanitize_recovery_label(review.target_label or head.target_binding),
         )
         if head.review_blocked_by_earlier_upload:
             text += '\n' + recovery_text(language, 'watch_recovery_prior_identity').format(
-                marker=head.prior_blocker_marker, name=Path(head.prior_blocker_path).name,
+                marker=head.prior_blocker_marker,
+                name=sanitize_recovery_label(Path(head.prior_blocker_path).name),
                 digest=head.prior_blocker_sha256, target=head.prior_blocker_target_binding,
             )
-        detail = QLabel(text)
+        text += '\n' + self.sanitize(sanitize_recovery_label(head.error))
+        detail = QLabel(wrap_recovery_display_text(text))
         detail.setTextFormat(Qt.TextFormat.PlainText)
         detail.setWordWrap(True)
-        layout.addWidget(detail)
-        preview = QLabel(recovery_text(language, 'watch_recovery_local_unavailable'))
+        detail.setMinimumWidth(0)
+        evidence.addWidget(detail)
+        absent = recovery_text(language, 'watch_recovery_none')
+        timestamp = lambda epoch: time.strftime(
+            '%Y-%m-%d %H:%M:%S', time.localtime(epoch),
+        ) if epoch else absent
+        facts = QLabel(wrap_recovery_display_text(
+            recovery_text(language, 'watch_recovery_file_details').format(
+                modified=timestamp(head.captured_at), size=head.source_size,
+                digest=head.sha256[:RECOVERY_DIGEST_PREFIX_CHARS],
+                binding=sanitize_recovery_label(head.target_binding),
+                confirmed=head.last_confirmed_sequence or absent,
+                confirmed_at=timestamp(head.last_confirmed_at),
+                progress=self.sanitize(sanitize_recovery_label(head.progress)) or absent,
+                progress_at=timestamp(head.progress_at), phase=head.phase or head.state,
+                http_status=head.http_status or absent,
+            ),
+        ))
+        facts.setTextFormat(Qt.TextFormat.PlainText)
+        facts.setWordWrap(True)
+        facts.setMinimumWidth(0)
+        evidence.addWidget(facts)
+        previews = QGridLayout()
+        previews.setColumnStretch(0, 1)
+        previews.setColumnStretch(1, 1)
+        remote_caption = QLabel(recovery_text(language, 'watch_recovery_loading'))
+        remote_caption.setObjectName('watchRecoveryRemoteCaption')
+        local_caption = QLabel(recovery_text(
+            language, 'watch_recovery_local_loaded' if image is not None
+            else 'watch_recovery_local_unavailable',
+        ))
+        for column, label in enumerate((remote_caption, local_caption)):
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            previews.addWidget(label, 0, column)
+        remote_image = QLabel()
+        remote_image.setObjectName('watchRecoveryRemoteImage')
+        remote_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview = QLabel()
+        preview.setObjectName('watchRecoveryLocalImage')
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if image is not None:
             preview.setPixmap(QPixmap.fromImage(image))
-        layout.addWidget(preview)
+        previews.addWidget(remote_image, 1, 0)
+        previews.addWidget(preview, 1, 1)
+        evidence.addLayout(previews)
+        evidence.addStretch()
 
         def decide(decision: CaptureDecision, caption: str) -> None:
             """Return the chosen decision together with the displayed evidence.
@@ -2176,11 +2276,97 @@ class QtCapture(QWidget):
         for decision, key, enabled in options:
             if enabled:
                 caption = recovery_text(language, key)
-                layout.addWidget(ActionButton(caption, lambda d=decision, s=caption: decide(d, s)))
-        layout.addWidget(ActionButton(recovery_text(language, 'watch_recovery_cancel'), dialog.reject))
+                button = ActionButton(caption, lambda d=decision, s=caption: decide(d, s))
+                button.setObjectName(f'watchRecovery-{decision}')
+                button.setAutoDefault(False)
+                layout.addWidget(button)
+        cancel = ActionButton(recovery_text(language, 'watch_recovery_cancel'), dialog.reject)
+        cancel.setDefault(True)
+        layout.addWidget(cancel)
         self._review_dialog = dialog
-        dialog.finished.connect(lambda _result: setattr(self, '_review_dialog', None))
+        self._review_remote_view = (remote_image, remote_caption)
+        dialog.finished.connect(self._close_review)
+        dialog.resize(OVERLAY_WIDTH_PX, OVERLAY_HEIGHT_PX)
         dialog.open()
+
+        def load_remote(
+            cancelled: Event, publish: Callable[[RemoteReviewResult], None],
+        ) -> None:
+            """Read and decode optional evidence without holding the decision lane.
+
+            Args:
+                cancelled (Event): Current dialog read lifetime.
+                publish (Callable[[RemoteReviewResult], None]): Delivers bounded
+                    image pixels and one localized evidence key.
+
+            Returns:
+                None: Releases the transport outcome independently of decisions.
+            """
+            try:
+                remote = self.commands.review_remote(review, cancelled)
+            except PermissionError:
+                publish((None, 'watch_recovery_remote_auth'))
+                return
+            except FileNotFoundError:
+                publish((None, 'watch_recovery_remote_missing'))
+                return
+            if cancelled.is_set():
+                return
+            if remote is None:
+                publish((None, 'watch_recovery_remote_unavailable'))
+                return
+            body_bytes, kind = remote
+            try:
+                pixels, _geometry = decode_photo(body_bytes, thumbnail=True)
+            except ValueError:
+                publish((None, 'watch_recovery_remote_decode'))
+                return
+            publish((pixels, f'watch_recovery_remote_{kind}'))
+
+        self._review_preview_lane.submit(load_remote)
+
+    def _show_review_remote(self, result: RemoteReviewResult) -> None:
+        """Present the current authorized comparison without changing actions.
+
+        Args:
+            result (RemoteReviewResult): Optional worker-decoded image and a
+                fixed locale key that describes its evidence class.
+
+        Returns:
+            None: Updates the optional comparison side of the open dialog.
+        """
+        if self._review_remote_view is None:
+            return
+        target, caption = self._review_remote_view
+        pixels, key = result
+        caption.setText(recovery_text(self.language, key))
+        if pixels is not None:
+            target.setPixmap(QPixmap.fromImage(pixels))
+
+    def _finish_review_preview(self, failure: str) -> None:
+        """Offer a terminal caption if the optional remote read fails.
+
+        Args:
+            failure (str): Empty success or a bounded worker error class.
+
+        Returns:
+            None: Leaves the local preview and decision availability intact.
+        """
+        if failure:
+            self._show_review_remote((None, 'watch_recovery_remote_transport'))
+
+    def _close_review(self, _result: int) -> None:
+        """Retire the matched review and its optional worker read.
+
+        Args:
+            _result (int): Qt dialog result already handled by its owner.
+
+        Returns:
+            None: Prevents late remote evidence from reaching another review.
+        """
+        self._review_preview_lane.cancel()
+        self._review_remote_view = None
+        self._review_dialog = None
 
     def _restore_preferences(self) -> None:
         """Reflect committed preferences without resubmitting them.
@@ -2283,6 +2469,16 @@ class QtCapture(QWidget):
                         or detail.get('state') in ('retry_wait', 'uncertain', 'auth_required', 'blocked')
                         or bool(detail.get('reason'))
                     )
+                    queue_state = detail.get('state')
+                    head_phase = detail.get('head_phase')
+                    self._queue_review_state = (
+                        queue_state
+                        if queue_state in (
+                            'uncertain', 'blocked', 'auth_required', 'missing',
+                        ) or queue_state == 'retry_wait' and head_phase == 'source'
+                        else ''
+                    )
+                    self._queue_dispatch_active = detail.get('dispatch_active') is True
                     if detail.get('head_id'):
                         self.head.setText(recovery_text(self.language, 'watch_recovery_local').format(
                             sequence=detail.get('head_sequence'), name=detail.get('head_file'),
@@ -2334,6 +2530,8 @@ class QtCapture(QWidget):
         busy = self._busy or state.alive
         if not state.alive:
             self._queue_backpressure = False
+            self._queue_review_state = ''
+            self._queue_dispatch_active = False
         if self._reported_queue_waiting != self._queue_backpressure:
             self._reported_queue_waiting = self._queue_backpressure
             self.queue_waiting.emit(self._queue_backpressure)
@@ -2350,6 +2548,7 @@ class QtCapture(QWidget):
         controls = (
             state, permitted, self._pending,
             self._linked_upload_selection_known, self._linked_upload_selected,
+            self._queue_review_state, self._queue_dispatch_active,
         )
         self._notify_import_actions(state, permitted)
         if self._rendered_controls == controls:
@@ -2370,7 +2569,14 @@ class QtCapture(QWidget):
         self.utc_status.setVisible(
             bool(self._flight_context) and self._utc_status_active,
         )
-        if watcher_starting:
+        needs_review = state.watcher_worker_active and bool(self._queue_review_state)
+        if needs_review:
+            watcher_status = (
+                recovery_text(self.language, 'watch_needs_attention')
+                if self._queue_review_state == 'uncertain'
+                else tr(self.language, 'phase_error')
+            )
+        elif watcher_starting:
             watcher_status = gettext('Starting Watcher…')
         elif state.capturing:
             watcher_status = gettext('Watcher is still running')
@@ -2406,7 +2612,13 @@ class QtCapture(QWidget):
         self.finish_button.setVisible(state.alive or self._pending)
         self.interrupt_button.setVisible(state.interrupt_available)
         self.refresh_button.setEnabled(permitted and state.capturing)
-        self.review_button.setEnabled(permitted and (state.alive or self._pending))
+        self.review_button.setEnabled(
+            permitted and (state.alive or self._pending) and not self._queue_dispatch_active,
+        )
+        self.review_button.setToolTip(
+            recovery_text(self.language, 'watch_recovery_transport_active')
+            if self._queue_dispatch_active else '',
+        )
         self.review_button.setVisible(state.alive or self._pending)
         self._refresh_action_visibility(state)
         self.close_button.setVisible(self._pending)
@@ -2475,6 +2687,7 @@ class QtCapture(QWidget):
             self._progress_container = None
         self._folder_inspection_lane.close()
         self._retained_summary_lane.close()
+        self._review_preview_lane.close()
         self._lane.close()
         if not self.busy():
             self.commands.close()

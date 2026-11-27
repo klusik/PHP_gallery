@@ -112,12 +112,12 @@ WATCH_QUEUE_STATUS_WRAP_PIXELS = 420
 WATCHER_RUNTIME_HELP_WRAP_PIXELS = 650
 # Purpose: Bound authorized gallery traversal used only for a recovery preview.
 # Type: int. Units: pages. Scope: one recovery dialog's observation fallback.
-# Consumers: WatcherApp._load_watch_recovery_remote.
+# Consumers: WatcherThread.load_watch_recovery_remote.
 # Rationale: An incomplete catalogue is reported unavailable instead of guessed latest.
 WATCH_RECOVERY_PREVIEW_PAGE_LIMIT = 32
 # Purpose: Stop admitting recovery preview pages after the elapsed budget.
 # Type: float. Units: seconds. Scope: one recovery dialog's observation fallback.
-# Consumers: WatcherApp._load_watch_recovery_remote.
+# Consumers: WatcherThread.load_watch_recovery_remote.
 # Rationale: One active media request retains its own session timeout; larger
 #   traversals are reported unavailable instead of delaying explicit review.
 WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS = 15.0
@@ -264,7 +264,10 @@ from uploader.watch_queue import (
     WATCH_QUEUE_RECONCILE_SECONDS,
     WATCH_QUEUE_STABILITY_MIN_SECONDS,
 )
-from uploader.watch_recovery import WatchRecoveryCoordinator, WatchRecoverySnapshot, read_recovery_preview
+from uploader.watch_recovery import (
+    PREVIEW_MAX_BYTES, WatchRecoveryCoordinator, WatchRecoveryRemote,
+    WatchRecoverySnapshot, read_recovery_preview,
+)
 from uploader.watch_recovery_ui import WatchRecoveryReviewDialog
 from uploader.media import capability_notes, detect_suffix_capabilities, probe_file
 from uploader.models import (
@@ -5688,7 +5691,8 @@ class WatcherThread(threading.Thread):
 
         Returns:
             None: Queues counts, flight/queue identities, cutoff, last scan,
-                current transport identity and retained progress diagnostics.
+                durable head phase, current transport identity and retained
+                progress diagnostics.
         """
         journal = getattr(self, '_queue', None)
         if journal is None:
@@ -5723,6 +5727,7 @@ class WatcherThread(threading.Thread):
                 'head_id': head.item_id if head is not None else '',
                 'head_sequence': head.sequence if head is not None else 0,
                 'head_file': Path(head.source.path).name if head is not None else '',
+                'head_phase': head.phase if head is not None else '',
                 'state': ('blocked' if self._producer_error
                           or journal.data.get('order_verified') is not True
                           else head.state if head is not None else 'idle'),
@@ -6210,6 +6215,85 @@ class WatcherThread(threading.Thread):
             and isinstance(filenames, list) and len(filenames) == 1
             and isinstance(filenames[0], str) and bool(filenames[0])
         )
+
+    def load_watch_recovery_remote(
+        self, snapshot: WatchRecoverySnapshot,
+        cancelled: threading.Event | None = None,
+    ) -> WatchRecoveryRemote | None:
+        """Read the last exact checkable receipt image or a catalogue observation.
+
+        Args:
+            snapshot (WatchRecoverySnapshot): Head and authority captured for review.
+            cancelled (threading.Event | None): Optional dialog-owned read fence.
+
+        Returns:
+            WatchRecoveryRemote | None: Authorized bounded bytes and their display
+                label, or None for a lost binding, incomplete catalogue or absent
+                image. The bytes grant no recovery decision authority.
+        """
+        target = self.linked_target
+        if target is None:
+            return None
+
+        def current() -> bool:
+            """Check that the same target still authorizes the optional read.
+
+            Returns:
+                bool: Current uncancelled target matches the reviewed binding.
+            """
+            return (
+                (cancelled is None or not cancelled.is_set())
+                and self.linked_target is target
+                and target.binding() == snapshot.target_binding
+                and target.session.can_upload()
+            )
+
+        if not current():
+            return None
+        items = self._queue.items() if self._queue is not None else []
+        confirmed = next((item for item in reversed(items)
+                          if item.state == 'acknowledged'
+                          and item.sequence == snapshot.last_confirmed_sequence), None)
+        photo_id: int | None = None
+        evidence_kind: Literal['receipt', 'observation'] = 'observation'
+        if confirmed is not None and self.state is not None:
+            record = self.state.data['uploaded_paths'].get(confirmed.source.path, {})
+            response = record.get('response', {}) if isinstance(record, dict) else {}
+            image_ids = response.get('image_ids') if isinstance(response, dict) else None
+            if (self._has_exact_saved_watch_receipt(confirmed)
+                    and isinstance(image_ids, list) and len(image_ids) == 1):
+                photo_id = image_ids[0]
+                evidence_kind = 'receipt'
+        if photo_id is None:
+            started = time.monotonic()
+            after_id: int | None = None
+            last_photo = None
+            for _page_index in range(WATCH_RECOVERY_PREVIEW_PAGE_LIMIT):
+                if (time.monotonic() - started
+                        >= WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS or not current()):
+                    return None
+                page = target.session.media_page(
+                    target.gallery_id, after_id, cancelled=cancelled,
+                )
+                if page.photos:
+                    last_photo = page.photos[-1]
+                after_id = page.next_after
+                if after_id is None:
+                    break
+            else:
+                return None
+            if last_photo is None:
+                return None
+            photo_id = last_photo.image_id
+        if not current():
+            return None
+        body, _mime = target.session.media_photo(
+            target.gallery_id, photo_id, True, cancelled=cancelled,
+            cache_eligible=False, preload_eligible=False,
+        )
+        if not current() or len(body) > PREVIEW_MAX_BYTES:
+            return None
+        return body, evidence_kind
 
     def run(self) -> None:
         """Run the watcher while retaining its target lease through shutdown.
@@ -9824,10 +9908,45 @@ class DesktopCapture:
             preview, _digest = read_recovery_preview(snapshot)
         except (OSError, ValueError):
             preview = None
+        target = worker.linked_target
         return CaptureReview(
             snapshot, owner.can_confirm_receipt(snapshot),
             preview is not None and owner.can_approve_photo_upload(snapshot), preview,
+            target.title if target is not None else '',
         )
+
+    def review_remote(
+        self, review: CaptureReview, cancelled: threading.Event,
+    ) -> WatchRecoveryRemote | None:
+        """Expose optional remote evidence for one still-current recovery view.
+
+        Args:
+            review (CaptureReview): Pinned review previously read by this view.
+            cancelled (threading.Event): Cancellation owned by the review dialog.
+
+        Returns:
+            WatchRecoveryRemote | None: Authorized comparison bytes and their
+                kind, or None after cancellation, rebinding or head replacement.
+        """
+        worker = self.worker
+        if (cancelled.is_set() or worker is None
+                or not WatcherApp._watch_recovery_owner_held(worker)):
+            return None
+        coordinator = worker.recovery_coordinator
+        if coordinator is None:
+            return None
+        witness = review.snapshot
+        current = coordinator.snapshot()
+        if current is None or current.decision_token != witness.decision_token:
+            return None
+        result = worker.load_watch_recovery_remote(witness, cancelled)
+        if (result is None or cancelled.is_set() or self.worker is not worker
+                or not WatcherApp._watch_recovery_owner_held(worker)):
+            return None
+        current = coordinator.snapshot()
+        if current is None or current.decision_token != witness.decision_token:
+            return None
+        return result
 
     def dispatch_identity(self) -> str:
         """Read the exact shared SimBrief identity without fetching a plan.
@@ -20340,76 +20459,8 @@ class WatcherApp:
         self._watch_recovery_dialog = WatchRecoveryReviewDialog(
             self.root, coordinator, language, target_label,
             on_resolved=lambda: self._watch_recovery_resolved(worker),
-            remote_loader=(
-                lambda snapshot: self._load_watch_recovery_remote(worker, snapshot)
-                if worker.linked_target is not None else None
-            ),
+            remote_loader=worker.load_watch_recovery_remote,
         )
-
-    def _load_watch_recovery_remote(
-        self, worker: WatcherThread, snapshot: WatchRecoverySnapshot,
-    ) -> tuple[bytes, str] | None:
-        """Load the last exact receipt thumbnail or a complete catalog observation.
-
-        Args:
-            worker (WatcherThread): Current exact linked target owner.
-            snapshot (WatchRecoverySnapshot): Immutable current queue snapshot.
-
-        Returns:
-            tuple[bytes, str] | None: Fresh thumbnail and evidence label, or None
-                when authorization, complete traversal or preview bounds fail.
-                Returned bytes are never receipt evidence for a decision.
-        """
-        target = worker.linked_target
-        if target is None or not target.session.can_upload():
-            return None
-        binding = target.binding()
-        items = worker._queue.items() if worker._queue is not None else []
-        confirmed = next((item for item in reversed(items)
-                          if item.state == 'acknowledged'
-                          and item.sequence == snapshot.last_confirmed_sequence), None)
-        photo_id: int | None = None
-        evidence_kind = 'observation'
-        if confirmed is not None and worker.state is not None:
-            record = worker.state.data['uploaded_paths'].get(confirmed.source.path, {})
-            response = record.get('response', {}) if isinstance(record, dict) else {}
-            image_ids = response.get('image_ids') if isinstance(response, dict) else None
-            if (worker._has_exact_saved_watch_receipt(confirmed)
-                    and isinstance(image_ids, list) and len(image_ids) == 1):
-                photo_id = image_ids[0]
-                evidence_kind = 'receipt'
-        if photo_id is None:
-            started = time.monotonic()
-            after_id: int | None = None
-            last_photo = None
-            for _page_index in range(WATCH_RECOVERY_PREVIEW_PAGE_LIMIT):
-                if (time.monotonic() - started
-                        >= WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS
-                        or target.binding() != binding
-                        or not target.session.can_upload()):
-                    return None
-                page = target.session.media_page(target.gallery_id, after_id)
-                if target.binding() != binding:
-                    return None
-                if page.photos:
-                    last_photo = page.photos[-1]
-                after_id = page.next_after
-                if after_id is None:
-                    break
-            else:
-                return None
-            if last_photo is None:
-                return None
-            photo_id = last_photo.image_id
-        if target.binding() != binding or not target.session.can_upload():
-            return None
-        body, _mime = target.session.media_photo(
-            target.gallery_id, photo_id, True,
-            cache_eligible=False, preload_eligible=False,
-        )
-        if target.binding() != binding:
-            return None
-        return body, evidence_kind
 
     def _watch_recovery_resolved(self, worker: WatcherThread) -> None:
         """Refresh queue state and wake only the reviewed original consumer.

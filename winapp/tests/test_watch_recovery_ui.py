@@ -1089,18 +1089,101 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             ["watch_stop_stopping", "watch_stop_not_persisted"], failed_details)
 
     def test_uncertain_finish_enters_needs_attention_without_waiting_forever(self) -> None:
-        """Fail Finish promptly while retaining the live Watcher owner.
+        """Distinguish an unknown upload from other blocked Finish states.
 
         Returns:
-            None: The lifecycle reports review needed rather than draining forever.
+            None: Unknown results, definitive blockers, retry waits, active
+                transport and a verified terminal queue retain distinct outcomes.
         """
+        cases = (
+            ("uncertain", "upload", "HTTP 503; result unknown", "attention"),
+            ("blocked", "prior_upload_review", "Earlier upload needs review", "attention"),
+            ("auth_required", "upload", "Gallery access is required", "attention"),
+            ("missing", "source", "Source file is unavailable", "attention"),
+            ("retry_wait", "source", "Source path is unavailable", "attention"),
+            ("retry_wait", "upload", "Temporary transport refusal", "retry"),
+            ("dispatching", "upload", "Request is still active", "active"),
+        )
+        for state, phase, reason, outcome in cases:
+            with self.subTest(state=state, phase=phase), tempfile.TemporaryDirectory() as directory:
+                queue_path = Path(directory) / "watch-drain.json"
+                item = {
+                    "sequence": 444, "state": state, "phase": phase,
+                    "source": {"path": str(Path(directory) / "pending.png")},
+                    "reason": reason,
+                }
+                retry_at = time.time() + FINISH_TEST_DEADLINE_SECONDS
+                if outcome == "retry":
+                    item["next_retry_at"] = retry_at
+                queue_path.write_text(json.dumps({
+                    "pending": ["head"], "items": [item],
+                }), encoding="utf-8")
+                phases: list[tuple[str, str]] = []
+                operation = SimpleNamespace(
+                    wants_revoke=False,
+                    plans=[SimpleNamespace(directory=Path(directory), abandoned=False)],
+                    update=lambda phase, detail="": phases.append((phase, detail)),
+                )
+                transport_active = threading.Event()
+                if outcome in {"attention", "active"}:
+                    transport_active.set()
+                alive_worker = SimpleNamespace(
+                    is_alive=lambda: True, drain_manifest=queue_path,
+                    _transport_active=transport_active,
+                )
+                host = SimpleNamespace(
+                    worker=alive_worker,
+                    utc_sync=SimpleNamespace(is_alive=lambda: False),
+                    semantic_ai_install_running=False,
+                )
+                adapter = object.__new__(FlightUI)
+                adapter._progress_generation = 0
+                adapter._force_finish_pending = False
+                adapter.operation = operation
+                adapter.host = host
+                adapter.recorder = None
+                adapter.resume_workers = []
+                deadline = (
+                    time.monotonic() - 1 if outcome in {"retry", "active"}
+                    else time.monotonic() + FINISH_TEST_DEADLINE_SECONDS
+                )
+                error_type = TimeoutError if outcome in {"retry", "active"} else RuntimeError
+                with (
+                    mock.patch("uploader.flight_ui.current_language", return_value="en"),
+                    self.assertRaises(error_type) as raised,
+                ):
+                    adapter.wait_for_workers(threading.Event(), deadline)
+
+                self.assertEqual("draining", phases[0][0])
+                self.assertIn("#444 pending.png: " + state, phases[0][1])
+                self.assertIn(reason, phases[0][1])
+                self.assertTrue(alive_worker.is_alive())
+                self.assertEqual(outcome in {"attention", "active"}, transport_active.is_set())
+                if outcome == "attention":
+                    heading = (
+                        recovery_text("en", "watch_needs_attention")
+                        if state == "uncertain" else tr("en", "phase_error")
+                    )
+                    self.assertEqual("error", phases[-1][0])
+                    self.assertTrue(str(raised.exception).startswith(heading + ": "))
+                else:
+                    self.assertEqual("draining", phases[-1][0])
+                    self.assertIsInstance(raised.exception, TimeoutError)
+                    if outcome == "retry":
+                        retry_label = recovery_text("en", "watch_retry_at").format(
+                            timestamp=time.strftime(
+                                "%Y-%m-%d %H:%M:%S", time.localtime(retry_at),
+                            ),
+                        )
+                        self.assertIn(retry_label, phases[0][1])
+
         with tempfile.TemporaryDirectory() as directory:
             queue_path = Path(directory) / "watch-drain.json"
             queue_path.write_text(json.dumps({
-                "pending": ["head"],
-                "items": [{"sequence": 444, "state": "uncertain",
-                           "source": {"path": str(Path(directory) / "pending.png")},
-                           "reason": "HTTP 503; result unknown"}],
+                "schema_version": 2, "pending": [], "frozen": True,
+                "cutoff": time.time(), "completed": True,
+                "items": [{"sequence": 444, "state": "acknowledged",
+                           "source": {"path": str(Path(directory) / "pending.png")}}],
             }), encoding="utf-8")
             phases: list[tuple[str, str]] = []
             operation = SimpleNamespace(
@@ -1108,32 +1191,21 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 plans=[SimpleNamespace(directory=Path(directory), abandoned=False)],
                 update=lambda phase, detail="": phases.append((phase, detail)),
             )
-            alive_worker = SimpleNamespace(
-                is_alive=lambda: True, drain_manifest=queue_path,
-            )
             host = SimpleNamespace(
-                worker=alive_worker,
+                worker=None,
                 utc_sync=SimpleNamespace(is_alive=lambda: False),
                 semantic_ai_install_running=False,
-                simulator_presence=SimpleNamespace(
-                    text=lambda key, language: recovery_text(language, key)),
             )
             adapter = object.__new__(FlightUI)
-            adapter._progress_generation = 0
-            adapter._force_finish_pending = False
             adapter.operation = operation
             adapter.host = host
             adapter.recorder = None
             adapter.resume_workers = []
-            adapter.ui_language = SimpleNamespace(get=lambda: "en")
-            with self.assertRaisesRegex(RuntimeError, "Needs attention"):
-                adapter.wait_for_workers(
-                    threading.Event(),
-                    time.monotonic() + FINISH_TEST_DEADLINE_SECONDS,
-                )
-            self.assertEqual("error", phases[-1][0])
-            self.assertIn("#444 pending.png: uncertain", phases[-1][1])
-            self.assertTrue(alive_worker.is_alive())
+            adapter.import_bindings = SimpleNamespace(entries=lambda: {})
+            adapter.wait_for_workers(
+                threading.Event(), time.monotonic() + FINISH_TEST_DEADLINE_SECONDS,
+            )
+            self.assertEqual([], phases)
 
     def capture(self, dialog: WatchRecoveryReviewDialog, filename: str) -> None:
         """Save one rendered native dialog size when QA capture is configured.

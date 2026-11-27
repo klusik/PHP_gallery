@@ -13,7 +13,6 @@
 
 import io
 import queue
-import re
 import threading
 import time
 import tkinter as tk
@@ -23,7 +22,9 @@ from tkinter import ttk
 from typing import TYPE_CHECKING, Callable
 
 from uploader.watch_recovery import (
-    PREVIEW_MAX_BYTES, WatchRecoveryCoordinator, WatchRecoverySnapshot, read_recovery_preview,
+    PREVIEW_MAX_BYTES, RECOVERY_DIGEST_PREFIX_CHARS, WatchRecoveryCoordinator,
+    WatchRecoverySnapshot, read_recovery_preview,
+    sanitize_recovery_label,
 )
 from uploader.flight_report_translations import recovery_text
 from uploader.ui_theme import Button, GlassCard
@@ -77,24 +78,6 @@ DETAIL_TEXT_LINES = 7
 # Type: int. Units: pixels. Scope: responsive recovery actions.
 # Consumers: WatchRecoveryReviewDialog.layout_buttons. Rationale: One column preserves labels below 560 px.
 NARROW_LAYOUT_BREAKPOINT_PX = 560
-# Purpose: Bound untrusted filenames and target labels in the UI.
-# Type: int. Units: characters. Scope: queue metadata labels.
-# Consumers: sanitize_recovery_label. Rationale: 160 characters preserve context without runaway layout.
-DISPLAY_TEXT_MAX_CHARS = 160
-
-
-def sanitize_recovery_label(value: str) -> str:
-    """Remove control characters and bound untrusted queue metadata.
-
-    Args:
-        value (str): Filename, target or reason copied from queue/service data.
-    Returns:
-        str: Single-line printable label bounded to the UI limit.
-    """
-    sanitized = re.sub(r"[\x00-\x1f\x7f]", " ", value).strip()
-    if len(sanitized) > DISPLAY_TEXT_MAX_CHARS:
-        return sanitized[:DISPLAY_TEXT_MAX_CHARS - 1] + "…"
-    return sanitized
 
 
 class WatchRecoveryReviewDialog:
@@ -509,7 +492,7 @@ class WatchRecoveryReviewDialog:
             modified=time.strftime("%Y-%m-%d %H:%M:%S",
                                    time.localtime(snapshot.captured_at)),
             size=snapshot.source_size,
-            digest=getattr(snapshot, "sha256", "")[:16],
+            digest=getattr(snapshot, "sha256", "")[:RECOVERY_DIGEST_PREFIX_CHARS],
                 binding=sanitize_recovery_label(snapshot.target_binding),
             confirmed=(str(getattr(snapshot, "last_confirmed_sequence", ""))
                        or snapshot.last_confirmed

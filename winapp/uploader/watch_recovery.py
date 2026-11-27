@@ -16,7 +16,8 @@ from contextlib import nullcontext
 from hashlib import sha256
 import os
 from pathlib import Path
-from typing import Callable, ContextManager
+import re
+from typing import Callable, ContextManager, Literal
 import uuid
 
 from .linked_upload import (LinkedTargetLease, UploadPipelineLease,
@@ -30,6 +31,34 @@ from .watch_queue import (WatchQueueItem, WatchQueueStore,
 # Consumers: read_recovery_preview and the desktop image decoders.
 # Rationale: forty MiB preserves the existing Tk limit for captured sources.
 PREVIEW_MAX_BYTES = 40 * 1024 * 1024
+
+# Purpose: Bound untrusted filenames and target labels in both interfaces.
+# Type: int. Units: characters. Scope: queue metadata labels.
+# Consumers: sanitize_recovery_label. Rationale: 160 characters preserve context
+# without widening a narrow recovery dialog.
+DISPLAY_TEXT_MAX_CHARS = 160
+# Purpose: Show a recognizable digest prefix without widening the evidence row.
+# Type: int. Units: hexadecimal characters. Scope: desktop recovery display.
+# Consumers: Legacy Tk and Qt metadata. Rationale: 16 characters suffice for
+# recognizing the displayed item; decision checks retain the complete digest.
+RECOVERY_DIGEST_PREFIX_CHARS = 16
+
+WatchRecoveryRemote = tuple[bytes, Literal['receipt', 'observation']]
+
+
+def sanitize_recovery_label(value: str) -> str:
+    """Remove control characters and bound untrusted recovery metadata.
+
+    Args:
+        value (str): Filename, target or reason copied from a queue or service.
+
+    Returns:
+        str: Single-line printable label bounded to the display limit.
+    """
+    sanitized = re.sub(r"[\x00-\x1f\x7f]", " ", value).strip()
+    if len(sanitized) > DISPLAY_TEXT_MAX_CHARS:
+        return sanitized[:DISPLAY_TEXT_MAX_CHARS - 1] + "…"
+    return sanitized
 
 
 @dataclass(frozen=True)

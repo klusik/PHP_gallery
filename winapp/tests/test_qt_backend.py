@@ -38,7 +38,7 @@ from qualify_loopback_authority import (
 from test_loopback_linked_switch_fixture import _MemoryCredentialStore
 from uploader import app_linking, flight_workflow
 from uploader.app_linking import LinkedMediaDetails
-from uploader.capture_session import CaptureStatus
+from uploader.capture_session import CaptureReview, CaptureStatus
 from uploader.config import BYTES_PER_GIB
 from uploader.credential_store import CredentialStoreUnavailable
 from uploader.desktop_connection import (
@@ -49,11 +49,12 @@ from uploader.desktop_connection import (
 from uploader.flight_data import FlightAnalysis
 from uploader.flight_jobs import FlightPreferences, REPORT_LANGUAGES, SessionPlan, WatcherContinuation, WorkspaceLease
 from uploader.flight_render import ReportMaps, ReportRenderer
-from uploader.flight_report_translations import tr
+from uploader.flight_report_translations import recovery_text, tr
 from uploader.flight_simbrief import DispatchPlan, load_dispatch
 from uploader.flight_workflow import FinalizationWorker
 from uploader.gallery_image_policy import (
     MEDIA_HTTP_BATCH_INITIAL_SIZE, MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS,
+    MEDIA_THUMBNAIL_SIZE,
 )
 from uploader.gallery_lightbox import (
     LIGHTBOX_TOUCHPAD_ZOOM_DELTA_UNITS, LIGHTBOX_WHEEL_DELTA_UNITS,
@@ -92,6 +93,7 @@ from uploader.ui_layout import (
     UI_LAYOUT_VIEWER_MINIMUM_WIDTH,
 )
 from uploader.upload_mode import ModeRecord
+from uploader.watch_recovery import WatchRecoverySnapshot
 from test_redesign import MAIN
 
 QT_LOAD_ERROR: ImportError | OSError | None = None
@@ -105,7 +107,7 @@ try:
     from PySide6.QtQml import QQmlError
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
-        QApplication, QCheckBox, QComboBox, QDialog, QFrame, QLabel,
+        QApplication, QCheckBox, QComboBox, QDialog, QFrame, QLabel, QScrollArea,
         QLineEdit, QMessageBox, QPushButton, QTreeView, QTreeWidget, QTreeWidgetItem,
         QSplitter, QToolTip, QWidget,
     )
@@ -177,6 +179,12 @@ WIDE_21_9_COLUMNS = 13
 # Consumers: QtWidePhotosViewportTests.test_wide_21_9_viewport_fills_all_visible_cards.
 # Rationale: 460 spans the three sample positions with a partially filled end row.
 WIDE_21_9_PHOTO_COUNT = 460
+# Purpose: Exercise the compact recovery dialog's two preview columns.
+# Type: tuple[int, int]. Units: logical pixels. Scope: native review fixture.
+# Consumers: test_watcher_progress_opens_review_before_optional_remote_preview.
+# Rationale: 420x390 checks both preview columns in the scrolled evidence while
+# decision buttons remain outside the scrollable content.
+RECOVERY_REVIEW_NARROW_SIZE = (420, 390)
 
 
 @unittest.skipIf(
@@ -631,6 +639,216 @@ class QtBackendTests(_NativeQtAppFixture):
                 configure_language(language)
             window.exit_window()
             self.assertFalse(window.isVisible())
+
+    def test_watcher_progress_opens_review_before_optional_remote_preview(self) -> None:
+        """Verify live uncertain Finish and side-by-side authorized evidence.
+
+        Returns:
+            None: Issue 381's decision controls stay usable before media
+                arrives, and an observation cannot enable receipt confirmation.
+        """
+        # Exceed the recovery label's 160-character display cap with one token.
+        snapshot = WatchRecoverySnapshot(
+            item_id='exact-head', sequence=444,
+            source_path=('f' * 164) + '.png',
+            source_signature='source-generation', source_size=174,
+            source_mtime_ns=1, sha256='a' * 64, state='uncertain',
+            target_binding='b' * 64, session_id='capture-session',
+            pending_count=81, acknowledged_count=443, skipped_count=0,
+            last_confirmed='443', last_confirmed_sequence=443,
+            last_confirmed_at=1.0, progress='443 acknowledged', progress_at=1.0,
+            phase='upload', http_status=503, captured_at=1.0, expected_mode='linked',
+            scope='upload', review_blocked_by_earlier_upload=False,
+            retained_stop=False, prior_blocker_marker='', prior_blocker_path='',
+            prior_blocker_sha256='', prior_blocker_target_binding='b' * 64,
+            error='Upload result unknown.',
+        )
+        commands = mock.Mock()
+        commands.events = Queue()
+        commands.snapshot.return_value = CaptureStatus()
+        commands.report_target.return_value = None
+        previews: list[bytes] = []
+        for color in ('green', 'blue'):
+            with BytesIO() as encoded, Image.new('RGB', MEDIA_THUMBNAIL_SIZE, color) as pixels:
+                pixels.save(encoded, format='PNG')
+                previews.append(encoded.getvalue())
+        local_body, remote_body = previews
+        commands.review.return_value = CaptureReview(
+            snapshot, False, True, local_body, 'Gallery',
+        )
+        remote_started = Event()
+        release_remote = Event()
+
+        def hold_remote(review: CaptureReview, cancel: Event) -> tuple[bytes, str] | None:
+            """Hold authorized comparison data after the local dialog is ready.
+
+            Args:
+                review (CaptureReview): Immutable displayed decision witness.
+                cancel (Event): Current dialog cancellation fence.
+
+            Returns:
+                tuple[bytes, str] | None: Synthetic observation or cancelled read.
+            """
+            if review.snapshot != snapshot:
+                raise AssertionError('Unexpected reviewed head.')
+            remote_started.set()
+            if not release_remote.wait(SCENE_WAIT_MS / 1000) or cancel.is_set():
+                return None
+            return remote_body, 'observation'
+
+        commands.review_remote.side_effect = hold_remote
+        with tempfile.TemporaryDirectory() as folder:
+            window = QtWindow(Path(folder), MAIN.APP_VERSION, '', 100, False, capture=commands)
+            capture = window.capture
+            assert capture is not None
+            try:
+                window.show()
+                window.show_page('watcher')
+                commands.snapshot.return_value = CaptureStatus(
+                    phase='draining', alive=True, watcher_worker_active=True,
+                    finishing=True, interrupt_available=True,
+                )
+                commands.events.put({'kind': 'watch_queue', 'payload': {
+                    'head_id': snapshot.item_id, 'head_sequence': snapshot.sequence,
+                    'head_file': snapshot.source_path, 'queued_count': snapshot.pending_count,
+                    'state': 'uncertain', 'head_phase': 'upload',
+                    'dispatch_active': True,
+                }})
+                capture._poll()
+                capture.show_progress()
+                self.assertFalse(capture._progress_continue.isEnabled())
+                self.assertEqual(
+                    recovery_text(capture.language, 'watch_needs_attention'),
+                    capture._progress_phase.text(),
+                )
+                commands.events.put({'kind': 'watch_queue', 'payload': {
+                    'head_id': snapshot.item_id, 'head_sequence': snapshot.sequence,
+                    'head_file': snapshot.source_path, 'queued_count': snapshot.pending_count,
+                    'state': 'uncertain', 'head_phase': 'upload',
+                    'dispatch_active': False,
+                }})
+                capture._poll()
+                self.assertTrue(capture._progress_continue.isEnabled())
+                capture._progress_continue.click()
+                self.wait_for(lambda: remote_started.is_set() and capture._review_dialog is not None)
+                dialog = capture._review_dialog
+                assert dialog is not None
+                local = dialog.findChild(QLabel, 'watchRecoveryLocalImage')
+                remote = dialog.findChild(QLabel, 'watchRecoveryRemoteImage')
+                caption = dialog.findChild(QLabel, 'watchRecoveryRemoteCaption')
+                skip = dialog.findChild(QPushButton, 'watchRecovery-skip')
+                self.assertTrue(skip.isEnabled())
+                self.assertFalse(local.pixmap().isNull())
+                unloaded = remote.pixmap()
+                self.assertTrue(unloaded is None or unloaded.isNull())
+                release_remote.set()
+                self.wait_for(lambda: not remote.pixmap().isNull())
+                self.assertLess(remote.x(), local.x())
+                # Top-left source pixel distinguishes the two synthetic previews.
+                self.assertEqual(QColor('green'), local.pixmap().toImage().pixelColor(0, 0))
+                self.assertEqual(QColor('blue'), remote.pixmap().toImage().pixelColor(0, 0))
+                self.assertEqual(
+                    recovery_text(capture.language, 'watch_recovery_remote_observation'),
+                    caption.text(),
+                )
+                self.assertIsNone(dialog.findChild(QPushButton, 'watchRecovery-receipt'))
+                scroll = dialog.findChild(QScrollArea)
+                assert scroll is not None
+                output = os.environ.get('PHP_GALLERY_QT_ARTIFACT_DIR')
+                if output:
+                    artifacts = Path(output)
+                    artifacts.mkdir(parents=True, exist_ok=True)
+                    self.assertTrue(dialog.grab().save(str(artifacts / 'watcher-review.png')))
+                dialog.resize(*RECOVERY_REVIEW_NARROW_SIZE)
+                self.application.processEvents()
+                self.assertEqual(0, scroll.horizontalScrollBar().maximum())
+                scroll.ensureWidgetVisible(remote)
+                self.application.processEvents()
+                viewport = scroll.viewport().rect()
+                for preview in (remote, local):
+                    top_left = preview.mapTo(scroll.viewport(), QPoint(0, 0))
+                    bottom_right = preview.mapTo(
+                        scroll.viewport(), QPoint(preview.width() - 1, preview.height() - 1),
+                    )
+                    self.assertTrue(viewport.contains(top_left))
+                    self.assertTrue(viewport.contains(bottom_right))
+                self.assertTrue(skip.isVisibleTo(dialog))
+                self.assertTrue(dialog.rect().contains(skip.geometry()))
+                if output:
+                    self.assertTrue(dialog.grab().save(
+                        str(artifacts / 'watcher-review-narrow.png'),
+                    ))
+                dialog.reject()
+                commands.decide.assert_not_called()
+                head_payload = {
+                    'head_id': snapshot.item_id,
+                    'head_sequence': snapshot.sequence,
+                    'head_file': snapshot.source_path,
+                    'queued_count': snapshot.pending_count,
+                }
+                for queue_state in ('blocked', 'auth_required', 'missing'):
+                    commands.events.put({'kind': 'watch_queue', 'payload': {
+                        **head_payload, 'state': queue_state, 'head_phase': 'upload',
+                        'reason': 'Gallery access requires review.',
+                        'dispatch_active': False,
+                    }})
+                    capture._poll()
+                    self.assertEqual(
+                        tr(capture.language, 'phase_error'),
+                        capture._progress_phase.text(),
+                    )
+                    self.assertNotEqual(
+                        recovery_text(capture.language, 'watch_needs_attention'),
+                        capture._progress_phase.text(),
+                    )
+                    self.assertEqual(
+                        recovery_text(capture.language, 'force_continue_watch'),
+                        capture._progress_continue.text(),
+                    )
+                    self.assertTrue(capture._progress_continue.isEnabled())
+                    if queue_state == 'blocked':
+                        review_calls = commands.review.call_count
+                        previous_dialog = capture._review_dialog
+                        capture._progress_continue.click()
+                        self.wait_for(lambda: (
+                            commands.review.call_count == review_calls + 1
+                            and capture._review_dialog is not None
+                            and capture._review_dialog is not previous_dialog
+                            and capture._review_dialog.isVisible()
+                        ))
+                        assert capture._review_dialog is not None
+                        capture._review_dialog.reject()
+                    commands.events.put({'kind': 'watch_queue', 'payload': {
+                        **head_payload, 'state': queue_state, 'head_phase': 'upload',
+                        'reason': 'Gallery access requires review.',
+                        'dispatch_active': True,
+                    }})
+                    capture._poll()
+                    self.assertFalse(capture._progress_continue.isEnabled())
+                for head_phase, actionable in (('upload', False), ('source', True)):
+                    commands.events.put({'kind': 'watch_queue', 'payload': {
+                        **head_payload, 'state': 'retry_wait', 'head_phase': head_phase,
+                        'reason': 'Retry is scheduled.', 'dispatch_active': False,
+                    }})
+                    capture._poll()
+                    self.assertEqual(
+                        actionable, capture._progress_continue.isVisible(),
+                    )
+                    if actionable:
+                        self.assertEqual(
+                            tr(capture.language, 'phase_error'),
+                            capture._progress_phase.text(),
+                        )
+                    else:
+                        self.assertNotEqual(
+                            recovery_text(capture.language, 'force_continue_watch'),
+                            capture._progress_continue.text(),
+                        )
+            finally:
+                release_remote.set()
+                commands.snapshot.return_value = CaptureStatus()
+                capture._poll()
+                window.exit_window()
 
     def test_profile_settings_save_only_changes_to_the_existing_owner(self) -> None:
         """Exercise the native form without replacing the current profile generation.

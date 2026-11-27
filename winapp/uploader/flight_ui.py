@@ -48,7 +48,7 @@ from uploader.flight_jobs import (
 )
 from uploader.flight_recorder import FlightRecorder
 from uploader.game_presence import GamePresence
-from uploader.flight_report_translations import tr
+from uploader.flight_report_translations import recovery_text, tr
 from uploader.localization import DEFAULT_LANGUAGE, current_language, gettext
 from uploader.flight_workflow import FinalizationWorker, WatchedReportTarget, create_local_report_worker
 from uploader.models import ImportJob, JsonValue
@@ -3331,6 +3331,7 @@ class FlightUI:
             if wants_revoke and self.host.semantic_ai_install_running:
                 blockers.append("dependency installation")
             attention_detail = ""
+            attention_is_uncertain = False
             if self.operation is not None and blockers:
                 photo_count = 0
                 photo_details: list[str] = []
@@ -3354,7 +3355,9 @@ class FlightUI:
                                       f'{head.get("state", "waiting")}')
                             retry = head.get('next_retry_at')
                             if type(retry) in (int, float) and retry > 0:
-                                detail += ' · ' + self.text("watch_retry_at").format(
+                                detail += ' · ' + recovery_text(
+                                    current_language(), "watch_retry_at",
+                                ).format(
                                     timestamp=time.strftime(
                                         '%Y-%m-%d %H:%M:%S', time.localtime(retry),
                                     ),
@@ -3366,6 +3369,7 @@ class FlightUI:
                             } or (head.get('state') == 'retry_wait'
                                   and head.get('phase') == 'source')):
                                 attention_detail = detail
+                                attention_is_uncertain = head.get('state') == 'uncertain'
                             progress = row.get('last_change_at')
                             if type(progress) in (int, float) and progress > 0:
                                 detail += ' · progress ' + time.strftime(
@@ -3378,13 +3382,15 @@ class FlightUI:
                     + "; ".join([*photo_details, *blockers]),
                 )
                 if attention_detail:
+                    heading = (
+                        recovery_text(current_language(), "watch_needs_attention")
+                        if attention_is_uncertain
+                        else tr(current_language(), "phase_error")
+                    )
                     self.operation.update(
-                        "error", self.text("watch_needs_attention") + ": "
-                        + attention_detail,
+                        "error", heading + ": " + attention_detail,
                     )
-                    raise RuntimeError(
-                        self.text("watch_needs_attention") + ": " + attention_detail
-                    )
+                    raise RuntimeError(heading + ": " + attention_detail)
             if not blockers:
                 break
             if time.monotonic() >= deadline:
@@ -4191,15 +4197,19 @@ class FlightUI:
             progress = operation.snapshot()
             terminal = progress.phase in {"completed", "error", "cancelled"}
             now = progress.phase_started if terminal else time.monotonic()
+            unknown_result_heading = recovery_text(
+                current_language(), "watch_needs_attention",
+            )
             needs_attention = (
                 progress.phase == "error"
-                and self.text("watch_needs_attention") in progress.detail
+                and unknown_result_heading in progress.detail
             )
-            self.phase_var.set(self.text(
-                "watch_needs_attention" if needs_attention else
-                "report_cancelled" if self.independent_operation()
-                and progress.phase == "cancelled" else "phase_" + progress.phase
-            ))
+            self.phase_var.set(
+                unknown_result_heading if needs_attention else self.text(
+                    "report_cancelled" if self.independent_operation()
+                    and progress.phase == "cancelled" else "phase_" + progress.phase
+                ),
+            )
             detail = progress.detail or progress.error
             if (progress.phase == "error" and operation.local_reports is True
                     and self.report_upload_operation() and operation.saved_revision is not None):

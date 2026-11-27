@@ -13,6 +13,7 @@ on:
     branches:
       - feature/445-pyside6-winapp
       - feature/446-winapp-qt-default-inspector
+      - feature/381-qt-watch-recovery
   workflow_call:
     inputs:
       candidate:

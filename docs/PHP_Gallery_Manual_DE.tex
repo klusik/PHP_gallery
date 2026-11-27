@@ -3000,6 +3000,12 @@ heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
 Beim Abschluss öffnet \ui{Show progress} den Fortschritt. \ui{Unterbrechen}
 pausiert die Uploads und behält die Warteschlange. \ui{Fortsetzen} lädt weiter
 in dieselbe Galerie hoch. WinApp öffnet bei Bedarf die Website-Verbindung.
+Erfordert der aktuelle Watcher-Eintrag eine Entscheidung, bietet der
+Qt-Fortschritt \ui{Nach Prüfung fortsetzen…} an, sobald die laufende Anfrage
+endet. Er zeigt den Grund einer bekannten Sperre und kennzeichnet ein
+unbekanntes Upload-Ergebnis ausdrücklich. Lokale Vorschau und Entscheidungen
+sind verfügbar, während das Vergleichsbild lädt. Das Vergleichsbild allein
+bestätigt keinen Upload.
 \ui{Photo is OK — upload} bedeutet, dass Sie
 die angezeigte Quelle geprüft haben und bestätigen, dass sie korrekt und kein
 Duplikat ist. Die Freigabe lässt nur denselben FIFO-Kopf den normalen Uploadweg

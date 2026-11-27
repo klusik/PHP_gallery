@@ -26,7 +26,7 @@ from .flight_simbrief import DispatchPlan
 from .flight_workflow import FinalizationWorker
 from .linked_upload import LinkedTargetLease, LinkedUploadTarget, UploadPipelineLease
 from .watch_queue import WatchQueueStore
-from .watch_recovery import WatchRecoverySnapshot
+from .watch_recovery import WatchRecoveryRemote, WatchRecoverySnapshot
 
 CaptureDecision = Literal['receipt', 'skip', 'approve', 'earlier', 'continue']
 CaptureEvents = Queue[tuple[str, str] | dict[str, object]]
@@ -218,6 +218,7 @@ class CaptureReview:
     can_receipt: bool
     can_approve: bool
     preview: bytes | None = None
+    target_label: str = ''
 
 
 class CaptureCommands(Protocol):
@@ -365,6 +366,20 @@ class CaptureCommands(Protocol):
 
         Returns:
             CaptureReview | None: Exact current review evidence or no live owner.
+        """
+
+    def review_remote(
+        self, review: CaptureReview, cancelled: Event,
+    ) -> WatchRecoveryRemote | None:
+        """Read optional remote evidence under the original recovery target.
+
+        Args:
+            review (CaptureReview): Exact snapshot held by the visible dialog.
+            cancelled (Event): Set when the dialog is dismissed or replaced.
+
+        Returns:
+            WatchRecoveryRemote | None: Authorized preview bytes and evidence
+                kind, or None when the request is stale or unavailable.
         """
 
     def dispatch_identity(self) -> str:
