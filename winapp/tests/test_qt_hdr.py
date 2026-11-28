@@ -27,7 +27,7 @@ try:
     from PySide6.QtWidgets import QWidget
     from uploader import qt_hdr_macos
     from uploader import qt_photo_source
-    from uploader.app_linking import NATIVE_MEDIA_MAX_BYTES
+    from uploader.linking import NATIVE_MEDIA_MAX_BYTES
     from uploader.gallery_image_policy import (
         MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
     )

@@ -5,6 +5,8 @@ Read [root AGENTS](../AGENTS.md), [winapp/README.md](README.md) and applicable
 packaging changes also require [.github rules](../.github/AGENTS.md) and
 [scripts rules](../scripts/AGENTS.md); fixtures require
 [tests rules](../tests/AGENTS.md).
+For source ownership and focused test discovery, use the
+[WinApp CODEMAP](../CODEMAP.md#winapp-source-ownership).
 
 Never use Python `from __future__ import annotations` or function-local
 imports. Put optional or platform-specific imports in module-level guards.

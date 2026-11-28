@@ -31,7 +31,7 @@ import stat
 import zipfile
 import time
 
-from .watch_queue import WatchSource, observe_watch_source
+from .watcher.queue import WatchSource, observe_watch_source
 
 from .models import ImportItem
 

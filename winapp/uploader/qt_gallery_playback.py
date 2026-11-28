@@ -20,7 +20,7 @@ from typing import Callable
 from PySide6.QtCore import QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QMenu, QVBoxLayout, QWidget, QWidgetAction
 
-from .app_linking import LinkedPresentation, LinkingError, LinkingSession
+from .linking import LinkedPresentation, LinkingError, LinkingSession
 from .flight_report_translations import tr
 from .gallery_audio import MEDIA_AUDIO_POLL_MS, NativeGalleryAudio, remove_audio_file
 from .gallery_image_policy import MEDIA_SLIDESHOW_DEFAULT_SECONDS

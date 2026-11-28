@@ -15,7 +15,7 @@ from collections.abc import Callable
 import threading
 import time
 
-from .app_linking import (
+from .linking import (
     NATIVE_MEDIA_PAGE_SIZE, LinkedMediaPage, LinkedPhoto, LinkingSession,
     LinkingMediaThrottled, LinkingResponseError,
 )

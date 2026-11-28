@@ -22,7 +22,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import LinkingError, LinkingSession
+from uploader.linking import LinkingError, LinkingSession
 from uploader.flight_delivery import deliver_report, FlightDeliveryError
 from uploader.linked_upload import (
     LinkedMultipart, LinkedTargetLease, LinkedUploadTarget, capture_linked_source,

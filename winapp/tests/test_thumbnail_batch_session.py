@@ -30,7 +30,12 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.gallery_media_cache import PHOTO_CACHE_FRESH_SECONDS
+from uploader.linking import core as linking_core
+from uploader.linking import session_media_pipeline as linking_session_media_pipeline
+from uploader.linking import transport as linking_transport
+from uploader.gallery_media_cache import GalleryMediaCache
 
 # Purpose: Keep a synthetic approved grant live for bounded session work.
 # Type: float. Units: seconds. Scope: one in-memory session fixture.
@@ -281,12 +286,12 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         """
         self.cache_directory = TemporaryDirectory()
         self.addCleanup(self.cache_directory.cleanup)
-        self.cache = linking.GalleryMediaCache(
+        self.cache = GalleryMediaCache(
             Path(self.cache_directory.name), linking.NATIVE_MEDIA_MAX_BYTES,
             thumbnails=True,
         )
         cache_patch = mock.patch.object(
-            linking.GalleryMediaCache, 'for_current_user', return_value=self.cache,
+            GalleryMediaCache, 'for_current_user', return_value=self.cache,
         )
         cache_patch.start()
         self.addCleanup(cache_patch.stop)
@@ -330,7 +335,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 'Content-Length': str(len(TEST_IMAGE_BODY)),
                 'ETag': '"' + hashlib.sha256(TEST_IMAGE_BODY).hexdigest() + '"',
                 'Cache-Control': 'private, max-age='
-                    + str(linking.PHOTO_CACHE_FRESH_SECONDS)
+                    + str(PHOTO_CACHE_FRESH_SECONDS)
                     + ', must-revalidate',
                 'Vary': 'Authorization, X-PHP-Gallery-Photo-Cache',
                 'X-PHP-Gallery-Photo-Cache': '1',
@@ -461,7 +466,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             item_timings.append(_timings)
 
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             session.media_thumbnails(
                 42, photos, publish, timings=timings, stats=stats,
@@ -659,7 +664,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                     target=read_foreground, name='batch-foreground', daemon=True,
                 )
                 with mock.patch.object(
-                    linking, '_linking_connection', side_effect=connections,
+                    linking_transport, '_linking_connection', side_effect=connections,
                 ) as connection_factory, mock.patch.object(
                     _Connection, 'request', autospec=True,
                     side_effect=record_request,
@@ -710,7 +715,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 self.assertFalse(gate.locked())
                 with gate._condition:
                     self.assertEqual((), tuple(gate._waiters))
-                self.assertFalse(linking._LINKING_TRANSPORT_SLOTS.locked())
+                self.assertFalse(linking_transport._LINKING_TRANSPORT_SLOTS.locked())
                 self.assertFalse(session._pending_gallery_cancels)
 
     def test_cancelled_batch_withdraws_from_held_session_gate(self) -> None:
@@ -763,7 +768,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         )
         try:
             with mock.patch.object(
-                linking, '_linking_connection',
+                linking_transport, '_linking_connection',
             ) as connection_factory, mock.patch.object(
                 gate._condition, 'wait', side_effect=observe_wait,
             ):
@@ -800,7 +805,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         connection = _Connection(self.response(
             200, encode_batch((7,), digest_override='0' * 64),
         ))
-        with mock.patch.object(linking, '_linking_connection', return_value=connection), mock.patch.object(
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection), mock.patch.object(
             session, '_media_read',
         ) as legacy:
             with self.assertRaises(linking.LinkingResponseError):
@@ -819,7 +824,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         photos = self.register_page(session, (7,))
         wire = encode_batch((7,), body=b'updated image')
         connection = _Connection(self.response(200, wire))
-        with mock.patch.object(linking, '_linking_connection', return_value=connection), mock.patch.object(
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection), mock.patch.object(
             session, '_media_read',
         ) as legacy:
             with self.assertRaises(linking.LinkingThumbnailProofChanged):
@@ -843,7 +848,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             gallery_key=self.cache.gallery_key(issuer, 42),
         ))
         delivered: list[linking.ThumbnailPublication | linking.LegacyThumbnailPublication] = []
-        with mock.patch.object(linking, '_linking_connection') as network:
+        with mock.patch.object(linking_transport, '_linking_connection') as network:
             session.media_thumbnails(
                 42, photos, lambda result, *_args: delivered.append(result),
             )
@@ -865,7 +870,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         expected = '"' + hashlib.sha256(TEST_IMAGE_BODY).hexdigest() + '"'
 
         def legacy_read(
-            gallery_id: int, kind: linking._NativeMediaKind,
+            gallery_id: int, kind: linking_core._NativeMediaKind,
             selector: int | str | None, cancelled: threading.Event | None,
             if_none_match: str | None = None, *, admin_preload: bool = False,
             timings: linking.MediaReadTimings | None = None,
@@ -896,7 +901,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
 
         published: list[linking.ThumbnailPublication | linking.LegacyThumbnailPublication] = []
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ) as connection_factory, mock.patch.object(
             session, '_media_read', side_effect=legacy_read,
         ) as legacy:
@@ -944,7 +949,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 ] = []
                 active_snapshots: list[tuple[int, ...]] = []
                 with mock.patch.object(
-                    linking, '_linking_connection', return_value=connection,
+                    linking_transport, '_linking_connection', return_value=connection,
                 ) as connection_factory:
                     session.media_thumbnails(
                         42, photos,
@@ -993,7 +998,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         connection = _Connection(self.media_response(status=503))
         active_snapshots: list[tuple[int, ...]] = []
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ) as connection_factory, mock.patch.object(
             session, '_media_read', wraps=session._media_read,
         ) as legacy:
@@ -1037,7 +1042,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         }))
         active_snapshots: list[tuple[int, ...]] = []
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ) as connection_factory, mock.patch.object(
             session, '_media_read',
         ) as legacy:
@@ -1079,7 +1084,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 connection = _Connection(self.response(status, body))
                 retry_waits: list[int] = []
                 with mock.patch.object(
-                    linking, '_linking_connection', return_value=connection,
+                    linking_transport, '_linking_connection', return_value=connection,
                 ), mock.patch.object(session, '_media_read') as legacy:
                     error = (linking.LinkingGrantRejected if status in (401, 403)
                              else linking.LinkingMediaUnavailable)
@@ -1107,7 +1112,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             429, retry=TEST_LONG_SERVER_RETRY_SECONDS,
         ))
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ) as connection_factory:
             with self.assertRaises(linking.LinkingMediaThrottled) as initial:
                 session.media_thumbnails(
@@ -1174,7 +1179,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
 
                 def connect(
                     issuer: SplitResult,
-                    control: linking._LinkingTransportControl,
+                    control: linking_transport._LinkingTransportControl,
                 ) -> _Connection:
                     """Return the next actual attempt's response owner.
 
@@ -1236,7 +1241,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
 
                 caller_cancel = threading.Event()
                 with mock.patch.object(
-                    linking, '_linking_connection', side_effect=connect,
+                    linking_transport, '_linking_connection', side_effect=connect,
                 ) as connection_factory, mock.patch.object(
                     _Connection, 'getresponse', autospec=True,
                     side_effect=read_response,
@@ -1261,9 +1266,9 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 self.assertTrue(session._request_gate.acquire(blocking=False))
                 session._request_gate.release()
                 self.assertTrue(
-                    linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False),
+                    linking_transport._LINKING_TRANSPORT_SLOTS.acquire(blocking=False),
                 )
-                linking._LINKING_TRANSPORT_SLOTS.release()
+                linking_transport._LINKING_TRANSPORT_SLOTS.release()
                 self.assertTrue(all(
                     connection.closed for connection in connections
                 ))
@@ -1285,7 +1290,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         observer_calls: list[int] = []
 
         def connect(
-            issuer: SplitResult, control: linking._LinkingTransportControl,
+            issuer: SplitResult, control: linking_transport._LinkingTransportControl,
         ) -> _Connection:
             """Return each of the two configured batch responses.
 
@@ -1330,7 +1335,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             raise RuntimeError('observer failure')
 
         with mock.patch.object(
-            linking, '_linking_connection', side_effect=connect,
+            linking_transport, '_linking_connection', side_effect=connect,
         ) as connection_factory:
             session.media_thumbnails(
                 42, photos, publish, retry_wait=raising_observer,
@@ -1345,8 +1350,8 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         self.assertEqual(0, observer_calls[1])
         self.assertTrue(session._request_gate.acquire(blocking=False))
         session._request_gate.release()
-        self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
-        linking._LINKING_TRANSPORT_SLOTS.release()
+        self.assertTrue(linking_transport._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
+        linking_transport._LINKING_TRANSPORT_SLOTS.release()
 
     def test_exhausted_transient_retains_cooldown_and_releases_gate(self) -> None:
         """Keep cooldown after a second 503 and leave serialized admission free.
@@ -1361,7 +1366,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         pending = iter(connections)
 
         def connect(
-            issuer: SplitResult, control: linking._LinkingTransportControl,
+            issuer: SplitResult, control: linking_transport._LinkingTransportControl,
         ) -> _Connection:
             """Return the next bounded response owner.
 
@@ -1376,7 +1381,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             return next(pending)
 
         with mock.patch.object(
-            linking, '_linking_connection', side_effect=connect,
+            linking_transport, '_linking_connection', side_effect=connect,
         ) as connection_factory:
             with self.assertRaises(linking.LinkingResponseError) as exhausted:
                 session.media_thumbnails(42, photos, lambda *_args: None)
@@ -1402,8 +1407,8 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         self.assertEqual(2, sum(item.request_args is not None for item in connections))
         self.assertTrue(session._request_gate.acquire(blocking=False))
         session._request_gate.release()
-        self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
-        linking._LINKING_TRANSPORT_SLOTS.release()
+        self.assertTrue(linking_transport._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
+        linking_transport._LINKING_TRANSPORT_SLOTS.release()
 
     def test_deadline_fence_stops_blocked_publication_without_caller_cancel(self) -> None:
         """Make a backpressured callback exit when its operation deadline ends.
@@ -1421,7 +1426,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         )
         caller_cancel = threading.Event()
         callback_entered = threading.Event()
-        controls: list[linking._LinkingTransportControl] = []
+        controls: list[linking_transport._LinkingTransportControl] = []
 
         def blocked_publish(
             _result: linking.ThumbnailPublication | linking.LegacyThumbnailPublication,
@@ -1444,7 +1449,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             check_active()
 
         def connection_factory(
-            issuer: SplitResult, control: linking._LinkingTransportControl,
+            issuer: SplitResult, control: linking_transport._LinkingTransportControl,
         ) -> _Connection:
             """Capture the transport completion event and return its response.
 
@@ -1459,8 +1464,10 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             controls.append(control)
             return connection
 
-        with mock.patch.object(linking, 'time', clock), mock.patch.object(
-            linking, '_linking_connection', side_effect=connection_factory,
+        with mock.patch.object(linking_session_media_pipeline, 'time', clock), mock.patch.object(
+            linking_transport, 'time', clock,
+        ), mock.patch.object(
+            linking_transport, '_linking_connection', side_effect=connection_factory,
         ):
             with self.assertRaises(linking.LinkingError):
                 session.media_thumbnails(
@@ -1472,8 +1479,8 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         self.assertTrue(controls[0].operation_finished.wait(TEST_WORKER_JOIN_SECONDS))
         self.assertTrue(session._request_gate.acquire(blocking=False))
         session._request_gate.release()
-        self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
-        linking._LINKING_TRANSPORT_SLOTS.release()
+        self.assertTrue(linking_transport._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
+        linking_transport._LINKING_TRANSPORT_SLOTS.release()
 
     def test_live_session_cancellation_during_cooldown_uses_no_http(self) -> None:
         """Cancel the logical gallery operation during automatic retry backoff.
@@ -1507,7 +1514,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         caller_cancel = ObservedCancelEvent()
 
         def connect(
-            issuer: SplitResult, control: linking._LinkingTransportControl,
+            issuer: SplitResult, control: linking_transport._LinkingTransportControl,
         ) -> _Connection:
             """Return the next bounded transient response.
 
@@ -1535,7 +1542,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 outcome_ready.set()
 
         with mock.patch.object(
-            linking, '_linking_connection', side_effect=connect,
+            linking_transport, '_linking_connection', side_effect=connect,
         ) as connection_factory:
             worker = threading.Thread(target=deferred_operation)
             worker.start()
@@ -1552,6 +1559,6 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         self.assertFalse(session._pending_gallery_cancels)
         self.assertTrue(session._request_gate.acquire(blocking=False))
         session._request_gate.release()
-        self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
-        linking._LINKING_TRANSPORT_SLOTS.release()
+        self.assertTrue(linking_transport._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
+        linking_transport._LINKING_TRANSPORT_SLOTS.release()
 

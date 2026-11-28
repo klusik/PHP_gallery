@@ -16,7 +16,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 
-from .app_linking import LinkedGallery, LinkingSession
+from .linking import LinkedGallery, LinkingSession
 from .gallery_folder_cover import cached_folder_cover, folder_cover_size, read_folder_cover
 from .gallery_view_preferences import (
     GALLERY_FOLDER_SHARE_BOUNDS, GALLERY_FOLDER_SHARE_SCALE,

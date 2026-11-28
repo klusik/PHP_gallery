@@ -27,6 +27,7 @@ from uploader.config import (
     CANVAS_GALLERY_RENDERER_ENVIRONMENT_VARIABLE,
     resolve_canvas_gallery_renderer_enabled,
 )
+from uploader.watcher.ui import photos_connection as watcher_photos_connection
 from test_redesign import MAIN
 
 
@@ -149,7 +150,9 @@ class CanvasRendererSettingTests(unittest.TestCase):
             experimental_canvas_gallery_renderer=True,
         )
 
-        with mock.patch.object(MAIN, "PhotosWorkspace") as workspace_type:
+        with mock.patch.object(
+            watcher_photos_connection, "PhotosWorkspace",
+        ) as workspace_type:
             MAIN.WatcherApp.build_photos_tab(app, mock.Mock())
 
         self.assertFalse(

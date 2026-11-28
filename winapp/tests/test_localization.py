@@ -29,6 +29,9 @@ import polib
 
 from test_application_shell import MAIN, WINAPP_DIR, descendants
 from test_ui_shell import SHELL_TEST_DEADLINE_MS
+from uploader.watcher import runtime, state as watcher_state
+from uploader.watcher.ui import event_delivery
+from uploader.watcher.ui.settings import preferences as settings_preferences
 from uploader.config import (
     THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE, THUMBNAIL_BATCH_FILE,
     load_thumbnail_batch_size, load_ui_language,
@@ -45,6 +48,18 @@ from uploader.photos_workspace import PhotosWorkspace
 from uploader.support_report import build_support_report
 from uploader.ui_shell import active_panel, initialize_shell
 from uploader.ui_theme import SmoothIconButton
+
+
+class WatcherRestartFixture(SimpleNamespace):
+    """Model the real Watcher reset fence for restart lifecycle tests."""
+
+    def watcher_reset_blocked(self) -> bool:
+        """Use the production admission predicate for a constructor-free host.
+
+        Returns:
+            bool: Whether the fixture host has a pending or invalid reset.
+        """
+        return MAIN.WatcherApp.watcher_reset_blocked(self)
 
 
 class CatalogTests(unittest.TestCase):
@@ -155,8 +170,8 @@ class LocalizationTests(unittest.TestCase):
                 )
                 app.refresh_interface_restart = lambda: MAIN.WatcherApp.refresh_interface_restart(app)
                 with (
-                    mock.patch.object(MAIN, "CONFIG_DIR", profile),
-                    mock.patch.object(MAIN, "messagebox") as messages,
+                    mock.patch.object(watcher_state, "CONFIG_DIR", profile),
+                    mock.patch.object(runtime, "messagebox") as messages,
                 ):
                     messages.askyesno.return_value = False
                     app.interface_language_var.get.return_value = LANGUAGE_NAMES[change]
@@ -197,7 +212,7 @@ class LocalizationTests(unittest.TestCase):
                         request_close=mock.Mock(),
                     ),
                 )
-                with mock.patch.object(MAIN, "messagebox") as messages:
+                with mock.patch.object(runtime, "messagebox") as messages:
                     MAIN.WatcherApp.close(app, restart=True)
                 app.updates.request_close.assert_not_called()
                 self.assertFalse(getattr(app, "_restart_requested", False))
@@ -219,7 +234,7 @@ class LocalizationTests(unittest.TestCase):
             for name in ("manual_worker", "preflight_worker", "ai_worker", "flight"):
                 with self.subTest(locale=locale, operation=name):
                     worker = mock.Mock(is_alive=mock.Mock(return_value=True))
-                    app = SimpleNamespace(
+                    app = WatcherRestartFixture(
                         root=mock.Mock(), _save_ui_layout_now=mock.Mock(),
                         updates=None, _prune_force_finished_workers=mock.Mock(),
                         _force_finished_workers=set(), _force_finished_operations=set(),
@@ -232,7 +247,7 @@ class LocalizationTests(unittest.TestCase):
                     )
                     if name != "flight":
                         setattr(app, name, worker)
-                    with mock.patch.object(MAIN, "messagebox") as messages:
+                    with mock.patch.object(runtime, "messagebox") as messages:
                         MAIN.WatcherApp.close(app, restart=True)
                     app.flights.stop.assert_not_called()
                     worker.stop.assert_not_called()
@@ -264,7 +279,7 @@ class LocalizationTests(unittest.TestCase):
                     _drain_running=True, config=SimpleNamespace(activity_history_limit=50),
                     connection_status_var=mock.Mock(), connection_detail_var=mock.Mock(),
                 )
-                with mock.patch.object(MAIN.logging, "info") as info:
+                with mock.patch.object(event_delivery.logging, "info") as info:
                     MAIN.WatcherApp.write_log(app, marker, "warning")
                 info.assert_called_once_with("UI: %s", marker)
                 self.assertEqual(marker, app._watch_recovery_latest)
@@ -283,8 +298,8 @@ class LocalizationTests(unittest.TestCase):
                 MAIN.WatcherApp._publish_connection_text(app, "status", "Connected")
                 self.assertEqual({"status": "Connected"}, app._connection_diagnostic)
                 app.connection_status_var.set.assert_called_once_with(gettext("Connected"))
-                runtime_source = MAIN.thumbnail_runtime_status()
-                runtime_caption = MAIN.thumbnail_runtime_status(for_display=True)
+                runtime_source = runtime.thumbnail_runtime_status()
+                runtime_caption = runtime.thumbnail_runtime_status(for_display=True)
                 self.assertIn("Client-side thumbnails", runtime_source)
                 self.assertEqual(locale == DEFAULT_LANGUAGE, runtime_caption == runtime_source)
 
@@ -453,9 +468,9 @@ class NativeLocalizationTests(unittest.TestCase):
             app.select_tab.assert_called_with(route)
         try:
             with (
-                mock.patch.object(MAIN, "CONFIG_DIR", profile),
-                mock.patch.object(MAIN, "startup_supported", return_value=True),
-                mock.patch.object(MAIN, "icon_button", wraps=MAIN.icon_button) as icon,
+                mock.patch.object(watcher_state, "CONFIG_DIR", profile),
+                mock.patch.object(settings_preferences, "startup_supported", return_value=True),
+                mock.patch.object(settings_preferences, "icon_button", wraps=settings_preferences.icon_button) as icon,
             ):
                 app.build_settings_tab(surface.content)
                 self.root.update()
@@ -786,7 +801,7 @@ class NativeLocalizationTests(unittest.TestCase):
             setattr(app, name, mock.Mock())
         # The native runner has Pillow. Drive the local option regardless of
         # the fixture interpreter's declared thumbnail codecs.
-        with mock.patch.object(MAIN, "local_thumbnail_supported", return_value=True):
+        with mock.patch.object(runtime, "local_thumbnail_supported", return_value=True):
             app.build_manual_tab(owner)
         self.root.update()
         self.assertTrue(app.start_import_button.instate(("disabled",)))

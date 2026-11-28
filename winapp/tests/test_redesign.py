@@ -22,14 +22,19 @@ import importlib.util
 import hashlib
 import io
 import json
+import email.message
+import multiprocessing
 import os
+import queue
 import shutil
 import sys
 import tempfile
 import threading
 import time
 import types
-from typing import Callable
+from dataclasses import replace
+from typing import Callable, NoReturn, Optional
+from urllib import error, parse
 import unittest
 from watcher_test_support import initialize_watcher_fixture
 from unittest import mock
@@ -48,10 +53,27 @@ try:
 except ImportError:
     Image = None
 
-from uploader import ui_theme
+from uploader import http_transport, ui_theme
+from uploader import flight_jobs, flight_workflow, linked_upload, macos_mode, ui_layout
+from uploader import launcher
+from uploader.ai import dependencies as ai_dependencies
+from uploader.ai import worker as ai_worker
+from uploader.imports import manual_upload as manual_upload_owner
+from uploader.imports import policy as import_policy
+from uploader.imports import preflight as preflight_owner
+from uploader.watcher import runtime
+from uploader.watcher import state as watcher_state
+from uploader.watcher import configuration as watcher_configuration
+from uploader.watcher.ui import imports_activity as watcher_ui_imports
+from uploader.watcher.ui import photos_connection
+from uploader.watcher.ui import support as watcher_ui_support
+from uploader.watcher.ui import watcher as watcher_ui_watcher
+from uploader.watcher.ui.event_pump import TkEventPump
+from uploader.watcher.workers import watcher as watcher_workers
+from uploader.watcher.workers import common as watch_common, thumbnails
 from uploader.game_context import GameContext
 from uploader.gallery_lightbox import PhotoLightbox
-from uploader.app_linking import UPLOAD_SCOPE, linking_issuer
+from uploader.linking import UPLOAD_SCOPE, linking_issuer
 from uploader.mode_coordinator import (
     ModeCoordinator,
     ModeCoordinatorError,
@@ -66,8 +88,8 @@ from uploader.upload_mode import (
     resolve_mode,
 )
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS, migrate_config_payload
-from uploader.app_linking import LinkedGallery, LinkingSession
-from uploader.app_linking import LinkedGalleryPage
+from uploader.linking import LinkedGallery, LinkingSession
+from uploader.linking import LinkedGalleryPage
 from uploader.gallery_catalogue_cache import (
     GalleryCatalogueCache, GalleryCatalogueSnapshot, GalleryCatalogueWriter,
 )
@@ -141,6 +163,63 @@ def load_main_module():
 MAIN = load_main_module()
 
 
+class WatcherAppMock(mock.Mock):
+    """Provide class-dispatched Watcher helpers on isolated application mocks."""
+
+    def watcher_reset_blocked(self) -> bool:
+        """Use the production reset fence when Watcher methods receive this mock.
+
+        Returns:
+            bool: Whether the fixture host has a pending or invalid reset.
+        """
+        return MAIN.WatcherApp.watcher_reset_blocked(self)
+
+    def _publish_connection_text(
+        self, field: str, message: str, **fields: str,
+    ) -> None:
+        """Route connection text through the real Watcher presentation helper.
+
+        Args:
+            field (str): Stable status or detail field to update.
+            message (str): Source-language connection text.
+            **fields (str): Optional values interpolated into the message.
+
+        Returns:
+            None: Updates this mock host through production behavior.
+        """
+        MAIN.WatcherApp._publish_connection_text(self, field, message, **fields)
+
+    def _watcher_connection_selected(self) -> bool:
+        """Use the real Watcher profile selection predicate on this mock.
+
+        Returns:
+            bool: Whether the current shared destination may feed Watcher.
+        """
+        return MAIN.WatcherApp._watcher_connection_selected(self)
+
+    def _flush_visible_log(self) -> None:
+        """Use the real bounded log flush when production event dispatch calls it.
+
+        Returns:
+            None: Appends any retained visible lines to the fixture text widget.
+        """
+        MAIN.WatcherApp._flush_visible_log(self)
+
+    def _start_watcher(
+        self, *, contextual_target: linked_upload.LinkedUploadTarget | None = None,
+    ) -> None:
+        """Delegate worker preparation to the real Watcher owner.
+
+        Args:
+            contextual_target (LinkedUploadTarget | None): Captured Photos
+                target, or None for ordinary Watcher startup.
+
+        Returns:
+            None: Keeps lifecycle setup aligned with production behavior.
+        """
+        MAIN.WatcherApp._start_watcher(self, contextual_target=contextual_target)
+
+
 def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     """Give a constructor-bypassed host the real bounded event dispatcher.
 
@@ -150,14 +229,20 @@ def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     Returns:
         None: Pump state is initialized and batch dispatch resolves to production.
     """
+    root = getattr(app, "root", None)
+    if root is None:
+        root = mock.Mock()
+        app.root = root
     app._drain_running = False
-    app._drain_after_id = None
+    app._event_pump = TkEventPump(root)
     app._event_drain_last_count = 0
     app._event_drain_total_count = 0
     app._event_drain_yield_count = 0
     app._event_drain_last_ms = 0.0
     app._event_drain_max_ms = 0.0
     app._activity_drawer_flush_count = 0
+    app._pending_log_lines = []
+    app._activity_tab_selected = False
     app._drain_event_batch = MAIN.WatcherApp._drain_event_batch.__get__(
         app, MAIN.WatcherApp,
     )
@@ -175,20 +260,20 @@ class UiLayoutPreferenceTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ui-layout.json"
-            state = MAIN.ViewLayoutState(1024, 720, 40, 55, "zoomed", 280)
-            MAIN._write_ui_layout(path, state)
+            state = ui_layout.ViewLayoutState(1024, 720, 40, 55, "zoomed", 280)
+            ui_layout._write_ui_layout(path, state)
             document = json.loads(path.read_text(encoding="utf-8"))
             document["other"] = {"keep": True}
             path.write_text(json.dumps(document), encoding="utf-8")
 
-            updated = MAIN.ViewLayoutState(
+            updated = ui_layout.ViewLayoutState(
                 1100, 760, 60, 65, "normal", 310, 447,
             )
-            MAIN._write_ui_layout(path, updated)
+            ui_layout._write_ui_layout(path, updated)
 
             self.assertEqual(
                 updated,
-                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                ui_layout._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
             )
             self.assertEqual(
                 {"keep": True},
@@ -208,7 +293,7 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 its real local view file; other accounts/sites remain isolated.
         """
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory)):
+                mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory)):
             app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
             app.linking_manager = mock.Mock()
             session = mock.Mock(spec=LinkingSession)
@@ -247,13 +332,13 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 "window": {"width": 1000, "height": 700, "x": 0, "y": 0},
                 "photos": {"tree_width": 210},
             }), encoding="utf-8")
-            legacy = MAIN._read_ui_layout(
+            legacy = ui_layout._read_ui_layout(
                 path, (0, 0, 1600, 900), (840, 500),
             )
             document = json.loads(path.read_text(encoding="utf-8"))
             document["photos"]["info_width"] = 9000
             path.write_text(json.dumps(document), encoding="utf-8")
-            clamped = MAIN._read_ui_layout(
+            clamped = ui_layout._read_ui_layout(
                 path, (0, 0, 1600, 900), (840, 500),
             )
 
@@ -277,12 +362,12 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 "photos": {"tree_width": True},
             }), encoding="utf-8")
 
-            state = MAIN._read_ui_layout(
+            state = ui_layout._read_ui_layout(
                 path, (-100, 20, 1200, 800), (840, 500),
             )
 
         self.assertEqual(
-            MAIN.ViewLayoutState(1200, 500, -100, 320, "normal", 210),
+            ui_layout.ViewLayoutState(1200, 500, -100, 320, "normal", 210),
             state,
         )
 
@@ -295,8 +380,8 @@ class UiLayoutPreferenceTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ui-layout.json"
-            initial = MAIN.ViewLayoutState(1000, 700, 20, 30, "normal", 210)
-            MAIN._write_ui_layout(path, initial)
+            initial = ui_layout.ViewLayoutState(1000, 700, 20, 30, "normal", 210)
+            ui_layout._write_ui_layout(path, initial)
             app = object.__new__(MAIN.WatcherApp)
             app.root = types.SimpleNamespace(
                 state=lambda: "normal",
@@ -316,10 +401,11 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 current_info_width=lambda: 447,
             )
             with mock.patch.object(
-                MAIN, "_layout_display_bounds", return_value=(0, 0, 1600, 900),
+                photos_connection, "_layout_display_bounds",
+                return_value=(0, 0, 1600, 900),
             ):
                 app._save_ui_layout_now()
-            loaded = MAIN._read_ui_layout(
+            loaded = ui_layout._read_ui_layout(
                 path, (0, 0, 1600, 900), (840, 500),
             )
 
@@ -334,8 +420,8 @@ class UiLayoutPreferenceTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ui-layout.json"
-            initial = MAIN.ViewLayoutState(1000, 700, 25, 40, "normal", 330)
-            MAIN._write_ui_layout(path, initial)
+            initial = ui_layout.ViewLayoutState(1000, 700, 25, 40, "normal", 330)
+            ui_layout._write_ui_layout(path, initial)
 
             fake_root = types.SimpleNamespace(
                 state=lambda: "zoomed",
@@ -361,12 +447,13 @@ class UiLayoutPreferenceTests(unittest.TestCase):
             )
 
             with mock.patch.object(
-                MAIN, "_layout_display_bounds", return_value=(0, 0, 1600, 900),
+                photos_connection, "_layout_display_bounds",
+                return_value=(0, 0, 1600, 900),
             ):
                 app._save_ui_layout_now()
                 self.assertEqual(
-                    MAIN.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
-                    MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                    ui_layout.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
+                    ui_layout._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
                 )
                 self.assertEqual(330, app._ui_layout_state.photos_tree_width)
 
@@ -374,8 +461,8 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 fake_root.winfo_viewable = lambda: 0
                 app._save_ui_layout_now()
                 self.assertEqual(
-                    MAIN.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
-                    MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                    ui_layout.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
+                    ui_layout._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
                 )
 
                 fake_root.state = lambda: "normal"
@@ -387,8 +474,8 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 app._save_ui_layout_now()
 
             self.assertEqual(
-                MAIN.ViewLayoutState(1100, 760, 80, 90, "normal", 330),
-                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                ui_layout.ViewLayoutState(1100, 760, 80, 90, "normal", 330),
+                ui_layout._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
             )
 
             fake_root.state = lambda: "iconic"
@@ -398,8 +485,8 @@ class UiLayoutPreferenceTests(unittest.TestCase):
             fake_root.winfo_y = lambda: -32000
             app._save_ui_layout_now(allow_iconic=True)
             self.assertEqual(
-                MAIN.ViewLayoutState(1150, 770, 80, 90, "normal", 330),
-                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                ui_layout.ViewLayoutState(1150, 770, 80, 90, "normal", 330),
+                ui_layout._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
             )
 
 
@@ -576,7 +663,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
                 factory receives only verified account and approved scope data.
         """
         app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
-        app._ui_layout_state = MAIN.ViewLayoutState(
+        app._ui_layout_state = ui_layout.ViewLayoutState(
             1100, 760, 20, 30, 'normal', 210,
         )
         app._canvas_grid_enabled_at_startup = True
@@ -620,7 +707,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         parent = mock.Mock()
         workspace = mock.Mock()
         with mock.patch.object(
-            MAIN, 'PhotosWorkspace', return_value=workspace,
+            photos_connection, 'PhotosWorkspace', return_value=workspace,
         ) as build:
             MAIN.WatcherApp.build_photos_tab(app, parent)
 
@@ -637,7 +724,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         session = mock.Mock()
         session.approved_scope.return_value = 'galleries'
         with mock.patch.object(
-            MAIN.GalleryCatalogueCache, 'for_current_user',
+            photos_connection.GalleryCatalogueCache, 'for_current_user',
             return_value=cache,
         ) as create_cache:
             self.assertIs(cache, cache_factory(session))
@@ -724,7 +811,7 @@ class WatcherGalleryDisplayTests(unittest.TestCase):
             sources = [folder / name for name in ('first.png', 'second.png')]
             for source in sources:
                 source.write_bytes(source.name.encode('ascii'))
-            worker = MAIN.WatcherThread.__new__(MAIN.WatcherThread)
+            worker = watcher_workers.WatcherThread.__new__(watcher_workers.WatcherThread)
             initialize_watcher_fixture(worker, MAIN, self)
             worker.config.watched_folder = str(folder)
             worker.configure_drain(folder / 'session', ())
@@ -736,7 +823,7 @@ class WatcherGalleryDisplayTests(unittest.TestCase):
             worker.acknowledge_photo(Path(head.source.path))
             second = worker.events.get_nowait()
             self.assertEqual(1, second["payload"]["queued_count"])
-            saved = MAIN.read_document(worker.drain_manifest)
+            saved = flight_jobs.read_document(worker.drain_manifest)
             self.assertEqual(1, len(saved['pending']))
             self.assertEqual('acknowledged', saved['items'][0]['state'])
 
@@ -1442,11 +1529,11 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             store = MAIN.ConfigStore(path)
             config = store.load()
             mode = MAIN.GuiModeOwner(
-                store.mode_port(config), lambda: MAIN.MacUploadModeStore(profile),
+                store.mode_port(config), lambda: macos_mode.MacUploadModeStore(profile),
             )
             mode.initialize()
             self.assertEqual('first_setup', mode.view().state)
-            saved = MAIN.replace(config, watched_folder=str(profile))
+            saved = replace(config, watched_folder=str(profile))
 
             def save_folder() -> MAIN.ModeConfigPort:
                 """Store the folder through the verified configuration owner.
@@ -1462,7 +1549,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             session.matches_issuer.return_value = True
             session.can_upload.return_value = True
             session.approved_scope.return_value = UPLOAD_SCOPE
-            target = MAIN.LinkedUploadTarget(
+            target = linked_upload.LinkedUploadTarget(
                 session, 'http://localhost:8888/galerie', 7, 3, 'Mac gallery',
             )
             self.assertEqual('linked_active', mode.select_linked(target).state)
@@ -1474,15 +1561,15 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             self.assertEqual('', reopened.api_key)
             port = store.mode_port(reopened)
             restarted = MAIN.GuiModeOwner(
-                port, lambda: MAIN.MacUploadModeStore(profile),
+                port, lambda: macos_mode.MacUploadModeStore(profile),
             )
             restarted.initialize()
             self.assertEqual('linked_disconnected', restarted.view().state)
-            with self.assertRaises(MAIN.ModeCoordinatorError):
+            with self.assertRaises(launcher.ModeCoordinatorError):
                 restarted.acquire('legacy', port)
 
             (profile / 'upload-mode' / 'mode.json').unlink()
-            with self.assertRaises(MAIN.ModeCoordinatorError):
+            with self.assertRaises(launcher.ModeCoordinatorError):
                 restarted.select_linked(target)
 
     def test_target_switch_blocks_foreign_pending_import_after_restart(self) -> None:
@@ -1499,7 +1586,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
         app.mode_owner.view.return_value = mock.Mock(record=mock.Mock(
             mode='linked', issuer=issuer, account_id=7, gallery_id=29,
         ))
-        binding = MAIN.linked_target_binding(issuer, 7, 29)
+        binding = linked_upload.linked_target_binding(issuer, 7, 29)
         app.flights = mock.Mock()
         app.flights.is_alive.return_value = False
         app.flights.busy.return_value = False
@@ -1517,7 +1604,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
         document = default_upload_state()
         document['jobs'] = {pending.id: pending.to_dict()}
         atomic_write_json(app.job_store.path, document)
-        with mock.patch.object(MAIN, 'CONFIG_DIR', Path(temporary.name)):
+        with mock.patch.object(watcher_state, 'CONFIG_DIR', Path(temporary.name)):
             self.assertIsNone(app.linked_target_change_refusal(binding))
             app.flights.pending.assert_called_with(binding=binding)
             app.flights.binding.assert_not_called()
@@ -1544,7 +1631,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 contents = b'synthetic image'
                 with zipfile.ZipFile(archive, 'w') as handle:
                     handle.writestr('image.jpg', contents)
-                digest = MAIN.hashlib.sha256(contents).hexdigest()
+                digest = hashlib.sha256(contents).hexdigest()
                 target = mock.Mock()
                 target.binding.return_value = 'a' * 64
                 target.issuer, target.title, target.gallery_id = (
@@ -1555,12 +1642,12 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 ]
                 target.upload.return_value = {'uploaded': 1, 'scanned': 1}
                 config = MAIN.WatcherConfig()
-                events = MAIN.queue.Queue()
+                events = queue.Queue()
                 store = MAIN.JobStateStore(root / 'jobs.json')
-                with mock.patch.object(MAIN, 'CONFIG_DIR', root), mock.patch.object(
-                    MAIN, 'STAGING_ROOT', root / 'staging',
+                with mock.patch.object(watcher_state, 'CONFIG_DIR', root), mock.patch.object(
+                    watcher_state, 'STAGING_ROOT', root / 'staging',
                 ):
-                    preflight = MAIN.ImportPreflightThread(
+                    preflight = preflight_owner.ImportPreflightThread(
                         config, 'zip', [], None, archive, False, True,
                         events, store, target,
                     )
@@ -1578,7 +1665,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     source = Path(item.path)
                     self.assertTrue(source.is_file())
                     self.assertTrue(archive.is_file())
-                    worker = MAIN.ManualUploadThread(
+                    worker = manual_upload_owner.ManualUploadThread(
                         config, [source], False, 1, 1, events,
                         plan.job, store, target,
                     )
@@ -1615,7 +1702,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             target.issuer, target.title, target.gallery_id = (
                 'https://gallery.example', 'Gallery', 7,
             )
-            digest = MAIN.hashlib.sha256(b'original').hexdigest()
+            digest = hashlib.sha256(b'original').hexdigest()
 
             def replace_during_inventory(
                 candidates: list[dict[str, MAIN.JsonValue]],
@@ -1641,9 +1728,9 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             item = MAIN.ImportItem.create(source, 'image.jpg', from_archive=True)
             item.transition('queued')
             job.items = [item]
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
-                worker = MAIN.ManualUploadThread(
-                    MAIN.WatcherConfig(), [source], False, 1, 1, MAIN.queue.Queue(),
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
+                worker = manual_upload_owner.ManualUploadThread(
+                    MAIN.WatcherConfig(), [source], False, 1, 1, queue.Queue(),
                     job, MAIN.JobStateStore(root / 'jobs.json'), target,
                 )
                 worker.linked_state = MAIN.LinkedUploadState(target)
@@ -1678,7 +1765,9 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 folder.mkdir()
                 old = time.time() - 48 * 3600
                 os.utime(folder, (old, old))
-            protected = MAIN.protected_staging_job_ids([uncertain, finished])
+            protected = import_policy.protected_staging_job_ids(
+                [uncertain, finished],
+            )
             self.assertEqual([uncertain.id], protected)
             removed = cleanup_stale_staging(root, 24.0, protected)
             self.assertEqual([], removed)
@@ -1704,7 +1793,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             app = object.__new__(MAIN.WatcherApp)
             app.linking_manager = mock.Mock()
             app.linking_manager.selected_upload_target.return_value = target
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
                 state = MAIN.LinkedUploadState(target)
                 # The source intentionally does not exist and must never be opened.
                 state.mark_uncertain(root / 'missing.jpg', 'a' * 64)
@@ -1745,16 +1834,16 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             session.approved_scope.return_value = UPLOAD_SCOPE
             session.identity.return_value.user_id = 9  # Synthetic Admin identity.
             session.probe_uncertain_upload.return_value = 'present'
-            target = MAIN.LinkedUploadTarget(
+            target = linked_upload.LinkedUploadTarget(
                 session, 'https://gallery.example', 9, 4, 'Fixture gallery',
             )
-            other = MAIN.replace(target, gallery_id=target.gallery_id + 1)
+            other = replace(target, gallery_id=target.gallery_id + 1)
             mode = mock.Mock(spec=MAIN.GuiModeOwner)
             mode.view.return_value = mock.Mock(state='linked_active', record=mock.Mock(
                 issuer=target.issuer, account_id=target.user_id,
                 gallery_id=target.gallery_id, scope=UPLOAD_SCOPE,
             ))
-            desktop = MAIN.DesktopConfiguration(
+            desktop = watcher_configuration.DesktopConfiguration(
                 MAIN.ConfigStore(profile / 'config.json'), MAIN.WatcherConfig(), mode,
             )
             desktop.target = target
@@ -1763,7 +1852,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             original_source = profile / 'missing.jpg'
             digest = 'a' * 64  # Structural SHA-256 spelling for an absent synthetic source.
             file_size = 128  # Bytes supplied for the synthetic read-only observation.
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
                 state = MAIN.LinkedUploadState(target)
                 state.mark_uncertain(original_source, digest)
                 retained = state.path.read_bytes()
@@ -1799,7 +1888,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             target.session.matches_issuer.return_value = True
             target.session.identity.return_value.user_id = 9
             app = object.__new__(MAIN.WatcherApp)
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
                 state = MAIN.LinkedUploadState(target)
                 state.mark_uncertain(root / 'missing.jpg', 'a' * 64)
                 original = state.path.read_bytes()
@@ -1834,7 +1923,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 self.assertEqual(original, state.path.read_bytes())
                 target.session.identity.side_effect = None
                 target.session.probe_uncertain_upload.reset_mock()
-                lease = MAIN.LinkedTargetLease(root, target.binding())
+                lease = linked_upload.LinkedTargetLease(root, target.binding())
                 lease.acquire()
                 try:
                     with self.assertRaises(RuntimeError):
@@ -1854,7 +1943,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             root = Path(directory)
             target = mock.Mock()
             target.binding.return_value = 'c' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
                 state = MAIN.LinkedUploadState(target)
                 with self.assertRaises(ValueError):
                     state.recovery_marker()
@@ -1875,7 +1964,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             target = mock.Mock()
             target.binding.return_value = 'b' * 64
             digest = 'c' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory)):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory)):
                 state = MAIN.LinkedUploadState(target)
                 state.mark_uncertain(Path(directory) / 'source.jpg', digest)
                 restored = MAIN.LinkedUploadState(target)
@@ -1899,8 +1988,8 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             digest = MAIN.sha256_file(source)
             target = mock.Mock()
             target.binding.return_value = 'b' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
-                lease = MAIN.LinkedTargetLease(root, target.binding())
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
+                lease = linked_upload.LinkedTargetLease(root, target.binding())
                 lease.acquire()
                 try:
                     state = MAIN.LinkedUploadState(target)
@@ -1953,9 +2042,9 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             target.inventory.return_value = {'existing': []}
             store = JobStateStore(root / 'upload_state.json')
             bindings = ImportBindings(root / 'flights')
-            events = MAIN.queue.Queue()
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
-                lease = MAIN.LinkedTargetLease(root, binding)
+            events = queue.Queue()
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
+                lease = linked_upload.LinkedTargetLease(root, binding)
                 lease.acquire()
                 try:
                     state = MAIN.LinkedUploadState(target)
@@ -1964,7 +2053,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     journal = state.path.read_bytes()
                 finally:
                     lease.release()
-                preflight = MAIN.ImportPreflightThread(
+                preflight = preflight_owner.ImportPreflightThread(
                     MAIN.WatcherConfig(), 'files', [source, fresh], None, None,
                     False, False, events, store, target,
                 )
@@ -1988,7 +2077,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             root = Path(directory)
             target = mock.Mock()
             target.binding.return_value = 'e' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
                 state = MAIN.LinkedUploadState(target)
                 state.mark_uncertain(root / 'sent.jpg', 'a' * 64)
                 original = json.dumps(json.loads(state.path.read_text(encoding='utf-8')))
@@ -2017,7 +2106,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             target.binding.return_value = 'd' * 64
             path = Path(directory) / 'camera.jpg'
             digest_a, digest_b = 'a' * 64, 'b' * 64
-            with mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory)):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory)):
                 state = MAIN.LinkedUploadState(target)
                 state.mark_uncertain(path, digest_a)
                 with self.assertRaises(ValueError):
@@ -2042,7 +2131,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             {'existing': []},
             RuntimeError('offline'),
         ]
-        inventory = MAIN.RemoteInventorySession(1, mock.Mock(), target)
+        inventory = http_transport.RemoteInventorySession(1, mock.Mock(), target)
         candidate = {'sha256': digest}
         self.assertTrue(inventory.refresh('', '', [candidate], force=True))
         self.assertTrue(inventory.has_hash(digest))
@@ -2061,7 +2150,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
         target.inventory.side_effect = [
             {'existing': [{'sha256': digest}]}, RuntimeError('unavailable'),
         ]
-        inventory = MAIN.RemoteInventorySession(1, mock.Mock(), target)
+        inventory = http_transport.RemoteInventorySession(1, mock.Mock(), target)
         candidate = {'sha256': digest}
         self.assertTrue(inventory.refresh('', '', [candidate], force=True))
         self.assertTrue(inventory.has_hash(digest))
@@ -2087,7 +2176,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 uncertain_source.write_bytes(b'A')
                 target = mock.Mock()
                 target.binding.return_value = 'e' * 64
-                with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+                with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
                     state = MAIN.LinkedUploadState(target)
                     original_digest = MAIN.sha256_file(uncertain_source)
                     state.mark_uncertain(uncertain_source, original_digest)
@@ -2101,7 +2190,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                         source.write_bytes(candidate_bytes)
 
                     candidate_digest = MAIN.sha256_file(source)
-                    watcher = object.__new__(MAIN.WatcherThread)
+                    watcher = object.__new__(watcher_workers.WatcherThread)
                     initialize_watcher_fixture(watcher, MAIN, self)
                     watcher._once_work = None
                     watcher.linked_target = target
@@ -2110,7 +2199,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     watcher.accepted_paths = {source}
                     watcher.initial_paths = set()
                     watcher._admission_lock = threading.RLock()
-                    watcher.events = MAIN.queue.Queue()
+                    watcher.events = queue.Queue()
                     watcher.drain_event = threading.Event()
                     watcher.stop_event = threading.Event()
                     watcher.stability = mock.Mock()
@@ -2137,7 +2226,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     watcher.remote_inventory.refresh.assert_not_called()
                     watcher.upload_watched_file.assert_not_called()
 
-                    manual = object.__new__(MAIN.ManualUploadThread)
+                    manual = object.__new__(manual_upload_owner.ManualUploadThread)
                     manual._redirect_refused = threading.Event()
                     manual.linked_target = target
                     manual.linked_state = MAIN.LinkedUploadState(target)
@@ -2168,7 +2257,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
             root = Path(directory)
             source = root / 'photo.jpg'
             source.write_bytes(b'A')
-            digest = MAIN.hashlib.sha256(b'A').hexdigest()
+            digest = hashlib.sha256(b'A').hexdigest()
 
             def generate(
                 snapshot: Path, _root: Path, _client_id: str,
@@ -2187,11 +2276,11 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 source.write_bytes(b'B')
                 return []
 
-            with mock.patch.object(MAIN, 'generate_local_thumbnails', side_effect=generate):
-                MAIN.generate_linked_thumbnails(source, root, 'request', digest)
+            with mock.patch.object(thumbnails, 'generate_local_thumbnails', side_effect=generate):
+                thumbnails.generate_linked_thumbnails(source, root, 'request', digest)
             self.assertFalse((root / 'request' / 'source-snapshot').exists())
 
-            worker = object.__new__(MAIN.ManualUploadThread)
+            worker = object.__new__(manual_upload_owner.ManualUploadThread)
             worker._redirect_refused = threading.Event()
             worker.linked_target = mock.Mock()
             worker.linked_state = mock.Mock()
@@ -2219,7 +2308,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     staging = Path(directory) / 'thumbnails'
                     staging.mkdir()
-                    worker = object.__new__(MAIN.ManualUploadThread)
+                    worker = object.__new__(manual_upload_owner.ManualUploadThread)
                     worker._redirect_refused = threading.Event()
                     worker.thumbnail_workers = worker.upload_workers = 1
                     worker.emit = mock.Mock()
@@ -2228,10 +2317,10 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                     upload_error = RuntimeError('upload pool failed')
                     process = mock.Mock(side_effect=process_error) if failure_at == 'process' else mock.Mock(return_value=pool)
                     upload = mock.Mock(side_effect=upload_error)
-                    with mock.patch.object(MAIN, 'local_thumbnail_supported', return_value=True), \
-                            mock.patch.object(MAIN.tempfile, 'mkdtemp', return_value=str(staging)), \
-                            mock.patch.object(MAIN.concurrent.futures, 'ProcessPoolExecutor', process), \
-                            mock.patch.object(MAIN.concurrent.futures, 'ThreadPoolExecutor', upload):
+                    with mock.patch.object(runtime, 'local_thumbnail_supported', return_value=True), \
+                            mock.patch.object(manual_upload_owner.tempfile, 'mkdtemp', return_value=str(staging)), \
+                            mock.patch.object(manual_upload_owner.concurrent.futures, 'ProcessPoolExecutor', process), \
+                            mock.patch.object(manual_upload_owner.concurrent.futures, 'ThreadPoolExecutor', upload):
                         with self.assertRaises(RuntimeError):
                             worker.run_with_client_thumbnails('')
                     self.assertFalse(staging.exists())
@@ -2244,15 +2333,20 @@ class LinkedUploadHistoryTests(unittest.TestCase):
 class FrozenDependencyTests(unittest.TestCase):
     """A frozen executable must never relaunch itself as a pip interpreter."""
 
-    def test_frozen_dependency_actions_never_spawn_pip(self):
-        with mock.patch.object(MAIN.sys, "frozen", True, create=True), mock.patch.object(MAIN.subprocess, "run") as run:
-            with mock.patch.object(MAIN, "Image", object()), mock.patch.object(MAIN, "pystray", object()):
-                self.assertTrue(MAIN.install_dependencies_for_current_runtime()[0])
-            with mock.patch.object(MAIN, "Image", None):
-                ok, message = MAIN.install_dependencies_for_current_runtime()
+    def test_frozen_dependency_actions_never_spawn_pip(self) -> None:
+        """Keep frozen dependency actions from starting a pip process.
+
+        Returns:
+            None: Frozen desktop and AI dependency checks do not invoke pip.
+        """
+        with mock.patch.object(runtime.sys, "frozen", True, create=True), mock.patch.object(runtime.subprocess, "run") as run:
+            with mock.patch.object(runtime, "Image", object()), mock.patch.object(runtime, "pystray", object()):
+                self.assertTrue(runtime.install_dependencies_for_current_runtime()[0])
+            with mock.patch.object(runtime, "Image", None):
+                ok, message = runtime.install_dependencies_for_current_runtime()
                 self.assertFalse(ok)
                 self.assertIn("Reinstall", message)
-            ok, message = MAIN.install_semantic_ai_dependencies_for_current_runtime()
+            ok, message = ai_dependencies.install_semantic_ai_dependencies_for_current_runtime()
             self.assertFalse(ok)
             self.assertIn("Ollama", message)
             run.assert_not_called()
@@ -2280,7 +2374,7 @@ class ConfigStateTests(unittest.TestCase):
                 vault.transaction.return_value.__enter__.return_value.read.return_value = None
                 owner = MAIN.GuiModeOwner(store.mode_port(config), lambda: vault)
                 owner.initialize()
-                app = mock.Mock()
+                app = WatcherAppMock()
                 app.config = config
                 app.config_store = store
                 app.mode_owner = owner
@@ -2289,7 +2383,7 @@ class ConfigStateTests(unittest.TestCase):
                         app, proposed, **options,
                     )
                 )
-                operation: MAIN.FinalizationWorker
+                operation: flight_workflow.FinalizationWorker
 
                 def server_confirmed() -> None:
                     """Model positive server response after the drain barrier.
@@ -2300,7 +2394,7 @@ class ConfigStateTests(unittest.TestCase):
                     operation._gui_work.checkpoint()
                     operation.confirm_server_revocation()
 
-                operation = MAIN.FinalizationWorker(
+                operation = flight_workflow.FinalizationWorker(
                     [], MAIN.normalize_upload_url(captured.gallery_url), captured.api_key,
                     lambda _cancel, _deadline: None, server_confirmed, True,
                     gui_admission=(owner, store.mode_port(captured)),
@@ -2317,7 +2411,7 @@ class ConfigStateTests(unittest.TestCase):
                     'pgu_finish_fixture',
                     json.loads(store.path.read_text(encoding='utf-8'))['api_key'],
                 )
-                with self.assertRaises(MAIN.ModeCoordinatorError):
+                with self.assertRaises(launcher.ModeCoordinatorError):
                     owner.save(mock.Mock())
                 if outcome == 'new_operation':
                     app.flights.operation = mock.Mock()
@@ -2373,7 +2467,7 @@ class ConfigStateTests(unittest.TestCase):
             work = owner.acquire('legacy', store.mode_port(captured))
             work.checkpoint()
             config.api_key = 'pgu_other'
-            with self.assertRaises(MAIN.ModeCoordinatorError):
+            with self.assertRaises(launcher.ModeCoordinatorError):
                 work.checkpoint()
             work.close()
             self.assertEqual('pgu_fixture', captured.api_key)
@@ -2408,7 +2502,7 @@ class ConfigStateTests(unittest.TestCase):
 
             transaction.write.side_effect = write_mode
             with mock.patch.object(
-                MAIN._ConfigModeTransaction, 'config_path',
+                watcher_state._ConfigModeTransaction, 'config_path',
                 new_callable=mock.PropertyMock, return_value=config_path,
             ):
                 coordinator = ModeCoordinator(store.mode_port(config), vault)
@@ -2455,7 +2549,7 @@ class ConfigStateTests(unittest.TestCase):
             config = store.load()
             config.api_key = 'pgu_fixture'
             store.save(config)
-            stale = MAIN.replace(config, watch_recursive=True)
+            stale = replace(config, watch_recursive=True)
             record = ModeRecord(
                 'a' * 32, 'b' * 32, 'linked',
                 profile_path_digest(r'C:\Users\Tester\config.json'),
@@ -2496,7 +2590,7 @@ class ConfigStateTests(unittest.TestCase):
                     transaction.read_mode_anchor(missing)
                 with self.assertRaises(OSError):
                     transaction.write_mode_anchor(missing, b'{}')
-            old = MAIN.replace(config)
+            old = replace(config)
             store.save(config)
             with self.assertRaises(OSError):
                 with store.mode_port(old).mode_transaction():
@@ -2517,7 +2611,7 @@ class ConfigStateTests(unittest.TestCase):
                 with store.mode_port(config).mode_transaction() as transaction:
                     transaction.snapshot()
                     with self.assertRaises(OSError):
-                        store.save(MAIN.replace(config, api_key='pgu_new'))
+                        store.save(replace(config, api_key='pgu_new'))
                     with self.assertRaises(OSError):
                         store.load()
                     with self.assertRaises(OSError):
@@ -2664,7 +2758,7 @@ class ConfigStateTests(unittest.TestCase):
             config = store.load()
             self.assertEqual('pgu_fixture', config.api_key)
             self.assertIn(b'"future_mode":' + opaque, path.read_bytes())
-            store.save(MAIN.replace(config, watch_recursive=True))
+            store.save(replace(config, watch_recursive=True))
             self.assertIn(b'"future_mode":' + opaque, path.read_bytes())
             self.assertEqual('pgu_fixture', json.loads(path.read_text())['api_key'])
 
@@ -2706,8 +2800,8 @@ class ConfigStateTests(unittest.TestCase):
             path = Path(directory) / 'config.json'
             store = MAIN.ConfigStore(path)
             current = store.load()
-            old = MAIN.replace(current, watch_recursive=True)
-            latest = MAIN.replace(current, api_key='pgu_new')
+            old = replace(current, watch_recursive=True)
+            latest = replace(current, api_key='pgu_new')
             store.save(latest)
             self.assertNotIn('_snapshot_token', latest.to_dict())
             self.assertNotIn('_snapshot_token', repr(latest))
@@ -2731,18 +2825,18 @@ class ConfigStateTests(unittest.TestCase):
             ):
                 with (
                     self.subTest(arguments=arguments),
-                    mock.patch.object(MAIN, 'CONFIG_DIR', path.parent),
-                    mock.patch.object(MAIN, 'WindowsInstance') as instance,
-                    mock.patch.object(MAIN, 'setup_logging'),
-                    mock.patch.object(MAIN, '_start_qt_supervisor') as supervise,
-                    mock.patch.object(MAIN, 'WatcherApp') as app,
-                    mock.patch.object(MAIN, 'run_once') as once,
-                    mock.patch.object(MAIN, 'synchronize_startup') as startup,
-                    mock.patch.object(MAIN, 'messagebox') as messages,
-                    mock.patch.object(MAIN.sys, 'stderr', io.StringIO()),
+                    mock.patch.object(watcher_state, 'CONFIG_DIR', path.parent),
+                    mock.patch.object(launcher, 'WindowsInstance') as instance,
+                    mock.patch.object(launcher, 'setup_logging'),
+                    mock.patch.object(launcher, '_start_qt_supervisor') as supervise,
+                    mock.patch.object(launcher, 'WatcherApp') as app,
+                    mock.patch.object(launcher, 'run_once') as once,
+                    mock.patch.object(launcher, 'synchronize_startup') as startup,
+                    mock.patch.object(runtime, 'messagebox') as messages,
+                    mock.patch.object(launcher.sys, 'stderr', io.StringIO()),
                 ):
                     instance.return_value.acquire.return_value = True
-                    self.assertEqual(1, MAIN.main(arguments + ['--config', str(path)]))
+                    self.assertEqual(1, launcher.main(arguments + ['--config', str(path)]))
                     supervise.assert_not_called()
                     app.assert_not_called()
                     once.assert_not_called()
@@ -2784,11 +2878,11 @@ class ConfigStateTests(unittest.TestCase):
                 observed.append(coordinator)
                 return coordinator
 
-            with mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                    mock.patch.object(MAIN, 'ModeCoordinator', side_effect=coordinator_factory), \
-                    mock.patch.object(MAIN, 'setup_logging'), \
-                    mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory) / 'profile'), \
-                    mock.patch.object(MAIN, 'WatcherThread') as worker:
+            with mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                    mock.patch.object(launcher, 'ModeCoordinator', side_effect=coordinator_factory), \
+                    mock.patch.object(launcher, 'setup_logging'), \
+                    mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory) / 'profile'), \
+                    mock.patch.object(launcher, 'WatcherThread') as worker:
                 worker.return_value._queue = None
                 worker.return_value._pending_transport = None
                 def scan(_folder: Path, _url: str) -> None:
@@ -2805,13 +2899,13 @@ class ConfigStateTests(unittest.TestCase):
                         observed[0].refresh()
 
                 worker.return_value.scan_once.side_effect = scan
-                self.assertEqual(0, MAIN.run_once(config, store))
+                self.assertEqual(0, launcher.run_once(config, store))
                 worker.assert_called_once()
                 self.assertIs(config, worker.call_args.args[0])
                 worker.return_value.scan_once.assert_called_once()
                 self.assertEqual('legacy_unmigrated', observed[0].refresh().state)
         with self.assertRaises(TypeError):
-            MAIN.run_once(MAIN.WatcherConfig())
+            launcher.run_once(MAIN.WatcherConfig())
 
     def test_once_refuses_unavailable_or_first_setup_before_worker(self) -> None:
         """Treat missing config or a vault failure as no authority to scan.
@@ -2837,13 +2931,13 @@ class ConfigStateTests(unittest.TestCase):
                 if scenario == 'vault_unavailable':
                     vault.transaction.side_effect = OSError('fixture vault unavailable')
                 if scenario == 'mismatched_config':
-                    config = MAIN.replace(config, api_key='pgu_unsaved')
-                with mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                        mock.patch.object(MAIN, 'WatcherThread') as worker, \
-                        mock.patch.object(MAIN.sys, 'stderr', io.StringIO()):
+                    config = replace(config, api_key='pgu_unsaved')
+                with mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                        mock.patch.object(launcher, 'WatcherThread') as worker, \
+                        mock.patch.object(launcher.sys, 'stderr', io.StringIO()):
                     if scenario == 'vault_open_failure':
-                        MAIN.WindowsUploadModeStore.side_effect = OSError('fixture vault open failed')
-                    self.assertEqual(1, MAIN.run_once(config, store))
+                        launcher.WindowsUploadModeStore.side_effect = OSError('fixture vault open failed')
+                    self.assertEqual(1, launcher.run_once(config, store))
                     worker.assert_not_called()
 
     def test_once_rechecks_evidence_for_each_network_attempt(self) -> None:
@@ -2877,14 +2971,14 @@ class ConfigStateTests(unittest.TestCase):
                 state.already_uploaded_hash.return_value = False
                 state.retry_allowed.return_value = True
                 attempts: list[str] = []
-                handlers: list[MAIN._GalleryKeyRedirectHandler] = []
+                handlers: list[http_transport._GalleryKeyRedirectHandler] = []
                 opener = mock.MagicMock()
 
-                def make_opener(handler: MAIN._GalleryKeyRedirectHandler) -> mock.MagicMock:
+                def make_opener(handler: http_transport._GalleryKeyRedirectHandler) -> mock.MagicMock:
                     """Capture the real redirect guard and return a fake opener.
 
                     Args:
-                        handler (MAIN._GalleryKeyRedirectHandler): Guard for
+                        handler (http_transport._GalleryKeyRedirectHandler): Guard for
                             the synthetic request's redirects.
 
                     Returns:
@@ -2893,11 +2987,11 @@ class ConfigStateTests(unittest.TestCase):
                     handlers.append(handler)
                     return opener
 
-                def open_request(http_request: MAIN.request.Request, timeout: float) -> mock.MagicMock:
+                def open_request(http_request: http_transport.request.Request, timeout: float) -> mock.MagicMock:
                     """Simulate one request and optionally invalidate evidence.
 
                     Args:
-                        http_request (MAIN.request.Request): Inventory or
+                        http_request (http_transport.request.Request): Inventory or
                             multipart request submitted by the worker.
                         timeout (float): Existing socket timeout, unused here.
 
@@ -2905,9 +2999,9 @@ class ConfigStateTests(unittest.TestCase):
                         mock.MagicMock: Context-managed synthetic JSON response.
 
                     Raises:
-                        MAIN.error.HTTPError: Synthetic routing-only 404.
-                        MAIN.error.URLError: Synthetic failed upload transport.
-                        MAIN.ModeCoordinatorError: Redirect evidence changed.
+                        error.HTTPError: Synthetic routing-only 404.
+                        error.URLError: Synthetic failed upload transport.
+                        launcher.ModeCoordinatorError: Redirect evidence changed.
                     """
                     is_inventory = http_request.get_header('Content-type').startswith('application/json')
                     attempts.append('inventory' if is_inventory else 'upload')
@@ -2915,22 +3009,22 @@ class ConfigStateTests(unittest.TestCase):
                         vault_reader.read.return_value = 'unavailable fixture evidence'
                         handlers[-1].redirect_request(
                             http_request, io.BytesIO(), 302, 'Found',
-                            MAIN.email.message.Message(),
+                            email.message.Message(),
                             'http://localhost:8888/Galerie/redirected',
                         )
                     if ((scenario == 'inventory_route' and is_inventory)
                             or (scenario == 'upload_route' and not is_inventory)):
                         vault_reader.read.return_value = 'unavailable fixture evidence'
-                        raise MAIN.error.HTTPError(
+                        raise error.HTTPError(
                             http_request.full_url, 404, 'Not Found', {},
                             io.BytesIO(b'non-JSON routing error'),
                         )
                     if scenario == 'thumbnail_fallback' and not is_inventory:
                         vault_reader.read.return_value = 'unavailable fixture evidence'
-                        raise MAIN.error.URLError('synthetic transport failure')
+                        raise error.URLError('synthetic transport failure')
                     if scenario == 'reconcile' and not is_inventory:
                         vault_reader.read.return_value = 'unavailable fixture evidence'
-                        raise MAIN.error.URLError('Remote end closed connection without response')
+                        raise error.URLError('Remote end closed connection without response')
                     if scenario == 'after_inventory' and is_inventory:
                         vault_reader.read.return_value = 'unavailable fixture evidence'
                     response = mock.MagicMock()
@@ -2941,18 +3035,18 @@ class ConfigStateTests(unittest.TestCase):
                     return response
 
                 opener.open.side_effect = open_request
-                with mock.patch.object(MAIN, 'CONFIG_DIR', root / 'profile'), \
-                        mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                        mock.patch.object(MAIN, 'UploadState', return_value=state), \
-                        mock.patch.object(MAIN, 'FileStabilityTracker') as stability, \
-                        mock.patch.object(MAIN, 'SimConnectCameraClient'), \
-                        mock.patch.object(MAIN, 'setup_logging'), \
-                        mock.patch.object(MAIN, 'local_thumbnail_supported', return_value=True), \
-                        mock.patch.object(MAIN, 'generate_local_thumbnails', return_value=[]), \
-                        mock.patch.object(MAIN.request, 'build_opener', side_effect=make_opener), \
-                        mock.patch.object(MAIN.sys, 'stderr', io.StringIO()):
+                with mock.patch.object(watcher_state, 'CONFIG_DIR', root / 'profile'), \
+                        mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                        mock.patch.object(watcher_state, 'UploadState', return_value=state), \
+                        mock.patch.object(watch_common, 'FileStabilityTracker') as stability, \
+                        mock.patch.object(watcher_workers, 'SimConnectCameraClient'), \
+                        mock.patch.object(launcher, 'setup_logging'), \
+                        mock.patch.object(runtime, 'local_thumbnail_supported', return_value=True), \
+                        mock.patch.object(thumbnails, 'generate_local_thumbnails', return_value=[]), \
+                        mock.patch.object(http_transport.request, 'build_opener', side_effect=make_opener), \
+                        mock.patch.object(launcher.sys, 'stderr', io.StringIO()):
                     stability.return_value.stable.return_value = True
-                    result = MAIN.run_once(config, store)
+                    result = launcher.run_once(config, store)
                 if scenario == 'healthy':
                     self.assertEqual(0, result)
                     self.assertEqual(['inventory', 'upload'], attempts)
@@ -2979,16 +3073,16 @@ class ConfigStateTests(unittest.TestCase):
             store.save(config)
             vault = mock.MagicMock()
             vault.transaction.return_value.__enter__.return_value.read.return_value = None
-            with mock.patch.object(MAIN, 'WindowsInstance') as instance, \
-                    mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                    mock.patch.object(MAIN, 'ModeCoordinator', wraps=MAIN.ModeCoordinator) as owner, \
-                    mock.patch.object(MAIN, 'setup_logging'), \
-                    mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory) / 'profile'), \
-                    mock.patch.object(MAIN, 'WatcherThread') as worker:
+            with mock.patch.object(launcher, 'WindowsInstance') as instance, \
+                    mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                    mock.patch.object(launcher, 'ModeCoordinator', wraps=launcher.ModeCoordinator) as owner, \
+                    mock.patch.object(launcher, 'setup_logging'), \
+                    mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory) / 'profile'), \
+                    mock.patch.object(launcher, 'WatcherThread') as worker:
                 worker.return_value._queue = None
                 worker.return_value._pending_transport = None
                 instance.return_value.acquire.return_value = True
-                self.assertEqual(0, MAIN.main(['--once', '--config', raw]))
+                self.assertEqual(0, launcher.main(['--once', '--config', raw]))
                 self.assertEqual(raw, owner.call_args.args[0]._raw_path)
                 worker.return_value.scan_once.assert_called_once()
                 instance.return_value.close.assert_called_once()
@@ -3011,12 +3105,12 @@ class ConfigStateTests(unittest.TestCase):
                 transaction.write_mode_anchor(transaction.snapshot(), encode_mode_record(record))
             vault = mock.MagicMock()
             vault.transaction.return_value.__enter__.return_value.read.return_value = record
-            with mock.patch.object(MAIN._ConfigModeTransaction, 'config_path',
+            with mock.patch.object(watcher_state._ConfigModeTransaction, 'config_path',
                                    new_callable=mock.PropertyMock, return_value=raw), \
-                    mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                    mock.patch.object(MAIN, 'WatcherThread') as worker, \
-                    mock.patch.object(MAIN.sys, 'stderr', io.StringIO()):
-                self.assertEqual(1, MAIN.run_once(config, store))
+                    mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                    mock.patch.object(launcher, 'WatcherThread') as worker, \
+                    mock.patch.object(launcher.sys, 'stderr', io.StringIO()):
+                self.assertEqual(1, launcher.run_once(config, store))
                 worker.assert_not_called()
 
     def test_once_accepts_confirmed_legacy_and_unmigrated_unc(self) -> None:
@@ -3039,15 +3133,15 @@ class ConfigStateTests(unittest.TestCase):
                         transaction.write_mode_anchor(transaction.snapshot(), encode_mode_record(record))
                 vault = mock.MagicMock()
                 vault.transaction.return_value.__enter__.return_value.read.return_value = record
-                with mock.patch.object(MAIN._ConfigModeTransaction, 'config_path',
+                with mock.patch.object(watcher_state._ConfigModeTransaction, 'config_path',
                                        new_callable=mock.PropertyMock, return_value=raw), \
-                        mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                        mock.patch.object(MAIN, 'setup_logging'), \
-                        mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory) / 'profile'), \
-                        mock.patch.object(MAIN, 'WatcherThread') as worker:
+                        mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                        mock.patch.object(launcher, 'setup_logging'), \
+                        mock.patch.object(watcher_state, 'CONFIG_DIR', Path(directory) / 'profile'), \
+                        mock.patch.object(launcher, 'WatcherThread') as worker:
                     worker.return_value._queue = None
                     worker.return_value._pending_transport = None
-                    self.assertEqual(0, MAIN.run_once(config, store))
+                    self.assertEqual(0, launcher.run_once(config, store))
                     worker.return_value.scan_once.assert_called_once()
 
     def test_once_releases_lease_when_scan_fails(self) -> None:
@@ -3066,13 +3160,13 @@ class ConfigStateTests(unittest.TestCase):
             vault.transaction.return_value.__enter__.return_value.read.return_value = None
             coordinator = ModeCoordinator(store.mode_port(config), vault)
             stderr = io.StringIO()
-            with mock.patch.object(MAIN, 'WindowsUploadModeStore', return_value=vault), \
-                    mock.patch.object(MAIN, 'ModeCoordinator', return_value=coordinator), \
-                    mock.patch.object(MAIN, 'setup_logging'), \
-                    mock.patch.object(MAIN, 'WatcherThread') as worker, \
-                    mock.patch.object(MAIN.sys, 'stderr', stderr):
+            with mock.patch.object(launcher, 'WindowsUploadModeStore', return_value=vault), \
+                    mock.patch.object(launcher, 'ModeCoordinator', return_value=coordinator), \
+                    mock.patch.object(launcher, 'setup_logging'), \
+                    mock.patch.object(launcher, 'WatcherThread') as worker, \
+                    mock.patch.object(launcher.sys, 'stderr', stderr):
                 worker.return_value.scan_once.side_effect = OSError('pgu_sensitive_fixture')
-                self.assertEqual(1, MAIN.run_once(config, store))
+                self.assertEqual(1, launcher.run_once(config, store))
             self.assertNotIn('pgu_sensitive_fixture', stderr.getvalue())
             self.assertEqual('legacy_unmigrated', coordinator.refresh().state)
 
@@ -3180,7 +3274,7 @@ class URLAndUploadStateTests(unittest.TestCase):
         Returns:
             None: The same candidate is no longer a usable duplicate match.
         """
-        inventory = MAIN.RemoteInventorySession(MAIN.DEFAULT_INVENTORY_REFRESH_SECONDS, mock.Mock())
+        inventory = http_transport.RemoteInventorySession(http_transport.DEFAULT_INVENTORY_REFRESH_SECONDS, mock.Mock())
         digest = 'a' * 64
         candidate = {'client_id': 'fixture', 'filename': 'photo.jpg',
                      'size': 5, 'sha256': digest}
@@ -3190,7 +3284,7 @@ class URLAndUploadStateTests(unittest.TestCase):
              'https://gallery.example/api/upload'),
             RuntimeError('synthetic unavailable server'),
         ]
-        with mock.patch.object(MAIN, 'post_json_resolved', side_effect=responses):
+        with mock.patch.object(http_transport, 'post_json_resolved', side_effect=responses):
             self.assertTrue(inventory.refresh('https://gallery.example', 'key',
                                               [candidate], force=True))
             self.assertTrue(inventory.has_hash(digest))
@@ -3213,7 +3307,7 @@ class URLAndUploadStateTests(unittest.TestCase):
             root = Path(directory)
             source = root / 'photo.jpg'
             source.write_bytes(b'fixture photo')
-            watcher = object.__new__(MAIN.WatcherThread)
+            watcher = object.__new__(watcher_workers.WatcherThread)
             initialize_watcher_fixture(watcher, MAIN, self)
             watcher._linked_lease = None
             watcher._once_work = None
@@ -3223,7 +3317,7 @@ class URLAndUploadStateTests(unittest.TestCase):
             watcher.accepted_paths = {source}
             watcher.initial_paths = set()
             watcher.initial_captured = True
-            watcher.events = MAIN.queue.Queue()
+            watcher.events = queue.Queue()
             watcher.drain_manifest = root / 'watch-drain.json'
             watcher.drain_only = True
             watcher.drain_requested_at = 0.0
@@ -3233,9 +3327,9 @@ class URLAndUploadStateTests(unittest.TestCase):
             watcher._reconcile_watch_queue(root)
             watcher.request_drain()
             watcher._run_owned = mock.Mock(
-                side_effect=MAIN.GalleryKeyRedirectError('unsafe URL and key'),
+                side_effect=http_transport.GalleryKeyRedirectError('unsafe URL and key'),
             )
-            MAIN.WatcherThread.run(watcher)
+            watcher_workers.WatcherThread.run(watcher)
             saved = json.loads(watcher.drain_manifest.read_text(encoding='utf-8'))
             self.assertEqual([str(source)], saved['pending'])
             self.assertIn('redirect was refused', saved['error'])
@@ -3252,17 +3346,17 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'photo.jpg'
             source.write_bytes(b'fixture photo')
-            watcher = object.__new__(MAIN.WatcherThread)
+            watcher = object.__new__(watcher_workers.WatcherThread)
             initialize_watcher_fixture(watcher, MAIN, self)
             watcher._once_work = None
             watcher.linked_target = None
             watcher.config = MAIN.WatcherConfig(api_key='pgu_fixture', create_thumbnails=True)
             watcher.emit = mock.Mock()
-            with mock.patch.object(MAIN, 'local_thumbnail_supported', return_value=True), \
-                    mock.patch.object(MAIN, 'generate_local_thumbnails', return_value=[]), \
-                    mock.patch.object(MAIN, 'multipart_upload',
-                                      side_effect=MAIN.GalleryKeyRedirectError('refused')) as upload:
-                with self.assertRaises(MAIN.GalleryKeyRedirectError):
+            with mock.patch.object(runtime, 'local_thumbnail_supported', return_value=True), \
+                    mock.patch.object(thumbnails, 'generate_local_thumbnails', return_value=[]), \
+                    mock.patch.object(http_transport, 'multipart_upload',
+                                      side_effect=http_transport.GalleryKeyRedirectError('refused')) as upload:
+                with self.assertRaises(http_transport.GalleryKeyRedirectError):
                     watcher.upload_watched_file('http://localhost:8888/Galerie', source, {})
                 upload.assert_called_once()
 
@@ -3277,7 +3371,7 @@ class URLAndUploadStateTests(unittest.TestCase):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 source = Path(directory) / 'photo.jpg'
                 source.write_bytes(b'fixture photo')
-                worker = object.__new__(MAIN.ManualUploadThread)
+                worker = object.__new__(manual_upload_owner.ManualUploadThread)
                 worker._redirect_refused = threading.Event()
                 worker.stop_event = threading.Event()
                 worker.progress_lock = threading.Lock()
@@ -3292,9 +3386,9 @@ class URLAndUploadStateTests(unittest.TestCase):
                 worker.remote_inventory = mock.Mock()
                 worker.remote_inventory.has_hash.return_value = False
                 if scenario == 'inventory':
-                    worker.remote_inventory.refresh.side_effect = MAIN.GalleryKeyRedirectError('unsafe details')
-                upload_error = MAIN.GalleryKeyRedirectError('unsafe details')
-                with mock.patch.object(MAIN, 'multipart_upload', side_effect=upload_error) as upload:
+                    worker.remote_inventory.refresh.side_effect = http_transport.GalleryKeyRedirectError('unsafe details')
+                upload_error = http_transport.GalleryKeyRedirectError('unsafe details')
+                with mock.patch.object(http_transport, 'multipart_upload', side_effect=upload_error) as upload:
                     worker.upload_one('http://localhost:8888/Galerie', source, 1, [], None, False)
                 self.assertEqual(0 if scenario == 'inventory' else 1, upload.call_count)
                 self.assertTrue(worker.stop_event.is_set())
@@ -3303,10 +3397,10 @@ class URLAndUploadStateTests(unittest.TestCase):
                 final = worker.update_item.call_args
                 self.assertEqual('failed_permanent', final.args[1])
                 self.assertEqual(MAIN.LEGACY_UPLOAD_UNCERTAIN_REASON, final.args[2])
-                with mock.patch.object(MAIN.request, 'build_opener') as opener:
-                    with self.assertRaises(MAIN.GalleryKeyRedirectError):
-                        MAIN._gallery_key_open(
-                            MAIN.request.Request('http://localhost:8888/Galerie'),
+                with mock.patch.object(http_transport.request, 'build_opener') as opener:
+                    with self.assertRaises(http_transport.GalleryKeyRedirectError):
+                        http_transport._gallery_key_open(
+                            http_transport.request.Request('http://localhost:8888/Galerie'),
                             1.0, worker._redirect_checkpoint,
                         )
                     opener.return_value.open.assert_not_called()
@@ -3320,7 +3414,7 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'photo.jpg'
             source.write_bytes(b'fixture photo')
-            worker = object.__new__(MAIN.ManualUploadThread)
+            worker = object.__new__(manual_upload_owner.ManualUploadThread)
             worker._redirect_refused = threading.Event()
             worker.stop_event = threading.Event()
             worker.progress_lock = threading.Lock()
@@ -3334,7 +3428,7 @@ class URLAndUploadStateTests(unittest.TestCase):
             worker.emit = mock.Mock()
             worker.remote_inventory = mock.Mock()
             worker.remote_inventory.refresh.return_value = False
-            with mock.patch.object(MAIN, 'multipart_upload',
+            with mock.patch.object(http_transport, 'multipart_upload',
                                    side_effect=RuntimeError('HTTP 422: fixture')) as upload:
                 worker.upload_one('https://example.test', source, 1, [], None, False)
             upload.assert_called_once()
@@ -3352,7 +3446,7 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'photo.jpg'
             source.write_bytes(b'fixture photo')
-            worker = object.__new__(MAIN.ManualUploadThread)
+            worker = object.__new__(manual_upload_owner.ManualUploadThread)
             worker._redirect_refused = threading.Event()
             worker.stop_event = threading.Event()
             worker.linked_target = None
@@ -3366,12 +3460,12 @@ class URLAndUploadStateTests(unittest.TestCase):
             worker.uploaded = worker.skipped_existing = worker.failed = 0
             worker.emit = mock.Mock()
             worker._run_fifo_import = mock.Mock(
-                side_effect=MAIN.GalleryKeyRedirectError('unsafe details'),
+                side_effect=http_transport.GalleryKeyRedirectError('unsafe details'),
             )
             worker.run_with_server_thumbnails = mock.Mock()
             worker.mark_remaining_cancelled = mock.Mock()
             worker.finalize_job = mock.Mock()
-            MAIN.ManualUploadThread._run_owned(worker)
+            manual_upload_owner.ManualUploadThread._run_owned(worker)
             self.assertTrue(worker.stop_event.is_set())
             self.assertTrue(worker._redirect_refused.is_set())
             worker.run_with_server_thumbnails.assert_not_called()
@@ -3406,15 +3500,15 @@ class URLAndUploadStateTests(unittest.TestCase):
                     source = Path(directory) / 'photo.jpg'
                     source.write_bytes(b'fixture photo')
                     target = Path(directory) / 'download.bin'
-                    sent: list[MAIN.request.Request] = []
-                    handlers: list[MAIN._GalleryKeyRedirectHandler] = []
+                    sent: list[http_transport.request.Request] = []
+                    handlers: list[http_transport._GalleryKeyRedirectHandler] = []
                     opener = mock.MagicMock()
 
-                    def make_opener(handler: MAIN._GalleryKeyRedirectHandler) -> mock.MagicMock:
+                    def make_opener(handler: http_transport._GalleryKeyRedirectHandler) -> mock.MagicMock:
                         """Capture the real credential policy for one fake opener.
 
                         Args:
-                            handler (MAIN._GalleryKeyRedirectHandler): Policy
+                            handler (http_transport._GalleryKeyRedirectHandler): Policy
                                 used for subsequent synthetic redirects.
 
                         Returns:
@@ -3423,36 +3517,36 @@ class URLAndUploadStateTests(unittest.TestCase):
                         handlers.append(handler)
                         return opener
 
-                    def open_request(http_request: MAIN.request.Request, timeout: float) -> mock.MagicMock:
+                    def open_request(http_request: http_transport.request.Request, timeout: float) -> mock.MagicMock:
                         """Simulate route fallback and follow only approved hops.
 
                         Args:
-                            http_request (MAIN.request.Request): API request.
+                            http_request (http_transport.request.Request): API request.
                             timeout (float): Unused requested socket timeout.
 
                         Returns:
                             mock.MagicMock: Successful synthetic API response.
 
                         Raises:
-                            MAIN.error.HTTPError: Synthetic routing-only 404.
-                            MAIN.GalleryKeyRedirectError: Unsafe redirect.
+                            error.HTTPError: Synthetic routing-only 404.
+                            http_transport.GalleryKeyRedirectError: Unsafe redirect.
                         """
                         sent.append(http_request)
                         if scenario == 'fallback' and len(sent) == 1:
-                            raise MAIN.error.HTTPError(
+                            raise error.HTTPError(
                                 http_request.full_url, 404, 'Not Found', {},
                                 io.BytesIO(b'non-JSON route error'),
                             )
                         redirected = handlers[-1].redirect_request(
                             http_request, io.BytesIO(), 302, 'Found',
-                            MAIN.email.message.Message(), destination,
+                            email.message.Message(), destination,
                         )
                         self.assertIsNotNone(redirected)
                         sent.append(redirected)
                         if scenario == 'chain':
                             handlers[-1].redirect_request(
                                 redirected, io.BytesIO(), 302, 'Found',
-                                MAIN.email.message.Message(),
+                                email.message.Message(),
                                 'https://other.example:8888/next',
                             )
                         response = mock.MagicMock()
@@ -3479,11 +3573,11 @@ class URLAndUploadStateTests(unittest.TestCase):
                         else:
                             MAIN.multipart_upload(origin, 'pgu_fixture', source, False)
 
-                    with mock.patch.object(MAIN.request, 'build_opener', side_effect=make_opener):
+                    with mock.patch.object(http_transport.request, 'build_opener', side_effect=make_opener):
                         if allowed:
                             invoke()
                         else:
-                            with self.assertRaises(MAIN.GalleryKeyRedirectError):
+                            with self.assertRaises(http_transport.GalleryKeyRedirectError):
                                 invoke()
                     self.assertEqual(2 if scenario in ('fallback', 'chain') or allowed else 1, len(sent))
                     self.assertTrue(all(
@@ -3491,7 +3585,7 @@ class URLAndUploadStateTests(unittest.TestCase):
                         for item in sent
                     ))
                     self.assertTrue(all(
-                        MAIN.parse.urlsplit(item.full_url).hostname == 'localhost'
+                        parse.urlsplit(item.full_url).hostname == 'localhost'
                         for item in sent
                     ))
                     if transport == 'binary':
@@ -3523,7 +3617,7 @@ class URLAndUploadStateTests(unittest.TestCase):
             response.__enter__.return_value = response
             response.read.return_value = b'{"ok":true,"uploaded":1}'
             with mock.patch.object(
-                MAIN, '_gallery_key_open', return_value=response,
+                http_transport, '_gallery_key_open', return_value=response,
             ) as open_url:
                 result = MAIN.multipart_upload(
                     saved.gallery_url, saved.api_key, photo, False,
@@ -3584,11 +3678,16 @@ class URLAndUploadStateTests(unittest.TestCase):
             self.assertEqual(2, len(recursive.items))
             self.assertEqual(1, flat.unsupported.get(".txt", 0))
 
-    def test_file_stability_waits_for_unchanged_interval(self):
+    def test_file_stability_waits_for_unchanged_interval(self) -> None:
+        """Wait until observed file bytes stay unchanged for the interval.
+
+        Returns:
+            None: Initial and changed bytes remain unstable until unchanged.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "copy.jpg"
             path.write_bytes(b"first")
-            tracker = MAIN.FileStabilityTracker(0.5)
+            tracker = watch_common.FileStabilityTracker(0.5)
             self.assertFalse(tracker.stable(path))
             tracker._seen[path] = (path.stat().st_size, path.stat().st_mtime, time.time() - 1.0)
             self.assertTrue(tracker.stable(path))
@@ -3616,12 +3715,29 @@ class URLAndUploadStateTests(unittest.TestCase):
                 def read(self):
                     return b'{"ok":true,"uploaded":1,"stored":["photo.jpg"]}'
 
-            original = MAIN._gallery_key_open
+            original = http_transport._gallery_key_open
 
-            def fake_urlopen(http_request, timeout):
+            def fake_urlopen(
+                http_request: http_transport.request.Request,
+                timeout: float,
+            ) -> FakeResponse:
+                """Simulate route rejection followed by a valid upload response.
+
+                Args:
+                    http_request (urllib.request.Request): Request whose target
+                        URL is recorded and inspected for the fallback branch.
+                    timeout (float): Transport timeout supplied to the opener.
+
+                Returns:
+                    FakeResponse: Successful upload response after fallback.
+
+                Raises:
+                    urllib.error.HTTPError: First legacy route is rejected so
+                        the transport can exercise its documented fallback.
+                """
                 calls.append(http_request.full_url)
                 if len(calls) == 1:
-                    raise MAIN.error.HTTPError(
+                    raise error.HTTPError(
                         http_request.full_url,
                         404,
                         "Not Found",
@@ -3630,7 +3746,7 @@ class URLAndUploadStateTests(unittest.TestCase):
                     )
                 return FakeResponse()
 
-            MAIN._gallery_key_open = fake_urlopen
+            http_transport._gallery_key_open = fake_urlopen
             try:
                 result = MAIN.multipart_upload(
                     "https://example.test/index.php?page=upload_automation_upload",
@@ -3639,7 +3755,7 @@ class URLAndUploadStateTests(unittest.TestCase):
                     False,
                 )
             finally:
-                MAIN._gallery_key_open = original
+                http_transport._gallery_key_open = original
 
             self.assertTrue(result["ok"])
             self.assertEqual(
@@ -3659,8 +3775,8 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
             path.write_bytes(b'changed')
-            digest = MAIN.hashlib.sha256(b'original').hexdigest()
-            with mock.patch.object(MAIN, '_gallery_key_open') as send:
+            digest = hashlib.sha256(b'original').hexdigest()
+            with mock.patch.object(http_transport, '_gallery_key_open') as send:
                 with self.assertRaises(ValueError):
                     MAIN.multipart_upload(
                         'https://example.test/gallery', 'test-key', path, False,
@@ -3677,11 +3793,11 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
             path.write_bytes(b'image')
-            digest = MAIN.hashlib.sha256(b'image').hexdigest()
+            digest = hashlib.sha256(b'image').hexdigest()
             endpoint = 'https://example.test/api/upload'
-            failure = MAIN.error.HTTPError(endpoint, 404, 'Not Found', {},
+            failure = error.HTTPError(endpoint, 404, 'Not Found', {},
                                            io.BytesIO(b'<html>not found</html>'))
-            with mock.patch.object(MAIN, '_gallery_key_open', side_effect=failure) as send:
+            with mock.patch.object(http_transport, '_gallery_key_open', side_effect=failure) as send:
                 with self.assertRaises(RuntimeError):
                     MAIN.multipart_upload(
                         'https://example.test', 'test-key', path, False,
@@ -3701,11 +3817,11 @@ class URLAndUploadStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
             path.write_bytes(b'image')
-            digest = MAIN.hashlib.sha256(b'image').hexdigest()
+            digest = hashlib.sha256(b'image').hexdigest()
             for payload in (b'{"ok":true}', b'{"ok":true,"uploaded":0}'):
                 response = mock.MagicMock()
                 response.__enter__.return_value.read.return_value = payload
-                with mock.patch.object(MAIN, '_gallery_key_open', return_value=response):
+                with mock.patch.object(http_transport, '_gallery_key_open', return_value=response):
                     with self.assertRaises(RuntimeError):
                         MAIN.multipart_upload(
                             'https://example.test', 'test-key', path, False,
@@ -3878,15 +3994,20 @@ class MediaJobLifecycleTests(unittest.TestCase):
             self.assertEqual(1, job.counts()["uploaded"])
             self.assertFalse(job.recoverable())
 
-    def test_manual_worker_pause_resume_cancel_are_explicit_events(self):
+    def test_manual_worker_pause_resume_cancel_are_explicit_events(self) -> None:
+        """Keep pause, resume and cancel controls on explicit worker state.
+
+        Returns:
+            None: Each action sets or clears only its corresponding event.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "a.jpg"
             source.write_bytes(b"x")
             job = ImportJob.create("files", "a.jpg", "gallery")
             job.items = [ImportItem.create(source)]
-            events = MAIN.queue.Queue()
+            events = queue.Queue()
             config = MAIN.WatcherConfig(gallery_url="https://example.test", api_key="key")
-            worker = MAIN.ManualUploadThread(config, [source], False, 1, 1, events, job=job, job_store=None)
+            worker = manual_upload_owner.ManualUploadThread(config, [source], False, 1, 1, events, job=job, job_store=None)
             worker.pause()
             self.assertTrue(worker.pause_event.is_set())
             worker.resume()
@@ -3907,7 +4028,7 @@ class MediaJobLifecycleTests(unittest.TestCase):
             original_bytes = b'manual import original bytes'
             source.write_bytes(original_bytes)
             store = JobStateStore(root / 'jobs.json')
-            events = MAIN.queue.Queue()
+            events = queue.Queue()
             config = MAIN.WatcherConfig(
                 gallery_url='https://gallery.example.test/upload',
                 api_key='fixture-key',
@@ -3915,8 +4036,8 @@ class MediaJobLifecycleTests(unittest.TestCase):
                 delete_uploaded_files=True,
                 stable_seconds=TEST_IMPORT_STABLE_SECONDS,
             )
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
-                preflight = MAIN.ImportPreflightThread(
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root):
+                preflight = preflight_owner.ImportPreflightThread(
                     config, 'files', [source], None, None, False, False,
                     events, store,
                 )
@@ -3933,19 +4054,19 @@ class MediaJobLifecycleTests(unittest.TestCase):
                 hashlib.sha256(original_bytes).hexdigest(), item.sha256,
             )
             self.assertEqual(len(original_bytes), item.size)
-            worker = MAIN.ManualUploadThread(
+            worker = manual_upload_owner.ManualUploadThread(
                 config, [source], False, 1, 1, events, job, store,
             )
             worker.remote_inventory = mock.Mock()
             worker.remote_inventory.refresh.return_value = True
             worker.remote_inventory.has_hash.return_value = False
-            with mock.patch.object(MAIN, 'CONFIG_DIR', root), mock.patch.object(
-                MAIN.WatcherThread, 'upload_watched_file',
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', root), mock.patch.object(
+                watcher_workers.WatcherThread, 'upload_watched_file',
                 return_value={'ok': True, 'uploaded': 1, 'scanned': 0},
             ), mock.patch.object(
-                MAIN.WatcherThread, 'sim_camera_metadata_fields', return_value={},
-            ), mock.patch.object(MAIN, 'delete_verified_linked_source') as delete_source:
-                MAIN.ManualUploadThread._run_owned(worker)
+                watcher_workers.WatcherThread, 'sim_camera_metadata_fields', return_value={},
+            ), mock.patch.object(watcher_workers, 'delete_verified_linked_source') as delete_source:
+                manual_upload_owner.ManualUploadThread._run_owned(worker)
 
             self.assertEqual('confirmed', item.state)
             self.assertEqual(1, worker.uploaded)
@@ -3963,9 +4084,14 @@ class MediaJobLifecycleTests(unittest.TestCase):
 class IsolationAndCallbackTests(unittest.TestCase):
     """No-live-gallery isolation checks for optional integrations and tray bridge."""
 
-    def test_remote_confirmation_object_starts_empty(self):
+    def test_remote_confirmation_object_starts_empty(self) -> None:
+        """Start remote inventory evidence without confirmed hashes.
+
+        Returns:
+            None: A new session does not claim any file is present remotely.
+        """
         events = []
-        session = MAIN.RemoteInventorySession(30.0, lambda level, message: events.append((level, message)))
+        session = http_transport.RemoteInventorySession(30.0, lambda level, message: events.append((level, message)))
         self.assertFalse(session.has_hash("a" * 64))
 
 
@@ -3977,9 +4103,9 @@ class IsolationAndCallbackTests(unittest.TestCase):
         """
         events = []
         digest = "b" * 64
-        session = MAIN.RemoteInventorySession(30.0, lambda level, message: events.append((level, message)))
-        original = MAIN.post_json_resolved
-        MAIN.post_json_resolved = lambda url, *_args, **_kwargs: (
+        session = http_transport.RemoteInventorySession(30.0, lambda level, message: events.append((level, message)))
+        original = http_transport.post_json_resolved
+        http_transport.post_json_resolved = lambda url, *_args, **_kwargs: (
             {"ok": True, "action": "inventory", "checked": 1,
              "existing": [{"sha256": digest}]},
             MAIN.upload_endpoint_candidates(url)[0],
@@ -3987,7 +4113,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
         try:
             confirmed = session.confirm_after_failure("https://example.test/api/upload", "key", {"sha256": digest, "name": "a.jpg", "size": 1})
         finally:
-            MAIN.post_json_resolved = original
+            http_transport.post_json_resolved = original
         # This legacy inventory result establishes presence, not HTTP causality.
         self.assertTrue(confirmed)
         self.assertTrue(session.has_hash(digest))
@@ -4002,14 +4128,14 @@ class IsolationAndCallbackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root_logger = logging.getLogger()
             original_handlers = list(root_logger.handlers)
-            original_dir = MAIN.CONFIG_DIR
-            original_log = MAIN.LOG_PATH
+            original_dir = watcher_state.CONFIG_DIR
+            original_log = launcher.LOG_PATH
             for handler in list(root_logger.handlers):
                 root_logger.removeHandler(handler)
-            MAIN.CONFIG_DIR = Path(tmp)
-            MAIN.LOG_PATH = Path(tmp) / "watcher.log"
+            watcher_state.CONFIG_DIR = Path(tmp)
+            launcher.LOG_PATH = Path(tmp) / "watcher.log"
             try:
-                MAIN.setup_logging()
+                launcher.setup_logging()
                 handlers = [handler for handler in root_logger.handlers if isinstance(handler, RotatingFileHandler)]
                 self.assertEqual(1, len(handlers))
                 self.assertEqual(2 * 1024 * 1024, handlers[0].maxBytes)
@@ -4020,17 +4146,22 @@ class IsolationAndCallbackTests(unittest.TestCase):
                     handler.close()
                 for handler in original_handlers:
                     root_logger.addHandler(handler)
-                MAIN.CONFIG_DIR = original_dir
-                MAIN.LOG_PATH = original_log
+                watcher_state.CONFIG_DIR = original_dir
+                launcher.LOG_PATH = original_log
 
-    def test_simconnect_missing_override_is_nonfatal(self):
+    def test_simconnect_missing_override_is_nonfatal(self) -> None:
+        """Treat an unavailable explicit SimConnect DLL as a soft failure.
+
+        Returns:
+            None: Missing local DLL discovery reports diagnostics without raising.
+        """
         missing_path = Path("Z:/definitely/missing/SimConnect.dll")
-        client = MAIN.SimConnectCameraClient(str(missing_path))
+        client = watcher_workers.SimConnectCameraClient(str(missing_path))
 
         # Keep the test independent from the developer workstation. A Windows host may have a
         # valid SimConnect.dll in an SDK/common location, so an invalid override alone does not
         # guarantee that automatic fallback discovery will fail.
-        with mock.patch.object(MAIN.os, "name", "nt"), mock.patch.object(
+        with mock.patch.object(watcher_workers.os, "name", "nt"), mock.patch.object(
             client,
             "resolve_dll_path",
             return_value=(None, [missing_path]),
@@ -4041,10 +4172,15 @@ class IsolationAndCallbackTests(unittest.TestCase):
         self.assertIn("SimConnect.dll is unavailable", message)
         self.assertIn(str(missing_path), message)
 
-    def test_ai_stop_is_independent_from_upload_worker_state(self):
+    def test_ai_stop_is_independent_from_upload_worker_state(self) -> None:
+        """Stop AI work through its own worker event.
+
+        Returns:
+            None: AI cancellation does not depend on upload worker state.
+        """
         config = MAIN.WatcherConfig(gallery_url="https://example.test", api_key="key", ai_worker_enabled=True)
-        events = MAIN.queue.Queue()
-        worker = MAIN.AIAnalysisWorkerThread(config, events)
+        events = queue.Queue()
+        worker = ai_worker.AIAnalysisWorkerThread(config, events)
         worker.stop()
         self.assertTrue(worker.stop_event.is_set())
 
@@ -4081,7 +4217,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
         )
         # A zero fixture interval starts the controlled request without a sleep.
         heartbeat.interval = 0.0
-        with mock.patch.object(MAIN, 'post_json', side_effect=request) as post:
+        with mock.patch.object(http_transport, 'post_json', side_effect=request) as post:
             heartbeat.start()
             try:
                 self.assertTrue(entered.wait(TEST_HEARTBEAT_WAIT_SECONDS))
@@ -4108,8 +4244,8 @@ class IsolationAndCallbackTests(unittest.TestCase):
             gallery_url='https://gallery.example', api_key='fixture-key',
             ai_worker_enabled=True,
         )
-        with mock.patch.object(MAIN, 'ai_worker_id', return_value='fixture-worker'):
-            worker = MAIN.AIAnalysisWorkerThread(config, MAIN.queue.Queue())
+        with mock.patch.object(ai_worker, 'ai_worker_id', return_value='fixture-worker'):
+            worker = ai_worker.AIAnalysisWorkerThread(config, queue.Queue())
         heartbeat = MAIN.PeriodicAIHeartbeat(
             'https://gallery.example', 'fixture-key', 7, 'fixture-claim', 60,
             worker.current_progress, worker.emit,
@@ -4119,7 +4255,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
 
         def request(_url: str, _key: str, payload: dict[str, JsonValue],
                     timeout_seconds: float = MAIN.DEFAULT_TIMEOUT_SECONDS,
-                    before_request: MAIN.Optional[MAIN.Callable[[], None]] = None) -> dict[str, JsonValue]:
+                    before_request: Optional[Callable[[], None]] = None) -> dict[str, JsonValue]:
             """Supply one synthetic claim and hold its heartbeat in flight.
 
             Args:
@@ -4186,11 +4322,11 @@ class IsolationAndCallbackTests(unittest.TestCase):
         app.connection_test_running = False
         app.semantic_ai_install_running = False
         app.api_key_revoke_running = False
-        with mock.patch.object(MAIN, 'PeriodicAIHeartbeat', return_value=heartbeat), \
-                mock.patch.object(MAIN, 'post_json', side_effect=request), \
-                mock.patch.object(MAIN, 'post_binary_to_file', side_effect=fail_download), \
+        with mock.patch.object(ai_worker, 'PeriodicAIHeartbeat', return_value=heartbeat), \
+                mock.patch.object(http_transport, 'post_json', side_effect=request), \
+                mock.patch.object(http_transport, 'post_binary_to_file', side_effect=fail_download), \
                 mock.patch.object(worker, 'report_failure', side_effect=report_failure), \
-                mock.patch.object(MAIN, 'enter_background_thread_mode'):
+                mock.patch.object(ai_worker, 'enter_background_thread_mode'):
             worker.start()
             try:
                 self.assertTrue(failed.wait(TEST_HEARTBEAT_WAIT_SECONDS))
@@ -4210,7 +4346,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
         Returns:
             None: An already-running download may finish but completion cannot.
         """
-        worker = MAIN.AIAnalysisWorkerThread(MAIN.WatcherConfig(), MAIN.queue.Queue())
+        worker = ai_worker.AIAnalysisWorkerThread(MAIN.WatcherConfig(), queue.Queue())
         heartbeat = MAIN.PeriodicAIHeartbeat(
             'https://gallery.example', 'fixture-key', 7, 'fixture-claim', 60,
             worker.current_progress, worker.emit,
@@ -4223,7 +4359,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
 
         def post(_url: str, _key: str, payload: dict[str, JsonValue],
                  timeout_seconds: float = MAIN.DEFAULT_TIMEOUT_SECONDS,
-                 before_request: MAIN.Optional[MAIN.Callable[[], None]] = None) -> dict[str, JsonValue]:
+                 before_request: Optional[Callable[[], None]] = None) -> dict[str, JsonValue]:
             """Deny the heartbeat while enforcing the parent request checkpoint.
 
             Args:
@@ -4237,7 +4373,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 dict[str, JsonValue]: Empty synthetic response if admitted.
 
             Raises:
-                MAIN.GalleryKeyRedirectError: Terminal synthetic heartbeat refusal.
+                http_transport.GalleryKeyRedirectError: Terminal synthetic heartbeat refusal.
             """
             if before_request is not None:
                 before_request()
@@ -4246,12 +4382,12 @@ class IsolationAndCallbackTests(unittest.TestCase):
             if action == 'ai_heartbeat':
                 if not entered_download.wait(TEST_HEARTBEAT_WAIT_SECONDS):
                     raise RuntimeError('Fixture download did not start.')
-                raise MAIN.GalleryKeyRedirectError('fixture refusal')
+                raise http_transport.GalleryKeyRedirectError('fixture refusal')
             return {}
 
         def download(_url: str, _key: str, _fields: dict[str, str], path: Path,
                      timeout_seconds: float = MAIN.DEFAULT_TIMEOUT_SECONDS,
-                     before_request: MAIN.Optional[MAIN.Callable[[], None]] = None) -> tuple[str, int]:
+                     before_request: Optional[Callable[[], None]] = None) -> tuple[str, int]:
             """Let one admitted synthetic download finish after the refusal.
 
             Args:
@@ -4274,12 +4410,12 @@ class IsolationAndCallbackTests(unittest.TestCase):
 
         analyzer = mock.Mock()
         analyzer.analyze.return_value = ({}, '')
-        with mock.patch.object(MAIN, 'PeriodicAIHeartbeat', return_value=heartbeat), \
-                mock.patch.object(MAIN, 'post_json', side_effect=post), \
-                mock.patch.object(MAIN, 'post_binary_to_file', side_effect=download), \
-                mock.patch.object(MAIN, 'AIImageAnalyzer', return_value=analyzer), \
+        with mock.patch.object(ai_worker, 'PeriodicAIHeartbeat', return_value=heartbeat), \
+                mock.patch.object(http_transport, 'post_json', side_effect=post), \
+                mock.patch.object(http_transport, 'post_binary_to_file', side_effect=download), \
+                mock.patch.object(ai_worker, 'AIImageAnalyzer', return_value=analyzer), \
                 mock.patch.object(worker, 'report_failure') as failure:
-            with self.assertRaises(MAIN.GalleryKeyRedirectError):
+            with self.assertRaises(http_transport.GalleryKeyRedirectError):
                 worker.process_job('https://gallery.example', 'fixture-key',
                                    {'job_id': 7, 'claim_token': 'fixture-claim'}, 60)
         self.assertEqual(['ai_heartbeat'], actions)
@@ -4293,15 +4429,15 @@ class IsolationAndCallbackTests(unittest.TestCase):
         Returns:
             None: Failure is reported and the fixture directory is removed.
         """
-        with mock.patch.object(MAIN, 'ai_worker_id', return_value='fixture-worker'):
-            worker = MAIN.AIAnalysisWorkerThread(MAIN.WatcherConfig(), MAIN.queue.Queue())
+        with mock.patch.object(ai_worker, 'ai_worker_id', return_value='fixture-worker'):
+            worker = ai_worker.AIAnalysisWorkerThread(MAIN.WatcherConfig(), queue.Queue())
         heartbeat = mock.Mock()
         heartbeat.start.side_effect = RuntimeError('Synthetic start failure.')
         with tempfile.TemporaryDirectory() as directory:
             owned = Path(directory) / 'job'
             owned.mkdir()
-            with mock.patch.object(MAIN, 'PeriodicAIHeartbeat', return_value=heartbeat), \
-                    mock.patch.object(MAIN.tempfile, 'mkdtemp', return_value=str(owned)), \
+            with mock.patch.object(ai_worker, 'PeriodicAIHeartbeat', return_value=heartbeat), \
+                    mock.patch.object(ai_worker.tempfile, 'mkdtemp', return_value=str(owned)), \
                     mock.patch.object(worker, 'report_failure') as report:
                 worker.process_job('https://gallery.example', 'fixture-key',
                                    {'job_id': 7, 'claim_token': 'fixture-claim'}, 60)
@@ -4316,15 +4452,15 @@ class IsolationAndCallbackTests(unittest.TestCase):
         Returns:
             None: No heartbeat is started or joined and the directory is removed.
         """
-        with mock.patch.object(MAIN, 'ai_worker_id', return_value='fixture-worker'):
-            worker = MAIN.AIAnalysisWorkerThread(MAIN.WatcherConfig(), MAIN.queue.Queue())
+        with mock.patch.object(ai_worker, 'ai_worker_id', return_value='fixture-worker'):
+            worker = ai_worker.AIAnalysisWorkerThread(MAIN.WatcherConfig(), queue.Queue())
         heartbeat = mock.Mock()
         with tempfile.TemporaryDirectory() as directory:
             owned = Path(directory) / 'job'
             owned.mkdir()
-            with mock.patch.object(MAIN, 'PeriodicAIHeartbeat', return_value=heartbeat), \
-                    mock.patch.object(MAIN.tempfile, 'mkdtemp', return_value=str(owned)), \
-                    mock.patch.object(MAIN, 'extension_for_content_type',
+            with mock.patch.object(ai_worker, 'PeriodicAIHeartbeat', return_value=heartbeat), \
+                    mock.patch.object(ai_worker.tempfile, 'mkdtemp', return_value=str(owned)), \
+                    mock.patch.object(ai_worker, 'extension_for_content_type',
                                       side_effect=ValueError('Synthetic path failure.')), \
                     mock.patch.object(worker, 'report_failure') as report:
                 worker.process_job('https://gallery.example', 'fixture-key',
@@ -4390,7 +4526,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
             def read(self):
                 return b'{"ok":true,"action":"revoke","message":"API key revoked."}'
 
-        original = MAIN._gallery_key_open
+        original = http_transport._gallery_key_open
 
         def fake_urlopen(http_request, timeout):
             captured["url"] = http_request.full_url
@@ -4399,11 +4535,11 @@ class IsolationAndCallbackTests(unittest.TestCase):
             captured["timeout"] = timeout
             return FakeResponse()
 
-        MAIN._gallery_key_open = fake_urlopen
+        http_transport._gallery_key_open = fake_urlopen
         try:
-            result = MAIN.revoke_upload_key("https://example.test/api/upload", "pgu_secret")
+            result = http_transport.revoke_upload_key("https://example.test/api/upload", "pgu_secret")
         finally:
-            MAIN._gallery_key_open = original
+            http_transport._gallery_key_open = original
 
         self.assertTrue(result["ok"])
         self.assertEqual("https://example.test/index.php?page=upload_automation_upload", captured["url"])
@@ -4429,12 +4565,29 @@ class IsolationAndCallbackTests(unittest.TestCase):
             def read(self):
                 return b'{"ok":true,"action":"revoke","message":"API key revoked."}'
 
-        original = MAIN._gallery_key_open
+        original = http_transport._gallery_key_open
 
-        def fake_urlopen(http_request, timeout):
+        def fake_urlopen(
+            http_request: http_transport.request.Request,
+            timeout: float,
+        ) -> FakeResponse:
+            """Simulate route rejection followed by a valid revoke response.
+
+            Args:
+                http_request (urllib.request.Request): Request whose target
+                    URL is recorded and inspected for the fallback branch.
+                timeout (float): Transport timeout supplied to the opener.
+
+            Returns:
+                FakeResponse: Successful API-key revocation response.
+
+            Raises:
+                urllib.error.HTTPError: First legacy route is rejected so the
+                    transport can exercise its documented fallback.
+            """
             calls.append(http_request.full_url)
             if len(calls) == 1:
-                raise MAIN.error.HTTPError(
+                raise error.HTTPError(
                     http_request.full_url,
                     404,
                     "Not Found",
@@ -4443,14 +4596,14 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 )
             return FakeResponse()
 
-        MAIN._gallery_key_open = fake_urlopen
+        http_transport._gallery_key_open = fake_urlopen
         try:
-            result = MAIN.revoke_upload_key(
+            result = http_transport.revoke_upload_key(
                 "https://example.test/index.php?page=upload_automation_upload",
                 "pgu_secret",
             )
         finally:
-            MAIN._gallery_key_open = original
+            http_transport._gallery_key_open = original
 
         self.assertTrue(result["ok"])
         self.assertEqual(
@@ -4461,9 +4614,14 @@ class IsolationAndCallbackTests(unittest.TestCase):
             calls,
         )
 
-    def test_upload_worker_count_is_single_request_for_shared_hosting(self):
+    def test_upload_worker_count_is_single_request_for_shared_hosting(self) -> None:
+        """Keep this install profile at one upload worker.
+
+        Returns:
+            None: Both configuration and resolver retain the single-worker cap.
+        """
         self.assertEqual(1, MAIN.DEFAULT_UPLOAD_WORKERS)
-        self.assertEqual(1, MAIN.MAX_UPLOAD_WORKERS)
+        self.assertEqual(1, watcher_state.MAX_UPLOAD_WORKERS)
         self.assertEqual(1, MAIN.resolve_upload_worker_count(0))
         self.assertEqual(1, MAIN.resolve_upload_worker_count(8))
 
@@ -4483,7 +4641,7 @@ class IsolationAndCallbackTests(unittest.TestCase):
             None: Routine inventory stays shallow; uncertain recovery checks deeply.
         """
         payloads = []
-        original_post_json_resolved = MAIN.post_json_resolved
+        original_post_json_resolved = http_transport.post_json_resolved
 
         def fake_post_json_resolved(
             upload_url: str, api_key: str, payload: dict[str, object],
@@ -4507,22 +4665,27 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 MAIN.upload_endpoint_candidates(upload_url)[0],
             )
 
-        MAIN.post_json_resolved = fake_post_json_resolved
+        http_transport.post_json_resolved = fake_post_json_resolved
         try:
-            session = MAIN.RemoteInventorySession(1, lambda _level, _message: None)
+            session = http_transport.RemoteInventorySession(1, lambda _level, _message: None)
             candidate = {"client_id": "x", "filename": "x.jpg", "size": 123, "sha256": "a" * 64}
             self.assertTrue(session.refresh("https://example.test/api/upload", "pgu_secret", [candidate], force=True))
             session.confirm_after_failure("https://example.test/api/upload", "pgu_secret", candidate)
         finally:
-            MAIN.post_json_resolved = original_post_json_resolved
+            http_transport.post_json_resolved = original_post_json_resolved
 
         self.assertFalse(payloads[0]["deep_check"])
         self.assertTrue(payloads[1]["deep_check"])
 
-    def test_revoke_retries_one_gateway_failure_and_accepts_revoked_confirmation(self):
+    def test_revoke_retries_one_gateway_failure_and_accepts_revoked_confirmation(self) -> None:
+        """Retry one gateway error and accept an already revoked key.
+
+        Returns:
+            None: A transient failure is retried and revoked confirmation passes.
+        """
         calls = []
-        original_post_json = MAIN.post_json
-        original_sleep = MAIN.time.sleep
+        original_post_json = http_transport.post_json
+        original_sleep = http_transport.time.sleep
 
         def fake_post_json(upload_url, api_key, payload, timeout_seconds=MAIN.DEFAULT_TIMEOUT_SECONDS):
             calls.append((upload_url, api_key, payload))
@@ -4530,13 +4693,13 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 raise RuntimeError("HTTP 502: <html><body><h1>502 Bad Gateway</h1></body></html>")
             raise RuntimeError("Invalid or revoked API key.")
 
-        MAIN.post_json = fake_post_json
-        MAIN.time.sleep = lambda _seconds: None
+        http_transport.post_json = fake_post_json
+        http_transport.time.sleep = lambda _seconds: None
         try:
-            result = MAIN.revoke_upload_key("https://example.test/api/upload", "pgu_secret")
+            result = http_transport.revoke_upload_key("https://example.test/api/upload", "pgu_secret")
         finally:
-            MAIN.post_json = original_post_json
-            MAIN.time.sleep = original_sleep
+            http_transport.post_json = original_post_json
+            http_transport.time.sleep = original_sleep
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["reconciled_after_gateway_error"])
@@ -4556,9 +4719,9 @@ class IsolationAndCallbackTests(unittest.TestCase):
             source.write_bytes(b"source")
             calls = []
             messages = []
-            original_supported = MAIN.local_thumbnail_supported
-            original_generate = MAIN.generate_local_thumbnails
-            original_upload = MAIN.multipart_upload
+            original_supported = runtime.local_thumbnail_supported
+            original_generate = thumbnails.generate_local_thumbnails
+            original_upload = http_transport.multipart_upload
 
             def fake_generate(path, output_root, client_upload_id):
                 generated = output_root / client_upload_id / "photo_thumb300.jpg"
@@ -4601,10 +4764,10 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 })
                 return {"ok": True, "uploaded": 1, "scanned": 1}
 
-            MAIN.local_thumbnail_supported = lambda: True
-            MAIN.generate_local_thumbnails = fake_generate
-            MAIN.multipart_upload = fake_upload
-            watcher = object.__new__(MAIN.WatcherThread)
+            runtime.local_thumbnail_supported = lambda: True
+            thumbnails.generate_local_thumbnails = fake_generate
+            http_transport.multipart_upload = fake_upload
+            watcher = object.__new__(watcher_workers.WatcherThread)
             initialize_watcher_fixture(watcher, MAIN, self)
             watcher._once_work = None
             watcher.linked_target = None
@@ -4614,9 +4777,9 @@ class IsolationAndCallbackTests(unittest.TestCase):
             try:
                 result = watcher.upload_watched_file("https://example.test/api/upload", source, {"sim_camera_lat": "49.0"})
             finally:
-                MAIN.local_thumbnail_supported = original_supported
-                MAIN.generate_local_thumbnails = original_generate
-                MAIN.multipart_upload = original_upload
+                runtime.local_thumbnail_supported = original_supported
+                thumbnails.generate_local_thumbnails = original_generate
+                http_transport.multipart_upload = original_upload
 
             self.assertTrue(result["ok"])
             self.assertEqual(1, len(calls))
@@ -4633,11 +4796,27 @@ class IsolationAndCallbackTests(unittest.TestCase):
             None: Only the original endpoint receives the inventory request.
         """
         calls = []
-        original = MAIN._gallery_key_open
+        original = http_transport._gallery_key_open
 
-        def fake_urlopen(http_request, timeout):
+        def fake_urlopen(
+            http_request: http_transport.request.Request,
+            timeout: float,
+        ) -> NoReturn:
+            """Reject an authoritative Gallery JSON 404 without fallback.
+
+            Args:
+                http_request (urllib.request.Request): Request whose URL is
+                    attached to the synthetic HTTP failure.
+                timeout (float): Transport timeout supplied to the opener.
+
+            Returns:
+                NoReturn: Always raises the synthetic HTTP error.
+
+            Raises:
+                urllib.error.HTTPError: Gallery JSON response is authoritative.
+            """
             calls.append(http_request.full_url)
-            raise MAIN.error.HTTPError(
+            raise error.HTTPError(
                 http_request.full_url,
                 404,
                 "Not Found",
@@ -4645,16 +4824,16 @@ class IsolationAndCallbackTests(unittest.TestCase):
                 io.BytesIO(b'{"ok":false,"error":"The gallery assigned to this API key no longer exists."}'),
             )
 
-        MAIN._gallery_key_open = fake_urlopen
+        http_transport._gallery_key_open = fake_urlopen
         try:
-            with self.assertRaises(MAIN.LegacyUploadResponseError):
+            with self.assertRaises(http_transport.LegacyUploadResponseError):
                 MAIN.post_json(
                     "https://example.test/index.php?page=upload_automation_upload",
                     "pgu_secret",
                     {"action": "inventory", "files": []},
                 )
         finally:
-            MAIN._gallery_key_open = original
+            http_transport._gallery_key_open = original
 
         self.assertEqual(["https://example.test/index.php?page=upload_automation_upload"], calls)
 
@@ -4669,9 +4848,9 @@ class SimConnectActivityTests(unittest.TestCase):
             None: Both queued events reach the logger and activity history with
                 their original operation and classified severity.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.exiting = False
-        app.events = MAIN.queue.Queue()
+        app.events = queue.Queue()
         app.events.put(("warning", "[simconnect] Aircraft data packet rejected."))
         app.events.put(("info", "Watching folder"))
         app.manual_worker = None
@@ -4755,7 +4934,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             None: A saved key opens abandonment directly; update ownership or
                 a missing key prevents another lifecycle action.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.updates.blocked.return_value = False
         app.config.api_key = "revoked-key"
         app.linking_manager.linked_upload_mode_selected.return_value = False
@@ -4777,7 +4956,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             None: A mismatched connection and disk failure leave memory/UI
                 untouched; success saves an empty key with other options intact.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         original = MAIN.WatcherConfig(
             gallery_url="https://deleted.test/", api_key="revoked-key",
             watched_folder="retained-folder", watch_recursive=True,
@@ -4815,9 +4994,9 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             None: The structured event invokes the local acknowledgement and
                 never enters the remote-revocation completion branch.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.exiting = False
-        app.events = MAIN.queue.Queue()
+        app.events = queue.Queue()
         app.events.put({"kind": "flight_abandoned",
                         "payload": {"binding": "captured-binding"}})
         initialize_event_pump_fixture(app)
@@ -4834,7 +5013,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 explicit linked targets reconnect and accepted work keeps its
                 existing Finish, progress and recovery destinations.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.flight_action_state = MAIN.WatcherApp.flight_action_state.__get__(app)
         app.updates.blocked.return_value = False
         app.config.api_key = ""
@@ -4910,7 +5089,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         """
         for api_key in ("", "saved-legacy-key"):
             with self.subTest(api_key_saved=bool(api_key)):
-                app = mock.Mock()
+                app = WatcherAppMock()
                 gallery_url = "https://photos-only.example/Galerie"
                 app.config = MAIN.WatcherConfig(
                     gallery_url=gallery_url, api_key=api_key,
@@ -4973,7 +5152,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             ),
         }
         for language, labels in expected.items():
-            app = mock.Mock()
+            app = WatcherAppMock()
             app.config = MAIN.WatcherConfig(gallery_url="https://gallery.test/")
             app.gallery_url_var.get.return_value = app.config.gallery_url
             app.api_key_revoke_running = False
@@ -5052,15 +5231,15 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         title_widget = mock.Mock()
         reset_icon = mock.Mock()
         with (
-            mock.patch.object(MAIN, "ttk", widgets),
-            mock.patch.object(MAIN, "Button", widgets.Button),
+            mock.patch.object(runtime, "ttk", widgets),
+            mock.patch.object(watcher_ui_watcher, "Button", widgets.Button),
             mock.patch.object(
-                MAIN, "GalleryIdentityLabel", return_value=title_widget,
+                watcher_ui_watcher, "GalleryIdentityLabel", return_value=title_widget,
             ) as title_factory,
-            mock.patch.object(MAIN, "GlassCard", side_effect=lambda *_args, **_kwargs: mock.Mock()),
-            mock.patch.object(MAIN, "icon_button"),
-            mock.patch.object(MAIN, "help_button"),
-            mock.patch.object(MAIN, "create_smooth_icon", return_value=reset_icon),
+            mock.patch.object(watcher_ui_watcher, "GlassCard", side_effect=lambda *_args, **_kwargs: mock.Mock()),
+            mock.patch.object(watcher_ui_watcher, "icon_button"),
+            mock.patch.object(watcher_ui_watcher, "help_button"),
+            mock.patch.object(watcher_ui_watcher, "create_smooth_icon", return_value=reset_icon),
         ):
             MAIN.WatcherApp.build_watch_tab(app, mock.Mock())
         buttons = {call.kwargs.get("command"): call
@@ -5127,7 +5306,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                     inventory_refresh_seconds=17.0,
                     attach_sim_camera_metadata=camera_metadata_enabled,
                 )
-                worker = object.__new__(MAIN.WatcherThread)
+                worker = object.__new__(watcher_workers.WatcherThread)
                 initialize_watcher_fixture(worker, MAIN, self)
                 worker._once_work = None
                 worker.linked_target = None
@@ -5137,7 +5316,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 worker.stop_event = mock.Mock()
                 worker.stop_event.is_set.return_value = True
                 worker.initial_captured = True
-                worker.events = MAIN.queue.Queue()
+                worker.events = queue.Queue()
                 worker.drain_only = False
                 worker.initial_paths = set()
                 worker.emit = mock.Mock()
@@ -5147,7 +5326,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                     "SimConnect.dll resolved"
                 )
 
-                MAIN.WatcherThread.run(worker)
+                watcher_workers.WatcherThread.run(worker)
 
                 messages = [
                     call.args[1]
@@ -5186,7 +5365,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         paths = [Path("photo.jpg")]
         config = types.SimpleNamespace()
 
-        with mock.patch.object(MAIN, "ManualUploadThread") as worker_factory:
+        with mock.patch.object(watcher_ui_imports, "create_import_worker") as worker_factory:
             MAIN.WatcherApp.launch_manual_job(app, job, paths, config)
 
         app.flights.import_bindings.bind.assert_not_called()
@@ -5230,8 +5409,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             app._preflight_approved = (job.id, old_generation, 'a' * 64)
             app.job_store = mock.Mock()
             config = MAIN.WatcherConfig(_snapshot_token=new_generation)
-            with mock.patch.object(MAIN.messagebox, 'showerror') as error, \
-                    mock.patch.object(MAIN, 'ManualUploadThread') as worker:
+            with mock.patch.object(runtime.messagebox, 'showerror') as error, \
+                    mock.patch.object(watcher_ui_imports, 'create_import_worker') as worker:
                 MAIN.WatcherApp.launch_manual_job(app, job, [source], config)
             error.assert_called_once()
             app.flights.import_bindings.bind.assert_not_called()
@@ -5261,8 +5440,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 item = MAIN.ImportItem.create(source, 'photo.jpg', from_archive=True)
                 item.transition(state)
                 job.items = [item]
-                worker = MAIN.ManualUploadThread(
-                    MAIN.WatcherConfig(), [], False, 1, 1, MAIN.queue.Queue(),
+                worker = manual_upload_owner.ManualUploadThread(
+                    MAIN.WatcherConfig(), [], False, 1, 1, queue.Queue(),
                     job, MAIN.JobStateStore(root / 'jobs.json'),
                 )
                 state_path = root / 'jobs.json'
@@ -5287,7 +5466,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.exiting = False
         app.api_key_revoke_running = True
         app.connection_test_running = True
-        app.events = MAIN.queue.Queue()
+        app.events = queue.Queue()
         generation = object()
         app.events.put({
             "kind": "connection_ready",
@@ -5342,7 +5521,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app = object.__new__(MAIN.WatcherApp)
         app.exiting = False
         app.connection_test_running = True
-        app.events = MAIN.queue.Queue()
+        app.events = queue.Queue()
         app.events.put({'kind': 'connection_ready', 'payload': {
             'gallery_label': 'Old gallery', 'explicit_test': True,
             'config_generation': object(),
@@ -5377,7 +5556,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             staged.write_bytes(b'image')
             app = object.__new__(MAIN.WatcherApp)
             app.exiting = False
-            app.events = MAIN.queue.Queue()
+            app.events = queue.Queue()
             ticket, old_generation, current_generation = object(), object(), object()
             app.preflight_worker = types.SimpleNamespace(_preflight_owner=ticket)
             app.config = types.SimpleNamespace(_snapshot_token=current_generation)
@@ -5418,8 +5597,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.api_key_var.get.return_value = 'edited-key'
         app.current_config.return_value.to_dict.return_value = {'api_key': 'edited-key'}
         app.config.to_dict.return_value = {'api_key': 'saved-key'}
-        with mock.patch.object(MAIN.messagebox, 'showerror') as error, \
-                mock.patch.object(MAIN.threading, 'Thread') as worker:
+        with mock.patch.object(runtime.messagebox, 'showerror') as error, \
+                mock.patch.object(watcher_state.threading, 'Thread') as worker:
             MAIN.WatcherApp.test_connection(app)
         error.assert_called_once()
         app.config_store.mode_port.assert_not_called()
@@ -5434,12 +5613,12 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
             path.write_bytes(b'original')
-            snapshot = MAIN.capture_linked_source(
-                path, MAIN.hashlib.sha256(b'original').hexdigest(), 8,
+            snapshot = linked_upload.capture_linked_source(
+                path, hashlib.sha256(b'original').hexdigest(), 8,
             )
             path.write_bytes(b'replacement')
             worker = mock.Mock()
-            MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+            watcher_workers.WatcherThread.delete_uploaded_file(worker, path, {
                 'ok': True, 'uploaded': 1,
             }, snapshot)
             self.assertEqual(b'replacement', path.read_bytes())
@@ -5455,16 +5634,16 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             path = Path(directory) / 'photo.jpg'
             contents = b'confirmed photo'
             path.write_bytes(contents)
-            snapshot = MAIN.capture_linked_source(
-                path, MAIN.hashlib.sha256(contents).hexdigest(), len(contents),
+            snapshot = linked_upload.capture_linked_source(
+                path, hashlib.sha256(contents).hexdigest(), len(contents),
             )
             worker = mock.Mock()
-            with mock.patch.object(MAIN, 'delete_verified_linked_source') as delete:
-                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+            with mock.patch.object(watcher_workers, 'delete_verified_linked_source') as delete:
+                watcher_workers.WatcherThread.delete_uploaded_file(worker, path, {
                     'ok': True, 'uploaded': 1,
                 }, snapshot)
                 delete.assert_called_once_with(snapshot)
-                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+                watcher_workers.WatcherThread.delete_uploaded_file(worker, path, {
                     'ok': True, 'uploaded': 0,
                 }, snapshot)
                 delete.assert_called_once_with(snapshot)
@@ -5479,7 +5658,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             root = Path(directory)
             source = root / 'photo.jpg'
             source.write_bytes(b'original')
-            worker = object.__new__(MAIN.WatcherThread)
+            worker = object.__new__(watcher_workers.WatcherThread)
             initialize_watcher_fixture(worker, MAIN, self)
             worker.config = MAIN.WatcherConfig(api_key='test-key')
             worker._once_work = None
@@ -5488,7 +5667,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             worker.accepted_paths = {source}
             worker.initial_paths = set()
             worker._admission_lock = threading.RLock()
-            worker.events = MAIN.queue.Queue()
+            worker.events = queue.Queue()
             worker.drain_event = threading.Event()
             worker.stop_event = threading.Event()
             worker.stability = mock.Mock()
@@ -5541,7 +5720,7 @@ class WatcherActionTests(unittest.TestCase):
             None: The primary Finish captures revoke=True and ordinary Stop
                 retains its separate non-revoking drain path.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.updates.blocked.return_value = False
         app._contextual_watch_target = None
         app.flight_action_state.return_value = 'finish'
@@ -5560,7 +5739,7 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: No lifecycle check or second start runs during preparation.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app._watch_start_pending = True
         MAIN.WatcherApp.toggle_watcher(app)
         app.flights.session_state.assert_not_called()
@@ -5572,8 +5751,8 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: Explicit game Finish and Stop both suppress report rendering.
         """
-        app = mock.Mock()
-        app._contextual_watch_target = MAIN.LinkedUploadTarget(
+        app = WatcherAppMock()
+        app._contextual_watch_target = linked_upload.LinkedUploadTarget(
             mock.Mock(), "https://gallery.example", 7, 9, "Screenshots",
             "synthetic watcher key",
         )
@@ -5606,16 +5785,16 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: Idle cleanup revokes the exact gallery key off Tk.
         """
-        app = mock.Mock()
-        app.events = MAIN.queue.Queue()
+        app = WatcherAppMock()
+        app.events = queue.Queue()
         app._watcher_key_closing = False
         session = mock.Mock()
         key = "synthetic watcher key"
-        target = MAIN.LinkedUploadTarget(
+        target = linked_upload.LinkedUploadTarget(
             session, "https://gallery.example", 7, 9, "Screenshots", key,
         )
         app._contextual_watch_target = target
-        with mock.patch.object(MAIN.threading, "Thread") as thread:
+        with mock.patch.object(watcher_state.threading, "Thread") as thread:
             for state in ("active", "working", "pending", "blocked"):
                 app.flights.session_state.return_value = state
                 MAIN.WatcherApp.release_contextual_watcher(app)
@@ -5636,7 +5815,7 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: The ordinary action uses its saved destination path.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.worker = None
         app.flights.session_state.return_value = "idle"
         app.linking_manager.selected_upload_target.return_value = None
@@ -5656,7 +5835,7 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: Confirms the contextual action uses the existing stop path.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.worker.is_alive.return_value = True
         app.flights.session_state.return_value = "active"
 
@@ -5671,12 +5850,12 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: Confirms the stop-first message appears without opening a sheet.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.updates = None
         app.worker.is_alive.return_value = True
 
-        with mock.patch.object(MAIN, "messagebox") as dialogs, mock.patch.object(
-            MAIN,
+        with mock.patch.object(runtime, "messagebox") as dialogs, mock.patch.object(
+            runtime,
             "tk",
         ) as tkinter:
             MAIN.WatcherApp.open_watcher_settings(app)
@@ -5691,12 +5870,12 @@ class WatcherActionTests(unittest.TestCase):
         Returns:
             None: Shows the missing-folder message without starting work.
         """
-        app = mock.Mock()
+        app = WatcherAppMock()
         app.updates = None
         app.worker = None
         app.api_key_revoke_running = False
         app.watched_folder_var.get.return_value = ''
-        with mock.patch.object(MAIN, 'messagebox') as dialogs:
+        with mock.patch.object(runtime, 'messagebox') as dialogs:
             MAIN.WatcherApp.start(app)
         dialogs.showinfo.assert_called_once_with(
             'Watch folder', 'Choose a folder to watch before starting.',
@@ -5735,13 +5914,13 @@ class ScrollableFrameWheelTests(unittest.TestCase):
         child.master = frame
         event = mock.Mock()
         event.widget = child
-        event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+        event.delta = watcher_ui_support.WINDOWS_MOUSEWHEEL_DELTA
 
         # Built-in identities cover isinstance checks without loading Tk widgets.
         fake_tk = types.SimpleNamespace(Text=list, Listbox=dict)
         fake_ttk = types.SimpleNamespace(Treeview=set, Combobox=tuple)
-        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
-            MAIN,
+        with mock.patch.object(runtime, "tk", fake_tk), mock.patch.object(
+            runtime,
             "ttk",
             fake_ttk,
         ):
@@ -5762,12 +5941,12 @@ class ScrollableFrameWheelTests(unittest.TestCase):
         unrelated_view.master = None
         event = mock.Mock()
         event.widget = unrelated_view
-        event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+        event.delta = watcher_ui_support.WINDOWS_MOUSEWHEEL_DELTA
 
         fake_tk = types.SimpleNamespace(Text=list, Listbox=dict)
         fake_ttk = types.SimpleNamespace(Treeview=set, Combobox=tuple)
-        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
-            MAIN,
+        with mock.patch.object(runtime, "tk", fake_tk), mock.patch.object(
+            runtime,
             "ttk",
             fake_ttk,
         ):
@@ -5803,8 +5982,8 @@ class ScrollableFrameWheelTests(unittest.TestCase):
             Combobox=native_types[3],
         )
 
-        with mock.patch.object(MAIN, "tk", fake_tk), mock.patch.object(
-            MAIN,
+        with mock.patch.object(runtime, "tk", fake_tk), mock.patch.object(
+            runtime,
             "ttk",
             fake_ttk,
         ):
@@ -5814,7 +5993,7 @@ class ScrollableFrameWheelTests(unittest.TestCase):
                     child.master = frame
                     event = mock.Mock()
                     event.widget = child
-                    event.delta = MAIN.WINDOWS_MOUSEWHEEL_DELTA
+                    event.delta = watcher_ui_support.WINDOWS_MOUSEWHEEL_DELTA
 
                     result = MAIN.ScrollableFrame._on_mousewheel(frame, event)
 
@@ -5837,7 +6016,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.startup_waiting_for_tray = True
         app.startup_tray_deadline = 0.0
         app.window_hidden_to_tray = True
-        app._ui_layout_state = MAIN.ViewLayoutState(
+        app._ui_layout_state = ui_layout.ViewLayoutState(
             1000, 700, 25, 40, "zoomed", 250,
         )
         app.tray_icon = types.SimpleNamespace(visible=True)
@@ -5869,9 +6048,9 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         tray = types.SimpleNamespace(Icon=icon_factory)
         platform = types.SimpleNamespace(platform="darwin")
 
-        with mock.patch.object(MAIN, "sys", platform), \
-                mock.patch.object(MAIN, "pystray", tray), \
-                mock.patch.object(MAIN, "Image", object()):
+        with mock.patch.object(runtime, "sys", platform), \
+                mock.patch.object(runtime, "pystray", tray), \
+                mock.patch.object(runtime, "Image", object()):
             MAIN.WatcherApp.start_tray_icon(app)
 
         icon_factory.assert_not_called()
@@ -5882,7 +6061,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         Returns:
             None: Confirms badge pixels are deterministic and source art survives.
         """
-        if MAIN.Image is None or MAIN.ImageDraw is None:
+        if runtime.Image is None or runtime.ImageDraw is None:
             # Pillow remains optional for portable app runtimes; the dedicated
             # CI job sets this flag so pixel coverage cannot silently skip.
             if os.environ.get("PHP_GALLERY_REQUIRE_PILLOW") == "1":
@@ -5890,7 +6069,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
                     "Pillow is required for tray badge pixel coverage in this CI job."
                 )
             self.skipTest("Pillow is unavailable")
-        base = MAIN.Image.new("RGBA", (32, 32), "#203040")
+        base = runtime.Image.new("RGBA", (32, 32), "#203040")
         original_pixels = base.tobytes()
 
         marked = MAIN.render_tray_icon(base, True)
@@ -5906,11 +6085,11 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
 
         # The bundled artwork is 256 px; Windows tray display downsamples it
         # to 16 px, so inspect the rendered badge at its actual target size.
-        large_base = MAIN.Image.new("RGBA", (256, 256), "#203040")
+        large_base = runtime.Image.new("RGBA", (256, 256), "#203040")
         large_original_pixels = large_base.tobytes()
         large_marked = MAIN.render_tray_icon(large_base, True)
         large_plain = MAIN.render_tray_icon(large_base, False)
-        resampling = MAIN.Image.Resampling.LANCZOS
+        resampling = runtime.Image.Resampling.LANCZOS
         marked_16 = large_marked.resize((16, 16), resampling)
         plain_16 = large_plain.resize((16, 16), resampling)
         red_pixels = [
@@ -6023,7 +6202,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         )
         menu_factory.SEPARATOR = object()
         with mock.patch.object(
-            MAIN,
+            runtime,
             "pystray",
             types.SimpleNamespace(Menu=menu_factory, MenuItem=menu_item_factory),
         ):
@@ -6036,13 +6215,13 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         self.assertIn("Update 0.4.1", MAIN.WatcherApp.tray_tooltip_text(app))
         self.assertLessEqual(
             len(MAIN.WatcherApp.tray_tooltip_text(app)),
-            MAIN.TRAY_TOOLTIP_MAX_LENGTH,
+            watcher_ui_support.TRAY_TOOLTIP_MAX_LENGTH,
         )
 
         app.update_available_version = "v" * 200
         self.assertLessEqual(
             len(MAIN.WatcherApp.tray_tooltip_text(app)),
-            MAIN.TRAY_TOOLTIP_MAX_LENGTH,
+            watcher_ui_support.TRAY_TOOLTIP_MAX_LENGTH,
         )
         app.update_available_version = None
         self.assertEqual("Check for updates", MAIN.WatcherApp.tray_update_menu_label(app))
@@ -6114,7 +6293,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.update_banner = None
         app.tray_icon = None
 
-        with mock.patch.object(MAIN, "messagebox") as dialogs:
+        with mock.patch.object(runtime, "messagebox") as dialogs:
             MAIN.WatcherApp.close(app)
         app.flights.stop.assert_not_called()
         app.utc_sync.stop.assert_not_called()
@@ -6179,7 +6358,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.stop_tray_icon = mock.Mock()
         initialize_event_pump_fixture(app)
 
-        with mock.patch.object(MAIN, "messagebox") as dialogs:
+        with mock.patch.object(runtime, "messagebox") as dialogs:
             dialogs.askyesno.return_value = True
             MAIN.WatcherApp.close(app)
         app.flights.stop.assert_called_once_with()
@@ -6224,11 +6403,11 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         failed_child = mock.Mock()
         failed_child.terminate.side_effect = OSError('already exited')
         with mock.patch.object(
-            MAIN.multiprocessing, 'active_children',
+            multiprocessing, 'active_children',
             return_value=[failed_child, child],
         ), mock.patch.object(
-            MAIN.os, '_exit', side_effect=SystemExit(0),
-        ) as exit_process, mock.patch.object(MAIN, 'messagebox') as dialogs:
+            os, '_exit', side_effect=SystemExit(0),
+        ) as exit_process, mock.patch.object(runtime, 'messagebox') as dialogs:
             with self.assertRaises(SystemExit):
                 MAIN.WatcherApp.close(app, for_update=True)
         self.assertTrue(app.exiting)
@@ -6262,10 +6441,10 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
                 app.write_log = mock.Mock()
                 child = mock.Mock()
                 with mock.patch.object(
-                    MAIN.multiprocessing, 'active_children',
+                    multiprocessing, 'active_children',
                     return_value=[child],
                 ), mock.patch.object(
-                    MAIN.os, '_exit', side_effect=SystemExit(0),
+                    os, '_exit', side_effect=SystemExit(0),
                 ) as exit_process:
                     MAIN.WatcherApp.close(app, for_update=True)
                 self.assertFalse(app.exiting)

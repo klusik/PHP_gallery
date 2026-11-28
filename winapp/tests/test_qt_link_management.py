@@ -33,7 +33,7 @@ try:
     from PySide6.QtWidgets import (
         QApplication, QCheckBox, QDialog, QLabel, QPushButton,
     )
-    from uploader.app_linking import (
+    from uploader.linking import (
         ADMIN_MEDIA_SCOPE_SUFFIX, GALLERY_SEARCH_SUFFIX, ROLLING_SCOPE_SUFFIX,
         ROLLING_UPLOAD_SCOPE, LinkingSession, UPLOAD_SCOPE,
     )
@@ -308,14 +308,14 @@ class QtLinkManagementTests(NativeQtTestCase):
 
             with (
                 mock.patch(
-                    'uploader.qt_photos.saved_desktop_gallery_binding',
+                    'uploader.photos.qt.media.saved_desktop_gallery_binding',
                     return_value=OfflineBinding(
                         handoff.binding.issuer, handoff.binding.account_id,
                         handoff.previous_scope,
                     ),
                 ),
                 mock.patch(
-                    'uploader.qt_photos.persist_browser_scope_upgrade',
+                    'uploader.photos.qt.media.persist_browser_scope_upgrade',
                     side_effect=persist_upgrade,
                 ) as persist,
             ):
@@ -369,11 +369,11 @@ class QtLinkManagementTests(NativeQtTestCase):
                     handoff = replace(handoff, refresh_deadline=time.monotonic())
                 with (
                     mock.patch(
-                        'uploader.qt_photos.saved_desktop_gallery_binding',
+                        'uploader.photos.qt.media.saved_desktop_gallery_binding',
                         return_value=binding,
                     ),
                     mock.patch(
-                        'uploader.qt_photos.persist_browser_scope_upgrade',
+                        'uploader.photos.qt.media.persist_browser_scope_upgrade',
                     ) as persist,
                 ):
                     dialog = window.photos._authorization_dialog
@@ -409,7 +409,7 @@ class QtLinkManagementTests(NativeQtTestCase):
         with tempfile.TemporaryDirectory() as folder:
             window = self._window(folder, state, selected)
             with mock.patch(
-                'uploader.qt_photos.discover_linking_capabilities',
+                'uploader.photos.qt.link_management.discover_linking_capabilities',
                 return_value=capabilities,
             ):
                 dialog = self._open_manage_link(window)
@@ -450,7 +450,7 @@ class QtLinkManagementTests(NativeQtTestCase):
         with tempfile.TemporaryDirectory() as folder:
             window = self._window(folder, state, selected)
             with mock.patch(
-                'uploader.qt_photos.discover_linking_capabilities',
+                'uploader.photos.qt.link_management.discover_linking_capabilities',
                 return_value=frozenset({'galleries:list', 'gallery:upload'}),
             ):
                 dialog = self._open_manage_link(window)
@@ -520,7 +520,7 @@ class QtLinkManagementTests(NativeQtTestCase):
                 )
                 try:
                     with mock.patch(
-                        'uploader.qt_photos.discover_linking_capabilities',
+                        'uploader.photos.qt.link_management.discover_linking_capabilities',
                         return_value=frozenset({'galleries:list', 'gallery:upload'}),
                     ):
                         dialog = self._open_manage_link(window)

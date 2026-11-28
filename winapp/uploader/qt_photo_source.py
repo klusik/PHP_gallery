@@ -24,7 +24,7 @@ try:
 except ImportError:
     PillowImage = None
 
-from .app_linking import (
+from .linking import (
     LINKING_GALLERY_TREE_MAX_ROWS,
     MEDIA_RECENT_ORDER_PHOTO_LIMIT,
     NATIVE_MEDIA_MAX_BYTES,

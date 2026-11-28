@@ -12,7 +12,9 @@
 
 import importlib.machinery
 import importlib.util
+import hashlib
 import json
+import logging
 import queue
 import sys
 import tempfile
@@ -29,6 +31,14 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.flight_workflow import FinalizationWorker
+from uploader.flight_jobs import read_document
+from uploader.linked_upload import LinkedUploadTarget
+from uploader import http_transport
+from uploader.watcher.workers import common as watch_common
+from uploader.watcher.workers import watcher as watcher_worker
+from uploader.watcher.ui import watcher as watcher_ui
+from uploader.watcher import state as watcher_state
+from uploader.watcher.queue import observe_watch_source
 
 # Purpose: Bound completion of the synthetic initial-folder worker.
 # Type: float. Units: seconds. Scope: bounded watcher lifecycle regressions.
@@ -57,6 +67,26 @@ def load_main_module() -> ModuleType:
 
 
 MAIN: ModuleType
+
+
+class WatcherAppFixture(mock.Mock):
+    """Supply class-dispatched Watcher helpers to a constructor-free test host."""
+
+    def watcher_reset_blocked(self) -> bool:
+        """Use the production reset fence for contextual resume checks.
+
+        Returns:
+            bool: Whether reset state blocks new Watcher work.
+        """
+        return MAIN.WatcherApp.watcher_reset_blocked(self)
+
+    def _watcher_connection_selected(self) -> bool:
+        """Use the production saved-target binding predicate.
+
+        Returns:
+            bool: Whether this host still selects its captured Watcher target.
+        """
+        return MAIN.WatcherApp._watcher_connection_selected(self)
 
 
 class WatchDrainTests(unittest.TestCase):
@@ -199,7 +229,7 @@ class WatchDrainTests(unittest.TestCase):
                 workspace, None, resume=True, continuation=True,
             )
             self.assertTrue(resumed.initial_captured)
-            manifest = self.main.read_document(workspace / "watch-drain.json")
+            manifest = read_document(workspace / "watch-drain.json")
             self.assertIs(manifest["initial_captured"], True)
             # Model the host's durable consumed-marker acknowledgement before
             # letting this continuation worker pass its admission gate.
@@ -234,7 +264,7 @@ class WatchDrainTests(unittest.TestCase):
             self.assertEqual(new_photo, resumed.upload_watched_file.call_args.args[1])
             self.assertTrue(old_photo.exists())
             self.assertFalse(new_photo in resumed.accepted_paths)
-            row = self.main.read_document(workspace / 'watch-drain.json')
+            row = read_document(workspace / 'watch-drain.json')
             self.assertEqual([str(old_photo)], row['initial'])
             self.assertEqual([], row['pending'])
             self.assertIs(row['frozen'], False)
@@ -290,7 +320,7 @@ class WatchDrainTests(unittest.TestCase):
             self.assertIn(second, watcher.accepted_paths)
             self.assertFalse(watcher.stop_event.is_set())
             self.assertFalse(watcher.drain_event.is_set())
-            row = self.main.read_document(workspace / 'watch-drain.json')
+            row = read_document(workspace / 'watch-drain.json')
             self.assertEqual([str(second)], row['pending'])
             self.assertIs(row['frozen'], False)
             self.assertEqual(0.0, row['cutoff'])
@@ -313,7 +343,7 @@ class WatchDrainTests(unittest.TestCase):
             first = self.make_watcher(folder, workspace)
             first.configure_drain(workspace, {old_photo})
             manifest = workspace / 'watch-drain.json'
-            baseline = self.main.read_document(manifest)
+            baseline = read_document(manifest)
             outside = root / 'outside.jpg'
             mutations = (
                 ('frozen', True),
@@ -352,7 +382,7 @@ class WatchDrainTests(unittest.TestCase):
             watcher._run_owned = mock.Mock(
                 side_effect=ValueError(secret),
             )
-            with mock.patch.object(MAIN.logging, 'error') as log_error:
+            with mock.patch.object(logging, 'error') as log_error:
                 MAIN.WatcherThread.run(watcher)
 
             diagnostic = watcher.drain_error
@@ -391,7 +421,7 @@ class WatchDrainTests(unittest.TestCase):
             first = self.make_watcher(folder, workspace)
             first.configure_drain(workspace, {target})
             manifest = workspace / 'watch-drain.json'
-            row = self.main.read_document(manifest)
+            row = read_document(manifest)
             row['initial'] = [str(link)]
             self.main.atomic_write_json(manifest, row)
             resumed = self.make_watcher(folder, workspace)
@@ -423,7 +453,7 @@ class WatchDrainTests(unittest.TestCase):
             resumed.linked_target = target
             resumed._linked_lease = mock.Mock()
             state = mock.Mock(preexisting=False)
-            with mock.patch.object(MAIN, 'LinkedUploadState', return_value=state):
+            with mock.patch.object(watcher_state, 'LinkedUploadState', return_value=state):
                 with self.assertRaisesRegex(ValueError, 'history is missing'):
                     resumed.configure_drain(
                         workspace, None, resume=True, continuation=True,
@@ -467,11 +497,11 @@ class WatchDrainTests(unittest.TestCase):
                 scan_threads.append(threading.get_ident())
                 watcher.request_drain()
                 watcher.stop_event.set()
-                return [MAIN.observe_watch_source(old, time.time())]
+                return [observe_watch_source(old, time.time())]
 
-            with mock.patch.object(MAIN, "discover_watch_sources", side_effect=capture_initial) as scan:
+            with mock.patch.object(watcher_worker, "discover_watch_sources", side_effect=capture_initial) as scan:
                 watcher.configure_drain(workspace, None)
-                before = self.main.read_document(watcher.drain_manifest)
+                before = read_document(watcher.drain_manifest)
                 self.assertIs(before["initial_captured"], False)
                 self.assertIs(before["frozen"], True)
                 scan.assert_not_called()
@@ -483,7 +513,7 @@ class WatchDrainTests(unittest.TestCase):
             self.assertEqual(1, len(scan_threads))
             self.assertNotEqual(owner_thread, scan_threads[0])
             self.assertEqual({old}, watcher.initial_paths)
-            after = self.main.read_document(watcher.drain_manifest)
+            after = read_document(watcher.drain_manifest)
             self.assertIs(after["frozen"], True)
             self.assertEqual([], after["pending"])
             watcher.upload_watched_file.assert_not_called()
@@ -560,14 +590,14 @@ class WatchDrainTests(unittest.TestCase):
                 'ok': True, 'uploaded': 1, 'scanned': 0,
             }
             with mock.patch.object(
-                self.main, 'delete_verified_linked_source',
+                watcher_worker, 'delete_verified_linked_source',
             ) as delete:
                 worker.scan_once(folder, 'https://gallery.example.test/upload')
                 delete.assert_called_once()
                 snapshot = delete.call_args.args[0]
                 self.assertEqual(uploaded, snapshot.path)
                 self.assertEqual(
-                    self.main.hashlib.sha256(b'confirmed bytes').hexdigest(),
+                    hashlib.sha256(b'confirmed bytes').hexdigest(),
                     snapshot.expected_sha256,
                 )
 
@@ -598,13 +628,14 @@ class WatchDrainTests(unittest.TestCase):
             watcher.configure_drain(workspace, {old_photo})
 
             with mock.patch.object(
-                self.main, "iter_candidate_files", return_value=[old_photo]
+                watcher_worker, "discover_watch_sources",
+                return_value=[observe_watch_source(old_photo, time.time())],
             ):
                 watcher.scan_once(folder, "https://gallery.example.test/upload")
 
             watcher.upload_watched_file.assert_not_called()
             self.assertEqual(set(), watcher.accepted_paths)
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
 
     def test_linked_scan_rechecks_changed_bytes_but_not_acknowledged_photo(self) -> None:
@@ -638,7 +669,7 @@ class WatchDrainTests(unittest.TestCase):
             worker.scan_once(folder, "https://gallery.example.test")
             self.assertEqual(2, worker.remote_inventory.refresh.call_count)
             worker.upload_watched_file.assert_not_called()
-            self.assertEqual([], self.main.read_document(
+            self.assertEqual([], read_document(
                 workspace / "watch-drain.json"
             )["pending"])
 
@@ -667,7 +698,7 @@ class WatchDrainTests(unittest.TestCase):
 
             worker.scan_once(folder, "https://gallery.example.test")
             self.assertFalse(worker.stop_event.is_set())
-            row = self.main.read_document(workspace / "watch-drain.json")
+            row = read_document(workspace / "watch-drain.json")
             self.assertEqual([str(path)], row["pending"])
             self.assertEqual('retry_wait', row['items'][0]['state'])
             self.assertEqual(0.0, row['cutoff'])
@@ -693,7 +724,7 @@ class WatchDrainTests(unittest.TestCase):
             first = self.make_watcher(folder, workspace)
             first.configure_drain(workspace, set())
             first.request_drain()
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             cutoff = saved.get("cutoff")
             self.assertIsInstance(cutoff, (int, float))
             self.assertGreater(float(cutoff), 0.0)
@@ -705,12 +736,13 @@ class WatchDrainTests(unittest.TestCase):
             restarted.stability.stable.return_value = True
 
             with mock.patch.object(
-                self.main, "iter_candidate_files", return_value=[partial]
+                watcher_worker, "discover_watch_sources",
+                return_value=[observe_watch_source(partial, time.time())],
             ):
                 restarted.run()
 
             restarted.upload_watched_file.assert_called_once()
-            final = self.main.read_document(workspace / "watch-drain.json")
+            final = read_document(workspace / "watch-drain.json")
             self.assertEqual([], final["pending"])
             self.assertTrue(final["frozen"])
 
@@ -760,29 +792,29 @@ class WatchDrainTests(unittest.TestCase):
             app.linking_manager.linked_upload_mode_selected.return_value = False
             app.flights = mock.Mock()
             app.flights.pending.return_value = [mock.Mock(directory=workspace)]
-            state_factory = self.main.UploadState
+            state_factory = watcher_state.UploadState
 
             with (
-                mock.patch.object(self.main, "CONFIG_DIR", root / "profile"),
+                mock.patch.object(watcher_state, "CONFIG_DIR", root / "profile"),
                 mock.patch.object(
-                    self.main.WatcherThread, "start"
+                    watcher_worker.WatcherThread, "start"
                 ) as start_worker,
-                mock.patch.object(self.main, "SimConnectCameraClient") as simconnect,
+                mock.patch.object(watcher_worker, "SimConnectCameraClient") as simconnect,
                 mock.patch.object(
-                    self.main,
+                    watcher_state,
                     "UploadState",
                     side_effect=lambda: state_factory(
                         workspace / "upload-state.json"
                     ),
                 ),
                 mock.patch.object(
-                    self.main, "FileStabilityTracker"
+                    watch_common, "FileStabilityTracker"
                 ) as stability_factory,
                 mock.patch.object(
-                    self.main, "RemoteInventorySession"
+                    http_transport, "RemoteInventorySession"
                 ) as inventory_factory,
                 mock.patch.object(
-                    self.main.WatcherThread,
+                    watcher_worker.WatcherThread,
                     "upload_watched_file",
                     return_value={"uploaded": 1, "scanned": 1},
                 ) as upload_photo,
@@ -806,7 +838,7 @@ class WatchDrainTests(unittest.TestCase):
             upload_photo.assert_called_once()
             self.assertEqual(final_photo, upload_photo.call_args.args[1])
             self.assertNotIn(initial_photo, worker.accepted_paths)
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
             self.assertTrue(saved["frozen"])
 
@@ -859,7 +891,7 @@ class WatchDrainTests(unittest.TestCase):
 
             self.assertEqual(1, watcher.upload_watched_file.call_count)
             self.assertEqual(before, watcher.upload_watched_file.call_args.args[1])
-            final = self.main.read_document(workspace / "watch-drain.json")
+            final = read_document(workspace / "watch-drain.json")
             self.assertNotIn(str(late), final["pending"])
             self.assertFalse(final["pending"])
 
@@ -906,7 +938,7 @@ class WatchDrainTests(unittest.TestCase):
 
             watcher.scan_once(folder, "https://gallery.example.test/upload")
 
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             self.assertEqual([str(photo)], saved["pending"])
             watcher.upload_watched_file.assert_called_once()
             self.assertFalse(watcher.stop_event.is_set())
@@ -977,7 +1009,7 @@ class WatchDrainTests(unittest.TestCase):
 
             watcher.upload_watched_file.assert_called_once()
             self.assertEqual(set(), watcher.accepted_paths)
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
 
     def test_resume_reuses_the_exact_contextual_watcher_key(self) -> None:
@@ -996,22 +1028,22 @@ class WatchDrainTests(unittest.TestCase):
             })
             session = mock.Mock()
             issuer = "https://gallery.example.test"
-            target = self.main.LinkedUploadTarget(session, issuer, 7, 9, "Screenshots")
-            contextual = self.main.LinkedUploadTarget(
+            target = LinkedUploadTarget(session, issuer, 7, 9, "Screenshots")
+            contextual = LinkedUploadTarget(
                 session, issuer, 7, 9, "Screenshots", "synthetic watcher key",
             )
-            app = mock.Mock()
+            app = WatcherAppFixture()
             app._contextual_watch_target = contextual
             app.capture_linked_target.return_value = target
             app.flights.pending.return_value = [mock.Mock(directory=workspace)]
             with (
-                mock.patch.object(self.main, "capture_worker_config"),
-                mock.patch.object(self.main, "WatcherThread") as worker,
+                mock.patch.object(watcher_state, "capture_worker_config"),
+                mock.patch.object(watcher_ui, "WatcherThread") as worker,
             ):
                 result = self.main.WatcherApp.resume_flight_photos(app, workspace)
                 self.assertIs(worker.return_value, result)
                 self.assertIs(contextual, worker.call_args.args[2])
-                app.capture_linked_target.return_value = self.main.LinkedUploadTarget(
+                app.capture_linked_target.return_value = LinkedUploadTarget(
                     mock.Mock(), issuer, 7, 9, "Screenshots",
                 )
                 with self.assertRaisesRegex(ValueError, "gallery changed"):
@@ -1039,7 +1071,7 @@ class WatchDrainTests(unittest.TestCase):
 
             watcher.scan_once(folder, "https://gallery.example.test/upload")
 
-            saved = self.main.read_document(workspace / "watch-drain.json")
+            saved = read_document(workspace / "watch-drain.json")
             self.assertEqual([str(photo)], saved["pending"])
 
     def test_unresolved_queue_blocks_finalization_and_revoke(self) -> None:
@@ -1076,7 +1108,7 @@ class WatchDrainTests(unittest.TestCase):
                 Raises:
                     RuntimeError: A durable accepted photo is unresolved.
                 """
-                saved = self.main.read_document(
+                saved = read_document(
                     workspace / "watch-drain.json"
                 )
                 if saved["pending"]:

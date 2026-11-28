@@ -20,7 +20,9 @@ from types import TracebackType
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import attempt as linking_attempt
+from uploader.linking import session_lifecycle as linking_session_lifecycle
 from uploader import credential_store as credentials
 from uploader import offline_linking as offline
 
@@ -427,12 +429,12 @@ class OfflineLinkingTests(unittest.TestCase):
         """
         listener = MagicMock()
         listener.getsockname.return_value = ('127.0.0.1', 56321)
-        with patch.object(linking.socket, 'socket', return_value=listener):
+        with patch.object(linking_attempt.socket, 'socket', return_value=listener):
             attempt = linking.LinkingAttempt(self.issuer, scope=self.scope)
         self.addCleanup(attempt.close)
         attempt._phase = 'approved'
         attempt._code = _token('pglc_', b'd')
-        with patch.object(linking, '_request_json', return_value=self.response):
+        with patch.object(linking_attempt, '_request_json', return_value=self.response):
             session, refresh, lifetime = attempt.exchange_offline_once()
         self.addCleanup(session.close)
         self.assertEqual(self.new, refresh)
@@ -440,7 +442,7 @@ class OfflineLinkingTests(unittest.TestCase):
         self.assertTrue(session.available())
         self.assertFalse(session.can_list_galleries())
         self.assertFalse(session.can_upload())
-        with patch.object(linking, '_request_json', return_value=self.identity):
+        with patch.object(linking_session_lifecycle, '_request_json', return_value=self.identity):
             self.assertEqual(self.account, session.identity().user_id)
 
     def test_rolling_presentation_keeps_exact_scope_through_rotation(self) -> None:
@@ -520,7 +522,7 @@ class OfflineLinkingTests(unittest.TestCase):
             renewed, time.monotonic() + offline.OFFLINE_ACCESS_MAX_SECONDS,
         ))
         session.enable_renewal(renew)
-        with patch.object(linking, '_request_json', side_effect=[
+        with patch.object(linking_session_lifecycle, '_request_json', side_effect=[
             linking.LinkingGrantRejected('Rejected bearer.'), identity,
         ]) as request:
             with self.assertRaises(linking.LinkingGrantRejected):
@@ -592,7 +594,7 @@ class OfflineLinkingTests(unittest.TestCase):
         session._expires_at = time.monotonic()
         renew = MagicMock(side_effect=linking.LinkingRefreshRejected('Refused.'))
         session.enable_renewal(renew)
-        with patch.object(linking, '_request_json') as request:
+        with patch.object(linking_session_lifecycle, '_request_json') as request:
             with self.assertRaises(linking.LinkingRefreshRejected):
                 session.gallery_page()
             with self.assertRaises(linking.LinkingError):
@@ -610,7 +612,7 @@ class OfflineLinkingTests(unittest.TestCase):
         """
         scope = linking.ROLLING_GALLERIES_SCOPE
         clock = [time.monotonic()]
-        with patch.object(linking.time, 'monotonic', side_effect=lambda: clock[0]):
+        with patch.object(linking_session_lifecycle.time, 'monotonic', side_effect=lambda: clock[0]):
             session = linking.LinkingSession(
                 self.issuer, self.access, clock[0] + offline.OFFLINE_ACCESS_MAX_SECONDS,
                 scope, sliding_access_supported=True,
@@ -619,7 +621,7 @@ class OfflineLinkingTests(unittest.TestCase):
             renew = MagicMock()
             session.enable_renewal(renew)
             identity = {'user': {'id': self.account, 'username': 'admin'}, 'scope': scope}
-            with patch.object(linking, '_request_json', return_value=identity):
+            with patch.object(linking_session_lifecycle, '_request_json', return_value=identity):
                 # Multiple days of regular use must exceed both the initial
                 # fifteen-minute access and the original seven-day family age.
                 # Seventeen half-day vectors exercise eight full active days.
@@ -630,7 +632,7 @@ class OfflineLinkingTests(unittest.TestCase):
                     clock[0] += linking.LINKING_MAX_TOKEN_LIFETIME_SECONDS / 2
             renew.assert_not_called()
             deadline = session._expires_at
-            with patch.object(linking, '_request_json', side_effect=linking.LinkingError('Offline')):
+            with patch.object(linking_session_lifecycle, '_request_json', side_effect=linking.LinkingError('Offline')):
                 with self.assertRaises(linking.LinkingError):
                     session.identity()
             self.assertEqual(deadline, session._expires_at)
@@ -655,7 +657,7 @@ class OfflineLinkingTests(unittest.TestCase):
         session._expires_at = time.monotonic()
         renew = MagicMock(side_effect=linking.LinkingReconnectRequired('Sign in again'))
         session.enable_renewal(renew)
-        with patch.object(linking, '_request_json') as request:
+        with patch.object(linking_session_lifecycle, '_request_json') as request:
             for _ in range(2):
                 with self.assertRaises(linking.LinkingError):
                     session.gallery_page()

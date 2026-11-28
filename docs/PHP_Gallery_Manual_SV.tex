@@ -10423,6 +10423,18 @@ public/assets/ & JavaScript utan ramverk, CSS och offentliga resurser.\\
 scripts/ & Verktyg för migrering, integritet, driftsättning och underhåll.\\
 tests/ & Fristående PHP-tester och riktade JavaScript-tester.\\
 winapp/ & Windows-specifika verktyg och integrationer.\\
+winapp/gallery\_watch\_upload.pyw & Stabil startpunkt som hanterar tidiga flaggor.\\
+winapp/uploader/launcher.py & CLI-dispatch och sammansättning av skrivbordsbackend.\\
+winapp/uploader/watcher/ & Watcher-runtime, tillstånd, kö, återställning, workers och Tk-gränssnitt.\\
+winapp/uploader/watcher/configuration.py & Watchers konfigurationspolicy.\\
+winapp/uploader/watcher/ui/settings/ & Watcher-moduler för inställningar, uppdatering och avslut.\\
+winapp/uploader/imports/ & Policy, förkontroll och uppladdningsworkers för manuella importer.\\
+winapp/uploader/ai/ & Valfri AI-analys, workers, heartbeat och runtime-beroenden.\\
+winapp/uploader/linking/ & Ägarskap för länkad transport, sessioner och Tk-gränssnitt.\\
+winapp/uploader/flight/reports/ & Kanonisk implementation av flygrapporter; \texttt{flight\_report.py} är kvar som äldre navigerings-/importfasad.\\
+winapp/uploader/flight/ui/ & Flygfunktionernas beteende bakom kompositionsingången \texttt{FlightUI} i~\texttt{flight\_ui.py}.\\
+WinApp-uppdaterare och installerad verifiering & \texttt{self\_update.py}, \texttt{update\_ui.py}, \texttt{update\_helper.py}, \texttt{installer.iss}, Watcher-inställningar i~\texttt{watcher/ui/settings/} och~\texttt{qualify\_installer\_updates.py}. Värdbaserade uppdateringstester använder publicerade WinApp-installationsprogram 1.7.1 och~2.0.0 samt en exakt kandidatversion; se \texttt{TESTING.md} i~repositoryts rot.\\
+winapp/uploader/translation\_catalog/ & Flygrapportkataloger ordnade efter språk och gränssnittsområde.\\
 \bottomrule
 \end{longtable}
 

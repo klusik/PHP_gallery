@@ -15,7 +15,7 @@ from types import TracebackType
 from typing import Literal
 from unittest.mock import Mock
 
-from uploader.app_linking import ADMIN_MEDIA_SCOPE_SUFFIX, LinkingSession, UPLOAD_SCOPE
+from uploader.linking import ADMIN_MEDIA_SCOPE_SUFFIX, LinkingSession, UPLOAD_SCOPE
 from uploader.config_snapshot import ConfigSnapshot
 from uploader.linked_upload import LinkedUploadTarget
 from uploader.mode_coordinator import GuiModeOwner, ModeCoordinator, ModeCoordinatorError

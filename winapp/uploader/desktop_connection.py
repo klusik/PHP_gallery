@@ -19,7 +19,7 @@ from threading import Event
 import time
 from typing import Callable, NamedTuple
 
-from .app_linking import (
+from .linking import (
     ADMIN_DELETE_SCOPE_SUFFIX, GALLERIES_SCOPE, GALLERY_TREE_CAPABILITY,
     LINKING_GALLERY_ID_MAX,
     ROLLING_GALLERIES_SCOPE, ROLLING_GALLERY_SEARCH_SCOPES,

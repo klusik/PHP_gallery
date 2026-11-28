@@ -35,10 +35,10 @@ import threading
 from types import SimpleNamespace
 
 from PIL import Image, ImageGrab
-from uploader.watch_recovery_ui import WatchRecoveryReviewDialog
+from uploader.watcher.recovery_ui import WatchRecoveryReviewDialog
 from uploader.flight_ui import FlightUI
 from uploader.flight_workflow import FlightProgress
-from uploader.watch_queue import observe_watch_source
+from uploader.watcher.queue import observe_watch_source
 from uploader.ui_theme import configure_theme
 
 from uploader.flight_report_translations import (
@@ -1149,7 +1149,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 )
                 error_type = TimeoutError if outcome in {"retry", "active"} else RuntimeError
                 with (
-                    mock.patch("uploader.flight_ui.current_language", return_value="en"),
+                    mock.patch("uploader.flight.ui.progress.current_language", return_value="en"),
                     self.assertRaises(error_type) as raised,
                 ):
                     adapter.wait_for_workers(threading.Event(), deadline)

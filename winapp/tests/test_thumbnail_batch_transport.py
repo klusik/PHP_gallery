@@ -28,8 +28,12 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
-from uploader.thumbnail_batch_protocol import ValidatedItem
+from uploader import linking as linking
+from uploader.linking import media as linking_media
+from uploader.linking import transport as linking_transport
+from uploader.thumbnail_batch_protocol import (
+    PRODUCTION_MAX_RESPONSE_BYTES, ValidatedItem,
+)
 
 
 # Purpose: Bound the lifetime of an in-memory transport test control.
@@ -135,11 +139,11 @@ class BatchTransportTests(unittest.TestCase):
             if on_publish is not None:
                 on_publish()
 
-        control = linking._LinkingTransportControl(
+        control = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_DEADLINE_SECONDS, cancel,
         )
-        with mock.patch.object(linking, '_linking_connection', return_value=connection):
-            linking._native_thumbnail_batch_read_once(
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection):
+            linking_media._native_thumbnail_batch_read_once(
                 'https://gallery.example/Galerie', 'secret', ('1',), 42,
                 control, publish, timings=timings,
             )
@@ -184,11 +188,11 @@ class BatchTransportTests(unittest.TestCase):
         )
         publish = mock.Mock()
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._run_linking_transport(
-                    lambda control: linking._native_thumbnail_batch_read_once(
+                linking_transport._run_linking_transport(
+                    lambda control: linking_media._native_thumbnail_batch_read_once(
                         'https://private.example/Galerie', 'fixture-secret',
                         ('1',), 42, control, publish,
                     ),
@@ -217,7 +221,7 @@ class BatchTransportTests(unittest.TestCase):
             perf_counter=mock.Mock(side_effect=lambda: next(readings)),
         )
         timings = linking.MediaReadTimings()
-        with mock.patch.object(linking, 'time', clock):
+        with mock.patch.object(linking_media, 'time', clock):
             self.invoke([wire], on_publish=lambda: None, timings=timings)
         self.assertAlmostEqual(600.0, timings.body_ms)
         self.assertAlmostEqual(700.0, timings.network_ms)
@@ -241,7 +245,7 @@ class BatchTransportTests(unittest.TestCase):
              'Content-Length': str(len(valid) + 1)},
             {'Content-Type': linking.THUMBNAIL_BATCH_MIME,
              'Cache-Control': 'private, no-store', 'Vary': 'Authorization',
-             'Content-Length': str(linking.PRODUCTION_MAX_RESPONSE_BYTES + 1)},
+             'Content-Length': str(PRODUCTION_MAX_RESPONSE_BYTES + 1)},
             {'Content-Type': linking.THUMBNAIL_BATCH_MIME,
              'Cache-Control': 'private, no-store', 'Vary': 'Authorization',
              'Transfer-Encoding': 'chunked', 'Content-Length': str(len(valid))},
@@ -290,11 +294,11 @@ class BatchTransportTests(unittest.TestCase):
         Returns:
             None: The worker reports the same typed throttle to its caller.
         """
-        def fail(control: linking._LinkingTransportControl) -> dict[str, linking.JsonValue]:
+        def fail(control: linking_transport._LinkingTransportControl) -> dict[str, linking.JsonValue]:
             """Emit a simulated batch throttle from the admitted worker.
 
             Args:
-                control (linking._LinkingTransportControl): Worker deadline owner.
+                control (linking_transport._LinkingTransportControl): Worker deadline owner.
 
             Returns:
                 dict[str, linking.JsonValue]: No result because this always fails.
@@ -306,7 +310,7 @@ class BatchTransportTests(unittest.TestCase):
             )
 
         with self.assertRaises(linking.LinkingMediaThrottled) as result:
-            linking._run_linking_transport(
+            linking_transport._run_linking_transport(
                 fail, None, TEST_DEADLINE_SECONDS, TEST_DEADLINE_SECONDS,
                 phase='media', route='app_linking_thumbnail_batch',
             )
@@ -351,12 +355,12 @@ class BatchTransportTests(unittest.TestCase):
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
         publish = mock.Mock()
-        control = linking._LinkingTransportControl(
+        control = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_DEADLINE_SECONDS, None,
         )
-        with mock.patch.object(linking, '_linking_connection', return_value=connection):
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection):
             with self.assertRaises(linking.LinkingGrantRejected):
-                linking._native_thumbnail_batch_read_once(
+                linking_media._native_thumbnail_batch_read_once(
                     'https://gallery.example/Galerie', 'secret', ('1',), 42,
                     control, publish,
                 )

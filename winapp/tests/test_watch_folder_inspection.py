@@ -16,9 +16,9 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from uploader.capture_session import inspect_watch_folder
+from uploader.watcher.capture_session import inspect_watch_folder
 from uploader.discovery import inspect_folder_counts
-from uploader.watch_queue import WatchQueueStore, observe_watch_source
+from uploader.watcher.queue import WatchQueueStore, observe_watch_source
 
 
 class WatchFolderInspectionTests(unittest.TestCase):
@@ -60,7 +60,7 @@ class WatchFolderInspectionTests(unittest.TestCase):
         """
         cancelled = threading.Event()
         cancelled.set()
-        with patch('uploader.capture_session.inspect_folder_counts') as discover:
+        with patch('uploader.watcher.capture_session.inspect_folder_counts') as discover:
             result = inspect_watch_folder(
                 Path('unused'), {'.jpg'}, False, cancelled,
             )

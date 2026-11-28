@@ -41,7 +41,7 @@ from .localization import LANGUAGE_NAMES, current_language, gettext, gettext_noo
 from .qt_read_lane import QtReadLane
 from .qt_theme import ActionButton, ToggleSwitch
 from .ui_layout import WATCHER_SETTINGS_MINIMUM
-from .watcher_profile import WATCHER_PREFERENCE_TYPES
+from .watcher.profile import WATCHER_PREFERENCE_TYPES
 from .windows_startup import startup_supported
 
 ARCHIVE_BYTE_FIELDS = frozenset(('archive_max_uncompressed_bytes', 'archive_max_file_bytes'))

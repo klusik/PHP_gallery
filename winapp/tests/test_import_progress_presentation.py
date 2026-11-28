@@ -13,6 +13,7 @@
 import copy
 import queue
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -194,7 +195,7 @@ class ImportProgressPresentationTests(unittest.TestCase):
             pass
 
         with mock.patch.object(
-            MAIN.time, "monotonic", return_value=app._import_presentation_after - 0.001,
+            time, "monotonic", return_value=app._import_presentation_after - 0.001,
         ):
             app._flush_import_presentation()
         self.assertEqual([], tree.item_update_ids)

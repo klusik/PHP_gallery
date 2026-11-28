@@ -17,7 +17,7 @@ import re
 import sys
 from typing import Callable, Literal, Protocol
 
-from .app_linking import LINKING_GALLERY_ID_MAX, UPLOAD_SCOPE, _issuer_valid, scope_base
+from .linking import LINKING_GALLERY_ID_MAX, UPLOAD_SCOPE, _issuer_valid, scope_base
 from .server_discovery import _unique_object
 
 

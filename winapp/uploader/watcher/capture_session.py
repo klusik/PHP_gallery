@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
-# File: winapp/uploader/capture_session.py
+# File: winapp/uploader/watcher/capture_session.py
 # Module Type: Desktop capture composition
 # Purpose: Share durable flight startup and present Watcher commands.
 # Responsibilities: Preserve the recorder and plan owners across toolkits.
@@ -16,17 +16,17 @@ from queue import Queue
 from threading import Event
 from typing import Callable, Literal, Protocol
 
-from .discovery import inspect_folder_counts
-from .flight_jobs import (
+from ..discovery import inspect_folder_counts
+from ..flight_jobs import (
     FlightPreferences, SessionPlan, WatcherContinuation, WorkspaceLease,
     pending_sessions,
 )
-from .flight_recorder import FlightRecorder
-from .flight_simbrief import DispatchPlan
-from .flight_workflow import FinalizationWorker
-from .linked_upload import LinkedTargetLease, LinkedUploadTarget, UploadPipelineLease
-from .watch_queue import WatchQueueStore
-from .watch_recovery import WatchRecoveryRemote, WatchRecoverySnapshot
+from ..flight_recorder import FlightRecorder
+from ..flight_simbrief import DispatchPlan
+from ..flight_workflow import FinalizationWorker
+from ..linked_upload import LinkedTargetLease, LinkedUploadTarget, UploadPipelineLease
+from .queue import WatchQueueStore
+from .recovery import WatchRecoveryRemote, WatchRecoverySnapshot
 
 CaptureDecision = Literal['receipt', 'skip', 'approve', 'earlier', 'continue']
 CaptureEvents = Queue[tuple[str, str] | dict[str, object]]

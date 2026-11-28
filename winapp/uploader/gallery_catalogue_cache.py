@@ -25,7 +25,7 @@ import sys
 import tempfile
 import threading
 
-from .app_linking import (
+from .linking import (
     LINKING_GALLERY_ID_MAX, LINKING_GALLERY_TITLE_MAX_CHARS, LinkedGallery,
 )
 from .macos_mode import assert_local_macos_profile

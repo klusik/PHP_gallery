@@ -46,7 +46,7 @@ from .models import (
     LINKED_UPLOAD_UNCERTAIN_REASON, JsonValue,
 )
 from .import_ui_snapshot import ImportHistorySummary
-from .app_linking import linking_issuer
+from .linking import linking_issuer
 from .windows_file_identity import WindowsDirectoryAnchor
 
 UPLOAD_STATE_SCHEMA_VERSION = 2

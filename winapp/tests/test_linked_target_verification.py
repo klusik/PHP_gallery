@@ -16,7 +16,7 @@ import time
 import unittest
 from unittest.mock import Mock
 
-from uploader.app_linking import (
+from uploader.linking import (
     LinkedGallery, LinkedGalleryPage, LinkedIdentity, LinkingError,
     LinkingSession, TOKEN_PREFIX, UPLOAD_SCOPE,
 )

@@ -18,7 +18,7 @@ import math
 import threading
 import time
 
-from .app_linking import MediaReadTimings
+from .linking import MediaReadTimings
 from .thumbnail_batch_protocol import PRODUCTION_MAX_ITEMS, PRODUCTION_MAX_RESPONSE_BYTES
 
 

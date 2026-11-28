@@ -20,7 +20,8 @@ import time
 import unittest
 from unittest import mock
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.gallery_media_cache import PHOTO_CACHE_FRESH_SECONDS
 from uploader import gallery_view_order as order_module
 from uploader import gallery_view_preferences as preferences
 from uploader.gallery_view_order import GalleryViewOrder
@@ -757,14 +758,14 @@ class GalleryControlTests(unittest.TestCase):
         self.assertEqual({}, session._private_preload_proofs)
 
         self.assertFalse(session.cache_recent_media_order(
-            8, rows, verified_at - linking.PHOTO_CACHE_FRESH_SECONDS,
+            8, rows, verified_at - PHOTO_CACHE_FRESH_SECONDS,
         ))
         order = GalleryViewOrder(session, 7)
         self.assertIsNotNone(order.cached_page())
         with mock.patch.object(
-            linking.time, 'monotonic',
+            order_module.time, 'monotonic',
             return_value=(
-                verified_at + linking.PHOTO_CACHE_FRESH_SECONDS
+                verified_at + PHOTO_CACHE_FRESH_SECONDS
                 + CACHE_EXPIRY_TEST_MARGIN_SECONDS
             ),
         ):

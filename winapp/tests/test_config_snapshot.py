@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from uploader.app_linking import UPLOAD_SCOPE
+from uploader.linking import UPLOAD_SCOPE
 from uploader.config_snapshot import (
     CONFIG_MODE_ANCHOR_FIELD, ConfigSnapshotError, ConfigSnapshotStore,
 )

@@ -2063,6 +2063,51 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ### WinApp gallery controls
 
+The `winapp-gallery-sections.yml` manual `visual_baseline` input opts into a
+read-only Windows before/after Qt capture. Supply the full commit SHA of an
+ancestor of the workflow event candidate. Each exact source gets a fresh Python
+3.14.10 virtual environment, declared `winapp/requirements.txt` dependencies
+and a successful `pip check`; the same virtual-environment interpreter runs
+both registered `winapp-partitioned-no-visual` and `winapp-visual-parity`
+suites. Each artifact retains the side, baseline and candidate identities,
+central audit reports, Qt diagnostics and screenshots. Ordinary and delegated
+visual suites run as separate retained steps, so a failing ordinary result does
+not discard its report or screenshots. The visual step always delegates to the
+central audit, which requires a valid exact-source ordinary report and partition
+proof; missing or invalid evidence leaves visual parity blocked. A final workflow
+gate still requires both suite steps to succeed. The central audit remains the
+owner of canonical discovery and the exact delegated-ID coverage proof. Without
+this input, the existing push and dispatch behavior is unchanged. This capture
+does not install or publish the candidate.
+The manual `installed_updates` input is independent of `visual_baseline` and is
+off by default. When selected, the workflow builds one pristine setup from the
+exact candidate through the registered `winapp-frozen-installer` audit using
+Python 3.14.10 and `winapp/requirements-build.txt`. Its artifact retains the
+candidate's exact setup version, descriptor and hash and keeps the
+`issue-445-candidate-frozen-<sha>` name used by the installed Settings and
+packaging jobs. The next job passes only that target artifact to the same
+central audit. The PHP owner verifies its descriptor and SHA before invoking
+`qualify_installer_updates.py` with the target installer, target version,
+source SHA, work directory and report path. The Python owner downloads and
+authenticates the published WinApp 1.7.1 onefile setup and the published 2.0.0
+onedir setup from Gallery release `v_1.8.0`; neither predecessor is rebuilt or
+version-overlaid from the candidate source. The central audit owns the installed
+update cases and keeps each scenario's report: authentic predecessor installs,
+Tk and Qt candidate upgrades, restore/refusal paths and active-Watcher
+continuation. Both jobs verify the event SHA and immutable `origin/main`
+merge-base even when no visual baseline is supplied. Selecting both inputs runs
+the ordinary before/after visual capture and the installed upgrade lane;
+selecting only `installed_updates` skips those unrelated suites and runs one
+candidate setup build plus installed lifecycle. Artifacts and installed
+profiles live only on disposable hosted runners; this does not access or
+qualify a live user profile, publish an installer or replace target-PC
+acceptance.
+
+With `visual_baseline` alone, the registered `winapp-frozen-installer` audit
+still runs once on the exact candidate with `PHP_GALLERY_FROZEN_BUILD_ONLY=1`.
+Its candidate setup and metadata artifact follows the same frozen startup smoke;
+it does not install the candidate or qualify installed lifecycle behavior.
+
 The issue 445 workflow installs `winapp/requirements-core.txt` into a clean
 Windows virtual environment and `winapp/requirements.txt` into separate clean
 Windows, Linux and advisory macOS environments. Each install runs `pip check`.
@@ -2222,13 +2267,15 @@ The native gallery fixture captures the Legacy Tk notice and action in
 desktop and narrow Photos layouts and exercises the coordinated restart
 callback.
 
-The same opt-in suite verifies installed updates using the published
-WinApp 1.7.1 onefile setup and two hosted common onedir builds. The earlier build sets
-1.7.2 only in its disposable copy. The target uses the tracked WinApp
-version. The upgrade audit checks both setup descriptors before executing the
-real frozen helper on a dedicated Windows runner and retains a sanitized
-per-scenario report. The installed journeys, native credential sentinel and
-synthetic Watcher continuation use disposable profiles and source folders.
+The same opt-in suite verifies installed updates using the published WinApp
+1.7.1 onefile setup and the published WinApp 2.0.0 onedir setup from Gallery
+release `v_1.8.0`, plus one hosted common onedir setup built from the exact
+candidate's tracked WinApp version. The PHP audit verifies the candidate setup
+descriptor and complete SHA-256 before passing that one artifact to the update
+harness. The harness obtains and authenticates both published predecessors
+itself, then runs the upgrade journeys and retains a sanitized per-scenario
+report. The installed journeys, native credential sentinel and active-Watcher
+continuation use disposable profiles and source folders.
 
 The same hosted workflow admits the paired Photos comparison for an
 explicit comparison checkpoint. The central `watcher-tk-performance`

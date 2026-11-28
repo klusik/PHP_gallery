@@ -28,6 +28,42 @@ from test_simconnect import FakeSimConnectDLL, NativeFunction, packet_header
 from test_redesign import MAIN
 
 
+class UtcLifecycleAppMock(mock.Mock):
+    """Provide Watcher class-dispatch helpers for UTC lifecycle fixtures."""
+
+    def _saved_watcher_config(self) -> MAIN.WatcherConfig:
+        """Delegate to the real saved-Watcher configuration reader.
+
+        Returns:
+            MAIN.WatcherConfig: Effective settings for the shared Watcher.
+        """
+        return MAIN.WatcherApp._saved_watcher_config(self)
+
+    def watcher_reset_blocked(self) -> bool:
+        """Use the production reset fence for UTC lifecycle decisions.
+
+        Returns:
+            bool: Whether a Watcher reset is still pending or invalid.
+        """
+        return MAIN.WatcherApp.watcher_reset_blocked(self)
+
+    def _save_watcher_preferences(
+        self, config: MAIN.WatcherConfig, *, first_setup: bool = True,
+    ) -> None:
+        """Delegate preference persistence to the real Watcher owner.
+
+        Args:
+            config (MAIN.WatcherConfig): Saved settings or one changed preference.
+            first_setup (bool): Whether this update may initialize a missing file.
+
+        Returns:
+            None: Runs the production save callback against this fixture's owner.
+        """
+        MAIN.WatcherApp._save_watcher_preferences(
+            self, config, first_setup=first_setup,
+        )
+
+
 class FakeClock:
     """Injectable monotonic clock; native waits advance without real sleeping."""
 
@@ -559,7 +595,7 @@ class UtcLifecycleTests(unittest.TestCase):
         Returns:
             None: Asserts immediate cancellation and preservation of settings.
         """
-        app = mock.Mock()
+        app = UtcLifecycleAppMock()
         app.exiting = False
         app.updates.blocked.return_value = False
         app.config = MAIN.WatcherConfig(api_key="saved", sync_utc_time=True)
@@ -589,7 +625,7 @@ class UtcLifecycleTests(unittest.TestCase):
         Returns:
             None: Asserts off/stopped/draining states cannot start native work.
         """
-        app = mock.Mock()
+        app = UtcLifecycleAppMock()
         app.exiting = False
         app.config = MAIN.WatcherConfig(sync_utc_time=True)
         app.worker.is_alive.return_value = True

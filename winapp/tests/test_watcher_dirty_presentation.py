@@ -14,6 +14,8 @@
 
 import importlib.machinery
 import importlib.util
+from collections import deque
+import logging
 import sys
 import unittest
 from pathlib import Path
@@ -190,8 +192,8 @@ class WatcherDirtyPresentationTests(unittest.TestCase):
         app._displayed_log_lines = 0
         # Three source lines expose eviction from the two-record inline tail.
         app.job_store = mock.Mock(history_limit=2)
-        app._pending_log_lines = MAIN.deque(maxlen=app.job_store.history_limit)
-        with mock.patch.object(MAIN.logging, "info") as persistent:
+        app._pending_log_lines = deque(maxlen=app.job_store.history_limit)
+        with mock.patch.object(logging, "info") as persistent:
             app.write_log("first")
             app.write_log("second", "warning")
             app.write_log("third")

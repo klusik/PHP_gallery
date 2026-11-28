@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal
 
-from .app_linking import (
+from .linking import (
     LINKING_CREATE_TITLE_MAX_BYTES, LINKING_GALLERY_ID_MAX, LinkedGallery,
     LinkingError, LinkingSession, _issuer_valid,
 )

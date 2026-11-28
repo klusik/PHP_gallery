@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Literal, TypeAlias
 
-from .app_linking import (
+from .linking import (
     MEDIA_PRELOAD_RETRY_MAX_ATTEMPTS, LinkedPhoto, LinkingError,
     LinkingMediaThrottled, LinkingSession, MediaReadTimings,
 )

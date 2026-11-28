@@ -19,8 +19,8 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 try:
-    from uploader.capture_session import CaptureStatus
-    from uploader.capture_session import watcher_interrupt_available
+    from uploader.watcher.capture_session import CaptureStatus
+    from uploader.watcher.capture_session import watcher_interrupt_available
     from uploader.flight_report_translations import tr
     from uploader.localization import current_language
     from uploader.qt_capture import (

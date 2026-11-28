@@ -21,10 +21,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, TypeAlias
 
-from .app_linking import (
-    GALLERIES_SCOPE, TOKEN_PREFIX,
-    UPLOAD_SCOPE, _canonical_256bit, _issuer_valid, scope_base,
-)
+from .linking import GALLERIES_SCOPE, TOKEN_PREFIX, UPLOAD_SCOPE, _issuer_valid, scope_base
+from .linking.core import _canonical_256bit
 
 # Purpose: Refuse a vault snapshot after the original server access lifetime.
 # Type: int. Units: seconds. Scope: one transient bearer snapshot.

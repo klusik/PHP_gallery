@@ -24,7 +24,7 @@ from unittest import mock
 
 from test_redesign import MAIN
 from uploader import credential_store
-from uploader.app_linking import (
+from uploader.linking import (
     LinkedGallery, LinkedGalleryPage, LinkingError, LinkingSession,
     READ_UPLOAD_CREATE_SCOPE, UPLOAD_SCOPE,
 )
@@ -35,6 +35,7 @@ from uploader.linked_upload import (
     LinkedTargetLease, LinkedUploadTarget, verify_linked_upload_target,
 )
 from uploader.mode_coordinator import GuiModeOwner, ModeCoordinatorError
+from uploader.watcher import state as watcher_state
 from uploader.windows_startup import WindowsInstance
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.upload_mode import (
@@ -409,7 +410,7 @@ class NativeWindowsModeTests(unittest.TestCase):
         app.linking_manager.linked_upload_mode_selected.return_value = True
         app.linking_manager.selected_upload_target.return_value = target
 
-        with mock.patch.object(MAIN, 'CONFIG_DIR', self.directory):
+        with mock.patch.object(watcher_state, 'CONFIG_DIR', self.directory):
             try:
                 activated = app.commit_linked_upload_target(target)
             finally:

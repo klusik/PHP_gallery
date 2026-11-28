@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
-# File: winapp/uploader/watch_queue.py
+# File: winapp/uploader/watcher/queue.py
 # Module Type: Windows Service
 # Purpose: Retain capture admission and immutable FIFO order independently of HTTP.
 # Responsibilities:
@@ -27,8 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .models import JsonValue
-from .state_store import atomic_write_json, accepted_work_owner
+from ..models import JsonValue
+from ..state_store import atomic_write_json, accepted_work_owner
 
 # Purpose: Bound complete queue reads, including retained acknowledgements.
 # Type: int. Units: bytes. Scope: one session journal.

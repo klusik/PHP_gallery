@@ -28,7 +28,9 @@ import test_native_gallery_viewer as native_fixture
 import test_thumbnail_batch_session as batch_fixture
 import test_gallery_load_progress as progress_fixture
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import transport as linking_transport
+from uploader.gallery_media_cache import GalleryMediaCache
 from uploader.flight_report_translations import tr
 
 
@@ -88,12 +90,12 @@ class GalleryRetryProgressTests(unittest.TestCase):
         """
         cache_directory = TemporaryDirectory()
         self.addCleanup(cache_directory.cleanup)
-        cache = linking.GalleryMediaCache(
+        cache = GalleryMediaCache(
             Path(cache_directory.name), linking.NATIVE_MEDIA_MAX_BYTES,
             thumbnails=True,
         )
         cache_patch = mock.patch.object(
-            linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            GalleryMediaCache, 'for_current_user', return_value=cache,
         )
         cache_patch.start()
         self.addCleanup(cache_patch.stop)
@@ -152,7 +154,7 @@ class GalleryRetryProgressTests(unittest.TestCase):
         first_connection.getresponse = held_failure_response
         retry_connection = batch_fixture._Connection(healthy_response)
         connection_factory = mock.patch.object(
-            linking, '_linking_connection',
+            linking_transport, '_linking_connection',
             side_effect=(first_connection, retry_connection),
         )
         media_page_patch = mock.patch.object(

@@ -32,9 +32,21 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease
-from uploader.watcher_profile import WatcherProfile
-from uploader.app_linking import (
+from uploader import diagnostics, linked_upload, launcher, state_store, update_helper
+from uploader.flight_jobs import (
+    SessionPlan, WatcherContinuation, WorkspaceLease, connection_binding,
+    read_document,
+)
+from uploader import http_transport
+from uploader.watcher.workers import common as watch_common, watcher as watcher_workers
+from uploader.watcher import state as watcher_state
+from uploader.watcher import configuration as watcher_configuration
+from uploader.watcher.ui import photos_connection as watcher_photos
+from uploader.watcher.ui.event_pump import TkEventPump
+from uploader.watcher.ui.settings import updates as watcher_updates
+from uploader.watcher import desktop as watcher_desktop
+from uploader.watcher.profile import WatcherProfile
+from uploader.linking import (
     LinkingResponseError, LinkingSession, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
 )
 from uploader.flight_ui import FlightUI
@@ -42,7 +54,7 @@ from uploader.flight_workflow import FinalizationWorker
 import uploader.flight_ui as FLIGHT_UI_MODULE
 from uploader.self_update import UpdateDiagnostic
 from uploader.linked_upload import LinkedUploadTarget, linked_target_binding
-from uploader.app_linking_ui import LinkingManager
+from uploader.linking.ui import LinkingManager
 from uploader.photos_workspace import (
     PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
     PHOTOS_OBSERVATION_RECENT_LIMIT,
@@ -51,6 +63,15 @@ from uploader.photos_workspace import (
 from uploader.update_ui import (
     UPDATE_DIAGNOSTIC_RECENT_LIMIT,
     UpdateController,
+)
+from uploader.flight_recorder import FlightRecorder
+from uploader.mode_coordinator import GuiModeOwner
+from uploader.watcher import queue as watch_queue
+from uploader.watcher import runtime as watcher_runtime
+from uploader.watcher.capture_session import CaptureStatus
+from uploader.watcher.update_policy import (
+    UPDATE_CONTINUATION_LINK_SECONDS,
+    UPDATE_CONTINUATION_TARGET_RETRY_MS,
 )
 
 # Bound local event waits so a broken continuation cannot hang the hosted suite.
@@ -101,6 +122,26 @@ def load_main_module() -> ModuleType:
 MAIN = load_main_module()
 
 
+class WatcherRestartFixture(SimpleNamespace):
+    """Provide the class-level reset fence for a synthetic Watcher host."""
+
+    def watcher_reset_blocked(self) -> bool:
+        """Delegate reset admission to the production Watcher predicate.
+
+        Returns:
+            bool: Whether real Watcher reset state blocks a restart.
+        """
+        return MAIN.WatcherApp.watcher_reset_blocked(self)
+
+    def _watcher_connection_selected(self) -> bool:
+        """Delegate destination selection to the production Watcher predicate.
+
+        Returns:
+            bool: Whether this fixture's existing Watcher destination is selected.
+        """
+        return MAIN.WatcherApp._watcher_connection_selected(self)
+
+
 def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     """Bind constructor-bypassed tests to the real bounded event dispatcher.
 
@@ -110,8 +151,12 @@ def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     Returns:
         None: Pump counters are initialized and production batch dispatch is bound.
     """
+    root = getattr(app, 'root', None)
+    if root is None:
+        root = mock.Mock()
+        app.root = root
     app._drain_running = False
-    app._drain_after_id = None
+    app._event_pump = TkEventPump(root)
     app._event_drain_last_count = 0
     app._event_drain_total_count = 0
     app._event_drain_yield_count = 0
@@ -152,7 +197,7 @@ def initialize_continuation_inspection_fixture(app: MAIN.WatcherApp) -> None:
     app._update_resume_cancelled = False
     app._update_resume_generation = 0
     app._update_resume_deadline = (
-        time.monotonic() + MAIN.UPDATE_CONTINUATION_LINK_SECONDS
+        time.monotonic() + UPDATE_CONTINUATION_LINK_SECONDS
     )
     app._gui_mode_ready = True
 
@@ -216,7 +261,7 @@ class WatcherContinuationTests(unittest.TestCase):
             reports_enabled=False,
         )
         self.plan.save()
-        MAIN.atomic_write_json(self.session_directory / "watch-drain.json", {
+        state_store.atomic_write_json(self.session_directory / "watch-drain.json", {
             "schema_version": 1,
             "folder": str(self.watch_folder),
             "recursive": False,
@@ -233,7 +278,7 @@ class WatcherContinuationTests(unittest.TestCase):
             binding=self.binding,
             profile_hash=WatcherContinuation.profile_digest(self.flight_root),
             source_version="1.0.0",
-            target_version=MAIN.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION,
             update_session="d" * 32,
             mode="legacy",
             contextual=False,
@@ -249,7 +294,7 @@ class WatcherContinuationTests(unittest.TestCase):
             tuple[MAIN.WatcherThread, queue.Queue[Any], list[Path]]: Unstarted
                 worker, its event queue and paths successfully dispatched.
         """
-        config = MAIN.WatcherConfig(
+        config = watcher_state.WatcherConfig(
             gallery_url="https://gallery.example.test",
             api_key="fixture-api-key",
             watched_folder=str(self.watch_folder),
@@ -259,9 +304,9 @@ class WatcherContinuationTests(unittest.TestCase):
             stable_seconds=0.0,
         )
         events: queue.Queue[Any] = queue.Queue()
-        with mock.patch.object(MAIN, "FileStabilityTracker") as stability_factory, \
-                mock.patch.object(MAIN, "RemoteInventorySession") as inventory_factory, \
-                mock.patch.object(MAIN, "SimConnectCameraClient") as simconnect_factory:
+        with mock.patch.object(watch_common, "FileStabilityTracker") as stability_factory, \
+                mock.patch.object(http_transport, "RemoteInventorySession") as inventory_factory, \
+                mock.patch.object(watcher_workers, "SimConnectCameraClient") as simconnect_factory:
             simconnect_factory.return_value.diagnostics_snapshot.return_value = {}
             worker = MAIN.WatcherThread(config, events)
         worker.stability = stability_factory.return_value
@@ -305,8 +350,8 @@ class WatcherContinuationTests(unittest.TestCase):
         Returns:
             None: Cancelled, mismatched and frozen candidates stay unoffered.
         """
-        binding = MAIN.connection_binding(
-            MAIN.normalize_upload_url('https://gallery.example.test'),
+        binding = connection_binding(
+            http_transport.normalize_upload_url('https://gallery.example.test'),
             'fixture-api-key',
         )
         self.plan = SessionPlan(
@@ -315,8 +360,8 @@ class WatcherContinuationTests(unittest.TestCase):
         )
         self.plan.save()
         record = replace(
-            self.record, binding=binding, source_version=MAIN.APP_VERSION,
-            target_version=MAIN.APP_VERSION, phase='prepared',
+            self.record, binding=binding, source_version=watcher_runtime.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION, phase='prepared',
         )
 
         def inspect_marker(
@@ -339,7 +384,7 @@ class WatcherContinuationTests(unittest.TestCase):
                 ),
             )
             queue_row['frozen'] = frozen
-            MAIN.atomic_write_json(
+            state_store.atomic_write_json(
                 self.session_directory / 'watch-drain.json', queue_row,
             )
             app = object.__new__(MAIN.WatcherApp)
@@ -360,9 +405,9 @@ class WatcherContinuationTests(unittest.TestCase):
                 gallery_url='https://gallery.example.test',
                 api_key='fixture-api-key',
             )
-            app.updates = SimpleNamespace(previous_version=MAIN.APP_VERSION)
+            app.updates = SimpleNamespace(previous_version=watcher_runtime.APP_VERSION)
             with mock.patch.object(
-                    MAIN.threading, 'Thread',
+                    watcher_workers.threading, 'Thread',
                     side_effect=lambda **kwargs: SimpleNamespace(
                         start=lambda: kwargs['target'](),
                     )):
@@ -394,10 +439,10 @@ class WatcherContinuationTests(unittest.TestCase):
             None: Both records carry the current version and a fresh nonce.
         """
         record = replace(
-            self.record, source_version=MAIN.APP_VERSION,
-            target_version=MAIN.APP_VERSION, update_session='',
-            binding=MAIN.connection_binding(
-                MAIN.normalize_upload_url('https://gallery.example.test'),
+            self.record, source_version=watcher_runtime.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION, update_session='',
+            binding=connection_binding(
+                http_transport.normalize_upload_url('https://gallery.example.test'),
                 'fixture-api-key',
             ),
             phase='preparing',
@@ -417,8 +462,8 @@ class WatcherContinuationTests(unittest.TestCase):
         ordinary = WatcherContinuation.load(self.lease, ordinary_restart=True)
         self.assertIsNotNone(primary)
         self.assertEqual(primary, ordinary)
-        self.assertEqual(MAIN.APP_VERSION, primary.source_version)
-        self.assertEqual(MAIN.APP_VERSION, primary.target_version)
+        self.assertEqual(watcher_runtime.APP_VERSION, primary.source_version)
+        self.assertEqual(watcher_runtime.APP_VERSION, primary.target_version)
         self.assertEqual('prepared', primary.phase)
         self.assertNotEqual('', primary.update_session)
         self.assertEqual('ordinary_restart_ready', app.events.get_nowait()['kind'])
@@ -464,8 +509,8 @@ class WatcherContinuationTests(unittest.TestCase):
                     FLIGHT_UI_MODULE.tk, 'BooleanVar', side_effect=variable,
                 ):
             restarted_flights = FlightUI(
-                host, self.flight_root, MAIN.normalize_upload_url,
-                MAIN.revoke_upload_key, MAIN.WatcherApp.resume_flight_photos,
+                host, self.flight_root, http_transport.normalize_upload_url,
+                http_transport.revoke_upload_key, MAIN.WatcherApp.resume_flight_photos,
             )
         self.lease = restarted_flights.lease
         self.assertIsNotNone(restarted_flights.lease)
@@ -485,7 +530,7 @@ class WatcherContinuationTests(unittest.TestCase):
         )))
 
         with mock.patch.object(
-                MAIN.threading, 'Thread',
+                watcher_workers.threading, 'Thread',
                 side_effect=lambda **kwargs: SimpleNamespace(
                     start=lambda: kwargs['target'](),
                 )):
@@ -503,13 +548,13 @@ class WatcherContinuationTests(unittest.TestCase):
             None: The host keeps the original session, binding and journal on
                 both sides of the helper, without a second confirmation.
         """
-        config = MAIN.WatcherConfig(
+        config = watcher_state.WatcherConfig(
             gallery_url='https://gallery.example.test',
             api_key='fixture-api-key',
             watched_folder=str(self.watch_folder),
         )
-        binding = MAIN.connection_binding(
-            MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+        binding = connection_binding(
+            http_transport.normalize_upload_url(config.gallery_url), config.api_key,
         )
         plan = replace(self.plan, binding=binding)
         plan.save()
@@ -517,7 +562,7 @@ class WatcherContinuationTests(unittest.TestCase):
         worker.stop_event.is_set.return_value = False
         worker.drain_event.is_set.return_value = False
         worker.is_alive.side_effect = (True, False, False, False)
-        app = SimpleNamespace(
+        app = WatcherRestartFixture(
             config=config,
             exiting=False,
             worker=worker,
@@ -544,16 +589,16 @@ class WatcherContinuationTests(unittest.TestCase):
         before = manifest.read_bytes()
         ticket_path = self.flight_root / 'update-ticket.json'
         ticket = SimpleNamespace(
-            session_id=self.record.update_session, target_version=MAIN.APP_VERSION,
+            session_id=self.record.update_session, target_version=watcher_runtime.APP_VERSION,
         )
         with (
             mock.patch(
                 'uploader.update_helper.load_ticket', return_value=ticket,
             ),
             mock.patch('uploader.update_helper.bind_capture_resume') as bind,
-            mock.patch.object(MAIN.messagebox, 'askyesno') as confirm,
+            mock.patch.object(watcher_runtime.messagebox, 'askyesno') as confirm,
         ):
-            with mock.patch.object(MAIN, 'APP_VERSION', self.record.source_version):
+            with mock.patch.object(watcher_runtime, 'APP_VERSION', self.record.source_version):
                 MAIN.WatcherApp.prepare_update_checkpoint(app, ticket.target_version)
             worker.request_update_pause.assert_called_once_with()
             MAIN.WatcherApp.wait_for_update_checkpoint(app)
@@ -581,8 +626,8 @@ class WatcherContinuationTests(unittest.TestCase):
                 keeps the gate closed and dispatches no accepted photograph.
         """
         record = replace(
-            self.record, source_version=MAIN.APP_VERSION,
-            target_version=MAIN.APP_VERSION,
+            self.record, source_version=watcher_runtime.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION,
         )
         record.save(self.lease)
         record.save(self.lease, ordinary_restart=True)
@@ -638,8 +683,8 @@ class WatcherContinuationTests(unittest.TestCase):
         """
         gallery_url = "https://gallery.example.test"
         api_key = "fixture-api-key"
-        binding = MAIN.connection_binding(
-            MAIN.normalize_upload_url(gallery_url), api_key,
+        binding = connection_binding(
+            http_transport.normalize_upload_url(gallery_url), api_key,
         )
         plan = replace(self.plan, binding=binding)
         plan.save()
@@ -648,10 +693,10 @@ class WatcherContinuationTests(unittest.TestCase):
         )
         record.save(self.lease)
         manifest_path = self.session_directory / "watch-drain.json"
-        row = MAIN.read_document(manifest_path)
+        row = read_document(manifest_path)
         row["folder"] = str(self.watch_folder).replace("\\", "/")
-        MAIN.atomic_write_json(manifest_path, row)
-        config = MAIN.WatcherConfig(
+        state_store.atomic_write_json(manifest_path, row)
+        config = watcher_state.WatcherConfig(
             gallery_url=gallery_url,
             api_key=api_key,
             watched_folder=str(self.watch_folder),
@@ -659,8 +704,8 @@ class WatcherContinuationTests(unittest.TestCase):
             delete_uploaded_files=False,
         )
         config._snapshot_token = object()
-        identity = MAIN.normalize_upload_url(gallery_url)
-        saved_recorder = MAIN.FlightRecorder(
+        identity = http_transport.normalize_upload_url(gallery_url)
+        saved_recorder = FlightRecorder(
             self.flight_root, identity, config.simconnect_dll_path,
             lambda _level, _message: None, _session_id=self.session_id,
         )
@@ -704,10 +749,10 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN, "FileStabilityTracker"), \
-                mock.patch.object(MAIN, "RemoteInventorySession"), \
-                mock.patch.object(MAIN, "SimConnectCameraClient") as simconnect_factory, \
-                mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread):
+        with mock.patch.object(watch_common, "FileStabilityTracker"), \
+                mock.patch.object(http_transport, "RemoteInventorySession"), \
+                mock.patch.object(watcher_workers, "SimConnectCameraClient") as simconnect_factory, \
+                mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread):
             simconnect_factory.return_value.diagnostics_snapshot.return_value = {}
             self.assertTrue(MAIN.WatcherApp._prepare_update_resume(app, None))
 
@@ -757,7 +802,7 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual(self.session_directory, recorder.directory)
         self.assertEqual(
             [str(self.historical_photo)],
-            MAIN.read_document(manifest_path)["initial"],
+            read_document(manifest_path)["initial"],
         )
 
     def test_host_preparation_failure_diagnostic_omits_exception_text(self) -> None:
@@ -769,7 +814,7 @@ class WatcherContinuationTests(unittest.TestCase):
         """
         gallery_url = "https://gallery.example.test"
         api_key = "fixture-api-key"
-        config = MAIN.WatcherConfig(
+        config = watcher_state.WatcherConfig(
             gallery_url=gallery_url,
             api_key=api_key,
             watched_folder=str(self.watch_folder),
@@ -809,8 +854,8 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread), \
-                mock.patch.object(MAIN, "read_document", side_effect=RuntimeError(secret)):
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread), \
+                mock.patch.object(watcher_updates, "read_document", side_effect=RuntimeError(secret)):
             self.assertTrue(MAIN.WatcherApp._prepare_update_resume(app, None))
 
         diagnostic = app.events.get_nowait()
@@ -861,7 +906,7 @@ class WatcherContinuationTests(unittest.TestCase):
         worker.start()
         wait_for_event_kind(events, "watcher_start_ready")
         worker.upload_watched_file.assert_not_called()
-        before = MAIN.read_document(self.session_directory / "watch-drain.json")
+        before = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], before["pending"])
         self.assertEqual([str(self.historical_photo)], before["initial"])
 
@@ -875,7 +920,7 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertCountEqual([self.pending_photo, new_photo], dispatched)
         self.assertNotIn(self.historical_photo, dispatched)
-        final_queue = MAIN.read_document(self.session_directory / "watch-drain.json")
+        final_queue = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([], final_queue["pending"])
         self.assertEqual([str(self.historical_photo)], final_queue["initial"])
         self.assertEqual(self.session_id, SessionPlan.load(self.session_directory).session_id)
@@ -888,7 +933,7 @@ class WatcherContinuationTests(unittest.TestCase):
                 exact accepted pending path without freezing its boundary.
         """
         with mock.patch.object(
-            MAIN, "WATCHER_CONTINUATION_ADMISSION_TIMEOUT_SECONDS",
+            watcher_workers, "WATCHER_CONTINUATION_ADMISSION_TIMEOUT_SECONDS",
             TEST_GATE_TIMEOUT_SECONDS,
         ):
             worker, events, dispatched = self.make_watcher()
@@ -898,12 +943,12 @@ class WatcherContinuationTests(unittest.TestCase):
             worker.join(TEST_WORKER_JOIN_SECONDS)
         self.assertEqual([], dispatched)
         self.assertIn("confirmation timed out", worker.drain_error)
-        timed_out = MAIN.read_document(self.session_directory / "watch-drain.json")
+        timed_out = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], timed_out["pending"])
         self.assertFalse(timed_out["frozen"])
 
         timed_out["error"] = ""
-        MAIN.atomic_write_json(
+        state_store.atomic_write_json(
             self.session_directory / "watch-drain.json", timed_out,
         )
         self.record.save(self.lease)
@@ -914,7 +959,7 @@ class WatcherContinuationTests(unittest.TestCase):
         wait_for_event_kind(stopped_events, "watcher_start_finished")
         stopped_worker.join(TEST_WORKER_JOIN_SECONDS)
         self.assertEqual([], stopped_dispatch)
-        retained = MAIN.read_document(self.session_directory / "watch-drain.json")
+        retained = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], retained["pending"])
         self.assertFalse(retained["frozen"])
 
@@ -925,16 +970,16 @@ class WatcherContinuationTests(unittest.TestCase):
             None: A newly constructed normal watcher has no gate to wait for or
                 release, so its existing startup contract remains unchanged.
         """
-        config = MAIN.WatcherConfig(
+        config = watcher_state.WatcherConfig(
             gallery_url="https://gallery.example.test",
             api_key="fixture-api-key",
             watched_folder=str(self.watch_folder),
             watch_recursive=False,
             delete_uploaded_files=False,
         )
-        with mock.patch.object(MAIN, "FileStabilityTracker"), \
-                mock.patch.object(MAIN, "RemoteInventorySession"), \
-                mock.patch.object(MAIN, "SimConnectCameraClient") as simconnect:
+        with mock.patch.object(watch_common, "FileStabilityTracker"), \
+                mock.patch.object(http_transport, "RemoteInventorySession"), \
+                mock.patch.object(watcher_workers, "SimConnectCameraClient") as simconnect:
             simconnect.return_value.diagnostics_snapshot.return_value = {}
             worker = MAIN.WatcherThread(config, queue.Queue())
         self.assertIsNone(worker._continuation_gate)
@@ -962,7 +1007,7 @@ class WatcherContinuationTests(unittest.TestCase):
         worker.join(TEST_WORKER_JOIN_SECONDS)
         self.assertEqual([], dispatched)
         self.assertEqual("claimed", WatcherContinuation.load(self.lease).phase)
-        retained = MAIN.read_document(self.session_directory / "watch-drain.json")
+        retained = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], retained["pending"])
 
     def test_stop_during_consumption_save_keeps_claimed_marker_and_closed_gate(self) -> None:
@@ -1011,7 +1056,7 @@ class WatcherContinuationTests(unittest.TestCase):
         wait_for_event_kind(events, "watcher_start_finished")
         worker.join(TEST_WORKER_JOIN_SECONDS)
         self.assertEqual([], dispatched)
-        retained = MAIN.read_document(self.session_directory / "watch-drain.json")
+        retained = read_document(self.session_directory / "watch-drain.json")
         self.assertIn("confirmation timed out", retained["error"])
         self.assertEqual([str(self.pending_photo)], retained["pending"])
 
@@ -1059,7 +1104,7 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread):
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread):
             MAIN.WatcherApp._start_prepared_update_resume(
                 app, replace(self.record, update_session="e" * 32),
                 worker, recorder, target,
@@ -1115,7 +1160,7 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread):
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread):
             MAIN.WatcherApp._update_resume_failed(
                 app, "saved_session_needs_review",
             )
@@ -1182,7 +1227,7 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread):
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread):
             MAIN.WatcherApp._accept_update_resume_target(app, new_target)
 
         self.assertIs(old_target, app._update_resume_context_target)
@@ -1296,7 +1341,7 @@ class WatcherContinuationTests(unittest.TestCase):
         MAIN.WatcherApp._discard_update_resume_intent(app)
         self.assertEqual("cancelled", WatcherContinuation.load(self.lease).phase)
         self.assertFalse(app._resume_retry_available)
-        retained = MAIN.read_document(self.session_directory / "watch-drain.json")
+        retained = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], retained["pending"])
         marker = json.loads(
             (self.flight_root / "watcher-continuation.json").read_text(
@@ -1315,8 +1360,8 @@ class WatcherContinuationTests(unittest.TestCase):
         """
         gallery_url = "https://gallery.example.test"
         api_key = "fixture-api-key"
-        binding = MAIN.connection_binding(
-            MAIN.normalize_upload_url(gallery_url), api_key,
+        binding = connection_binding(
+            http_transport.normalize_upload_url(gallery_url), api_key,
         )
         offered = replace(
             self.record, binding=binding, mode="legacy", phase="prepared",
@@ -1339,7 +1384,7 @@ class WatcherContinuationTests(unittest.TestCase):
 
         self.assertEqual("cancelled", WatcherContinuation.load(self.lease).phase)
         self.assertTrue(self.pending_photo.is_file())
-        retained = MAIN.read_document(self.session_directory / "watch-drain.json")
+        retained = read_document(self.session_directory / "watch-drain.json")
         self.assertEqual([str(self.pending_photo)], retained["pending"])
 
         offered.save(self.lease)
@@ -1383,7 +1428,7 @@ class WatcherContinuationTests(unittest.TestCase):
 
         changed_profile = self.record.payload()
         changed_profile["profile_hash"] = "b" * 64
-        MAIN.atomic_write_json(
+        state_store.atomic_write_json(
             self.flight_root / "watcher-continuation.json", changed_profile,
         )
         app = object.__new__(MAIN.WatcherApp)
@@ -1418,7 +1463,7 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(app.events.empty())
         app._gui_mode_ready = True
         with mock.patch.object(
-                MAIN.threading, "Thread",
+                watcher_workers.threading, "Thread",
                 side_effect=lambda **kwargs: SimpleNamespace(
                     start=lambda: kwargs["target"](),
                 )):
@@ -1442,11 +1487,11 @@ class WatcherContinuationTests(unittest.TestCase):
         app.events = queue.Queue()
         app.exiting = False
         app.flights = SimpleNamespace(lease=self.lease)
-        app.updates = SimpleNamespace(previous_version=MAIN.APP_VERSION)
+        app.updates = SimpleNamespace(previous_version=watcher_runtime.APP_VERSION)
         app._continue_update_resume = mock.Mock()
 
-        with (mock.patch.object(MAIN.WatcherContinuation, 'load', return_value=None),
-              mock.patch.object(MAIN.update_helper, 'find_legacy_update_ticket', return_value=None)):
+        with (mock.patch.object(WatcherContinuation, 'load', return_value=None),
+              mock.patch.object(update_helper, 'find_legacy_update_ticket', return_value=None)):
             MAIN.WatcherApp._inspect_update_continuation(app)
             completion = wait_for_event_kind(app.events, 'watcher_resume_inspection_no_offer')
         self.assertTrue(app._update_resume_inspecting)
@@ -1464,14 +1509,14 @@ class WatcherContinuationTests(unittest.TestCase):
         """
         gallery_url = 'https://gallery.example.test'
         api_key = 'fixture-api-key'
-        binding = MAIN.connection_binding(
-            MAIN.normalize_upload_url(gallery_url), api_key,
+        binding = connection_binding(
+            http_transport.normalize_upload_url(gallery_url), api_key,
         )
         plan = replace(self.plan, binding=binding)
         plan.save()
         record = replace(
-            self.record, binding=binding, source_version=MAIN.APP_VERSION,
-            target_version=MAIN.APP_VERSION, phase='prepared',
+            self.record, binding=binding, source_version=watcher_runtime.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION, phase='prepared',
         )
         record.save(self.lease)
         record.save(self.lease, ordinary_restart=True)
@@ -1526,7 +1571,7 @@ class WatcherContinuationTests(unittest.TestCase):
                 WatcherContinuation, 'load',
                 classmethod(read_after_one_failure),
         ), mock.patch.object(
-                MAIN.threading, 'Thread',
+                watcher_workers.threading, 'Thread',
                 side_effect=lambda **kwargs: SimpleNamespace(
                     start=lambda: kwargs['target'](),
                 )):
@@ -1546,7 +1591,7 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(app._update_resume_attempted)
         self.assertEqual(record, app._resume_continuation)
         app._continue_update_resume.assert_called_once_with()
-        self.assertEqual([str(self.pending_photo)], MAIN.read_document(
+        self.assertEqual([str(self.pending_photo)], read_document(
             self.session_directory / 'watch-drain.json',
         )['pending'])
 
@@ -1588,10 +1633,10 @@ class WatcherContinuationTests(unittest.TestCase):
                 photographs remain and a prior-generation offer is ignored.
         """
         record = replace(
-            self.record, source_version=MAIN.APP_VERSION,
-            target_version=MAIN.APP_VERSION, phase='prepared',
-            binding=MAIN.connection_binding(
-                MAIN.normalize_upload_url('https://gallery.example.test'),
+            self.record, source_version=watcher_runtime.APP_VERSION,
+            target_version=watcher_runtime.APP_VERSION, phase='prepared',
+            binding=connection_binding(
+                http_transport.normalize_upload_url('https://gallery.example.test'),
                 'fixture-api-key',
             ),
         )
@@ -1706,11 +1751,11 @@ class WatcherContinuationTests(unittest.TestCase):
             None: A canonical nonce is parsed; malformed and mixed modes exit.
         """
         nonce = "f" * 32
-        self.assertEqual(nonce, MAIN.parse_args(["--after-update", nonce]).after_update)
+        self.assertEqual(nonce, launcher.parse_args(["--after-update", nonce]).after_update)
         with self.assertRaises(SystemExit):
-            MAIN.parse_args(["--after-update", "not-a-nonce"])
+            launcher.parse_args(["--after-update", "not-a-nonce"])
         with self.assertRaises(SystemExit):
-            MAIN.parse_args(["--once", "--after-update", nonce])
+            launcher.parse_args(["--once", "--after-update", nonce])
 
     def test_legacy_bridge_waits_for_explicit_resume_but_nonce_is_automatic(self) -> None:
         """Only old-helper intent needs confirmation after restart.
@@ -1823,7 +1868,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app._update_resume_failed = mock.Mock()
         app.events = queue.Queue()
 
-        with mock.patch.object(MAIN.threading, "Thread") as thread_factory:
+        with mock.patch.object(watcher_workers.threading, "Thread") as thread_factory:
             MAIN.WatcherApp._continue_update_resume(app)
 
         app.linking_manager.resume_upload_session.assert_called_once_with(
@@ -1895,9 +1940,9 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread), \
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread), \
                 mock.patch.object(
-                    MAIN, "verify_linked_upload_target", return_value=target,
+                    watcher_updates, "verify_linked_upload_target", return_value=target,
                 ) as verify_target:
             MAIN.WatcherApp._continue_update_resume(app)
 
@@ -1966,9 +2011,9 @@ class WatcherContinuationTests(unittest.TestCase):
             """
             return SimpleNamespace(start=target)
 
-        with mock.patch.object(MAIN.threading, "Thread", side_effect=inline_thread), \
+        with mock.patch.object(watcher_workers.threading, "Thread", side_effect=inline_thread), \
                 mock.patch.object(
-                    MAIN, "verify_linked_upload_target",
+                    watcher_updates, "verify_linked_upload_target",
                     side_effect=RuntimeError("secret token and gallery URL"),
                 ) as verify_target:
             MAIN.WatcherApp._continue_update_resume(app)
@@ -2049,9 +2094,9 @@ class WatcherContinuationTests(unittest.TestCase):
             'linking', 'app_linking_galleries', 503, 'other', 'http_status',
         )
         with mock.patch.object(
-                MAIN.threading, "Thread", side_effect=inline_thread), \
+                watcher_workers.threading, "Thread", side_effect=inline_thread), \
                 mock.patch.object(
-                    MAIN, "verify_linked_upload_target",
+                    watcher_updates, "verify_linked_upload_target",
                     side_effect=temporary_error,
                 ):
             MAIN.WatcherApp._continue_update_resume(app)
@@ -2069,7 +2114,7 @@ class WatcherContinuationTests(unittest.TestCase):
         MAIN.WatcherApp._drain_event_batch(app)
         self.assertFalse(app._update_resume_preparing)
         self.assertEqual(
-            MAIN.UPDATE_CONTINUATION_TARGET_RETRY_MS,
+            UPDATE_CONTINUATION_TARGET_RETRY_MS,
             app.root.after.call_args.args[0],
         )
         self.assertTrue(self.pending_photo.is_file())
@@ -2132,9 +2177,9 @@ class WatcherContinuationTests(unittest.TestCase):
             'linking', 'app_linking_galleries', 403, 'json', 'http_status',
         )
         with mock.patch.object(
-                MAIN.threading, "Thread", side_effect=inline_thread), \
+                watcher_workers.threading, "Thread", side_effect=inline_thread), \
                 mock.patch.object(
-                    MAIN, "verify_linked_upload_target", side_effect=revoked,
+                    watcher_updates, "verify_linked_upload_target", side_effect=revoked,
                 ):
             MAIN.WatcherApp._continue_update_resume(app)
 
@@ -2177,7 +2222,7 @@ class WatcherContinuationTests(unittest.TestCase):
         callback = mock.Mock()
         journal_path = self.session_directory / 'watch-drain.json'
         journal_path.unlink()
-        journal = MAIN.WatchQueueStore(
+        journal = watch_queue.WatchQueueStore(
             journal_path, self.binding, self.watch_folder, False, scope=UPLOAD_SCOPE,
         )
         journal.initialize([])
@@ -2185,13 +2230,13 @@ class WatcherContinuationTests(unittest.TestCase):
         self.pending_photo.unlink()
         self.pending_photo.write_bytes(b'accepted before the update')
         admitted = journal.reconcile([
-            MAIN.observe_watch_source(self.pending_photo, time.time()),
+            watch_queue.observe_watch_source(self.pending_photo, time.time()),
         ])
         self.assertEqual(1, admitted)
         original = journal_path.read_bytes()
-        pipeline = MAIN.UploadPipelineLease(config_root)
+        pipeline = linked_upload.UploadPipelineLease(config_root)
 
-        with mock.patch.object(MAIN, 'CONFIG_DIR', config_root):
+        with mock.patch.object(watcher_state, 'CONFIG_DIR', config_root):
             pipeline.acquire()
             try:
                 app.close_retained_watch(self.plan, callback)
@@ -2281,7 +2326,7 @@ class WatcherContinuationTests(unittest.TestCase):
                     return target
 
                 callback = mock.Mock()
-                with mock.patch.object(MAIN, 'verify_linked_upload_target', side_effect=verified):
+                with mock.patch.object(watcher_photos, 'verify_linked_upload_target', side_effect=verified):
                     app.restore_capture_upload_target(binding, callback)
                     self.assertTrue(entered.wait(TEST_EVENT_WAIT_SECONDS))
                     callback.assert_not_called()
@@ -2381,7 +2426,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app = object.__new__(MAIN.WatcherApp)
         app.root = mock.Mock()
         app.root.tk.call.return_value = "8.6.15"
-        app.config = MAIN.WatcherConfig()
+        app.config = watcher_state.WatcherConfig()
         app.root.clipboard_clear = mock.Mock()
         app.root.clipboard_append = mock.Mock()
         app.current_job = None
@@ -2458,20 +2503,20 @@ class WatcherContinuationTests(unittest.TestCase):
         app.ai_activity_var = SimpleNamespace(get=lambda: "AI: stopped")
         app.write_log = mock.Mock()
         error_marker = 'private-response-fixture'
-        response = MAIN.LinkingResponseError(
+        response = LinkingResponseError(
             'linking', 'app_linking_identity', 403, 'json', 'http_status',
         )
         response.args = (f'token={error_marker}',)
         with self.assertLogs(level='INFO') as records:
-            MAIN.WatcherApp.write_log(app, MAIN.format_watch_recovery_diagnostic(
+            MAIN.WatcherApp.write_log(app, diagnostics.format_watch_recovery_diagnostic(
                 'target', 'gallery_verification_failed', error=response,
             ), 'warning')
-            MAIN.WatcherApp.write_log(app, MAIN.format_watch_recovery_diagnostic(
+            MAIN.WatcherApp.write_log(app, diagnostics.format_watch_recovery_diagnostic(
                 'inspect', 'retained_queue_read', sessions=1, pending=2,
             ), 'info')
         self.assertNotIn(error_marker, '\n'.join(records.output))
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(
-            MAIN, "LOG_PATH", Path(directory) / "absent.log",
+            watcher_state, "LOG_PATH", Path(directory) / "absent.log",
         ):
             MAIN.WatcherApp.copy_diagnostics(app)
         copied = app.root.clipboard_append.call_args.args[0]
@@ -2558,10 +2603,10 @@ class WatcherFactoryResetTests(unittest.TestCase):
         self.profile_root = Path(temporary)
         self.lease = WorkspaceLease(self.profile_root / 'flights')
         self.addCleanup(self.lease.release)
-        self.enterContext(mock.patch.object(MAIN, 'CONFIG_DIR', self.profile_root))
+        self.enterContext(mock.patch.object(watcher_state, 'CONFIG_DIR', self.profile_root))
         self.app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
         app = self.app
-        app.config = MAIN.WatcherConfig(watched_folder='old screenshots', watch_recursive=True)
+        app.config = watcher_state.WatcherConfig(watched_folder='old screenshots', watch_recursive=True)
         app.worker = None
         app._watcher_profile = None
         app._watcher_profile_invalid = False
@@ -2616,7 +2661,7 @@ class WatcherFactoryResetTests(unittest.TestCase):
         Returns:
             None: Verifies the warning and the absence of reset effects.
         """
-        with mock.patch.object(MAIN.messagebox, 'askyesno', return_value=False) as confirm:
+        with mock.patch.object(watcher_runtime.messagebox, 'askyesno', return_value=False) as confirm:
             self.app.request_watcher_reset()
         self.assertEqual('no', confirm.call_args.kwargs['default'])
         self.assertIn('logs', confirm.call_args.args[1])
@@ -2659,7 +2704,7 @@ class WatcherFactoryResetTests(unittest.TestCase):
         worker._transport_active.set()
         with (
             mock.patch.object(worker, 'is_alive', return_value=True) as is_alive,
-            mock.patch.object(MAIN.messagebox, 'askyesno', return_value=True),
+            mock.patch.object(watcher_runtime.messagebox, 'askyesno', return_value=True),
         ):
             app.request_watcher_reset()
             self.assertTrue(worker.stop_event.is_set())
@@ -2758,16 +2803,16 @@ class WatcherFactoryResetTests(unittest.TestCase):
             update_pause_event=threading.Event(), _recovery_review_only=False,
             _force_finish_requested=threading.Event(), linked_target=None,
             _gui_admission=(owner, port),
-            config=MAIN.WatcherConfig(
+            config=watcher_state.WatcherConfig(
                 gallery_url="https://gallery.test", api_key="worker-key",
             ),
         )
         app.worker = worker
         self.assertIsNone(app.watched_report_target())
         worker.initial_captured = True
-        url = MAIN.normalize_upload_url(worker.config.gallery_url)
+        url = http_transport.normalize_upload_url(worker.config.gallery_url)
         app._verified_legacy_gallery = (
-            object(), MAIN.connection_binding(url, "worker-key"),
+            object(), connection_binding(url, "worker-key"),
             "Flights/Current", "Current flights",
         )
         legacy = app.watched_report_target()
@@ -2800,13 +2845,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             mode.view.return_value.record = None
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
-                capture = MAIN.DesktopCapture(
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
+                capture = watcher_desktop.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
                 worker = SimpleNamespace(
@@ -2837,12 +2882,12 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
         for stale in (False, True):
             with self.subTest(stale=stale), tempfile.TemporaryDirectory() as folder:
                 profile = Path(folder)
-                store = MAIN.ConfigStore(profile / 'config.json')
+                store = watcher_state.ConfigStore(profile / 'config.json')
                 config = store.load()
                 config.gallery_url = 'https://capture-revoke.example.test/index.php'
                 config.api_key = 'synthetic revoke credential'
                 store.save(config)
-                mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+                mode = mock.MagicMock(spec=GuiModeOwner)
                 mode.view.return_value.state = 'legacy'
                 ticket = mock.Mock()
                 ticket.kind = 'legacy_revoke'
@@ -2850,12 +2895,12 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                 mode.save.side_effect = lambda save, **_options: save()
                 positive = {'ok': True, 'action': 'revoke'}
                 with (
-                    mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                    mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
-                    mock.patch.object(MAIN, 'revoke_upload_key', return_value=positive) as revoke,
+                    mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                    mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
+                    mock.patch.object(watcher_desktop, 'revoke_upload_key', return_value=positive) as revoke,
                 ):
-                    desktop = MAIN.DesktopConfiguration(store, config, mode)
-                    capture = MAIN.DesktopCapture(
+                    desktop = watcher_configuration.DesktopConfiguration(store, config, mode)
+                    capture = watcher_desktop.DesktopCapture(
                         store, desktop.current, mode, desktop.active,
                         persist_revoked_config=desktop.persist_revoked_config,
                     )
@@ -2907,13 +2952,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             session = flight_root / session_id
             session.mkdir(parents=True)
             config_root = profile / 'config.json'
-            store = MAIN.ConfigStore(config_root)
+            store = watcher_state.ConfigStore(config_root)
             config = store.load()
             config.gallery_url = 'https://capture-abandon.example.test/index.php'
             config.api_key = 'synthetic abandon credential'
             store.save(config)
-            binding = MAIN.connection_binding(
-                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            binding = connection_binding(
+                http_transport.normalize_upload_url(config.gallery_url), config.api_key,
             )
             plan = SessionPlan(
                 directory=session, binding=binding, languages=(),
@@ -2924,22 +2969,22 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             screenshots.mkdir()
             original = screenshots / 'kept.png'
             original.write_bytes(b'synthetic retained original')
-            journal = MAIN.WatchQueueStore(
+            journal = watch_queue.WatchQueueStore(
                 session / 'watch-drain.json', binding, screenshots, False,
             )
             journal.initialize([])
             journal.reconcile([
-                MAIN.observe_watch_source(original, time.time()),
+                watch_queue.observe_watch_source(original, time.time()),
             ])
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             mode.save.side_effect = lambda save, **_options: save()
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
             ):
-                desktop = MAIN.DesktopConfiguration(store, config, mode)
-                capture = MAIN.DesktopCapture(
+                desktop = watcher_configuration.DesktopConfiguration(store, config, mode)
+                capture = watcher_desktop.DesktopCapture(
                     store, desktop.current, mode, desktop.active,
                     persist_abandoned_config=lambda proposed, captured: (
                         desktop.persist_abandoned_config(proposed, captured)
@@ -2954,13 +2999,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                     terminal = SessionPlan.load(session)
                     self.assertTrue(terminal.completed)
                     self.assertTrue(terminal.abandoned)
-                    queue_row = MAIN.WatchQueueStore.read_journal(
+                    queue_row = watch_queue.WatchQueueStore.read_journal(
                         session / 'watch-drain.json',
                     )
                     self.assertTrue(queue_row['force_finished'])
                     self.assertEqual([str(original)], queue_row['pending'])
                     self.assertEqual(b'synthetic retained original', original.read_bytes())
-                    saved = MAIN.ConfigStore(config_root).load(read_only=True)
+                    saved = watcher_state.ConfigStore(config_root).load(read_only=True)
                     self.assertEqual('synthetic abandon credential', saved.api_key)
                     self.assertTrue(capture.snapshot().abandon_cleanup_pending)
                     self.assertTrue(capture.complete_legacy_abandon())
@@ -2983,13 +3028,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             session_id = 'f' * 32
             session = flight_root / session_id
             session.mkdir(parents=True)
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
             config.gallery_url = 'https://capture-force-finish.example.test/index.php'
             config.api_key = 'synthetic force-finish credential'
             store.save(config)
-            binding = MAIN.connection_binding(
-                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            binding = connection_binding(
+                http_transport.normalize_upload_url(config.gallery_url), config.api_key,
             )
             plan = SessionPlan(
                 directory=session, binding=binding, languages=(),
@@ -3000,14 +3045,14 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             screenshots.mkdir()
             original = screenshots / 'accepted.png'
             original.write_bytes(b'accepted before force finish')
-            journal = MAIN.WatchQueueStore(
+            journal = watch_queue.WatchQueueStore(
                 session / 'watch-drain.json', binding, screenshots, False,
             )
             journal.initialize([])
             journal.reconcile([
-                MAIN.observe_watch_source(original, time.time()),
+                watch_queue.observe_watch_source(original, time.time()),
             ])
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             entered = threading.Event()
 
@@ -3053,10 +3098,10 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             active_worker._force_finish_publication_done.set()
             active_worker._transport_active.set()
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
             ):
-                capture = MAIN.DesktopCapture(
+                capture = watcher_desktop.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
                 capture.lease = WorkspaceLease(flight_root)
@@ -3076,7 +3121,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                     saved_plan = SessionPlan.load(session)
                     self.assertTrue(saved_plan.completed)
                     self.assertTrue(saved_plan.abandoned)
-                    saved_queue = MAIN.WatchQueueStore.read_journal(
+                    saved_queue = watch_queue.WatchQueueStore.read_journal(
                         session / 'watch-drain.json',
                     )
                     self.assertTrue(saved_queue['force_finished'])
@@ -3121,7 +3166,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                 mode='linked', issuer=issuer, account_id=account_id,
                 gallery_id=gallery_id, scope=UPLOAD_SCOPE,
             )
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value = SimpleNamespace(
                 state='linked_active', record=mode_record,
             )
@@ -3130,14 +3175,14 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                 reports_enabled=False,
             )
             plan.save()
-            journal = MAIN.WatchQueueStore(
+            journal = watch_queue.WatchQueueStore(
                 session / 'watch-drain.json', binding, watch_folder, False,
             )
             journal.initialize([])
             journal.reconcile([
-                MAIN.observe_watch_source(original, time.time()),
+                watch_queue.observe_watch_source(original, time.time()),
             ])
-            target_lease = MAIN.LinkedTargetLease(profile, binding)
+            target_lease = linked_upload.LinkedTargetLease(profile, binding)
             target_lease.acquire()
             entered = threading.Event()
 
@@ -3184,13 +3229,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             )
             active_worker._force_finish_publication_done.set()
             active_worker._transport_active.set()
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
             ):
-                capture = MAIN.DesktopCapture(
+                capture = watcher_desktop.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
                 capture.lease = WorkspaceLease(flight_root)
@@ -3231,7 +3276,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                     saved_plan = SessionPlan.load(session)
                     self.assertTrue(saved_plan.completed)
                     self.assertTrue(saved_plan.abandoned)
-                    saved_queue = MAIN.WatchQueueStore.read_journal(
+                    saved_queue = watch_queue.WatchQueueStore.read_journal(
                         session / 'watch-drain.json',
                     )
                     self.assertTrue(saved_queue['force_finished'])
@@ -3257,9 +3302,9 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             session_id = 'd' * 32
             session = flight_root / session_id
             session.mkdir(parents=True)
-            recorder = MAIN.FlightRecorder(
+            recorder = FlightRecorder(
                 flight_root,
-                MAIN.normalize_upload_url(
+                http_transport.normalize_upload_url(
                     'https://capture-analysis.example.test/index.php',
                 ),
                 '',
@@ -3267,7 +3312,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                 _session_id=session_id,
             )
             recorder._checkpoint()
-            resumed_recorder = MAIN.FlightRecorder.from_session(
+            resumed_recorder = FlightRecorder.from_session(
                 session, recorder.gallery_identity, '',
                 lambda _level, _message: None,
             )
@@ -3276,25 +3321,25 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             watch_folder.mkdir()
             original = watch_folder / 'report-in-progress.png'
             original.write_bytes(b'report ownership remains with finalizer')
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
             config.gallery_url = 'https://capture-analysis.example.test/index.php'
             config.api_key = 'synthetic analysis barrier credential'
             store.save(config)
-            binding = MAIN.connection_binding(
-                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            binding = connection_binding(
+                http_transport.normalize_upload_url(config.gallery_url), config.api_key,
             )
             plan = SessionPlan(
                 directory=session, binding=binding, languages=(),
                 reports_enabled=False,
             )
             plan.save()
-            journal = MAIN.WatchQueueStore(
+            journal = watch_queue.WatchQueueStore(
                 session / 'watch-drain.json', binding, watch_folder, False,
             )
             journal.initialize([])
             journal.reconcile([
-                MAIN.observe_watch_source(original, time.time()),
+                watch_queue.observe_watch_source(original, time.time()),
             ])
             report_entered = threading.Event()
             release_report = threading.Event()
@@ -3331,7 +3376,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                 finish_plan(plan_row)
 
             operation.finish_plan = hold_report
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             active_worker = SimpleNamespace(
                 is_alive=mock.Mock(return_value=True),
@@ -3358,10 +3403,10 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             active_worker._force_finish_publication_done.set()
             active_worker._transport_active.set()
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
             ):
-                capture = MAIN.DesktopCapture(
+                capture = watcher_desktop.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
                 capture.lease = WorkspaceLease(flight_root)
@@ -3410,13 +3455,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
             flight_root = profile / 'flights'
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
             config.gallery_url = 'https://capture-empty-finish.example.test/index.php'
             config.api_key = 'synthetic empty-queue credential'
             store.save(config)
-            binding = MAIN.connection_binding(
-                MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+            binding = connection_binding(
+                http_transport.normalize_upload_url(config.gallery_url), config.api_key,
             )
             screenshots = profile / 'screenshots'
             screenshots.mkdir()
@@ -3429,7 +3474,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                     reports_enabled=False,
                 )
                 plan.save()
-                journal = MAIN.WatchQueueStore(
+                journal = watch_queue.WatchQueueStore(
                     session / 'watch-drain.json', binding, screenshots, False,
                 )
                 journal.initialize([])
@@ -3454,13 +3499,13 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
             operation = FinalizationWorker(
                 plans, '', '', wait_for_worker, lambda: None, False,
             )
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'STATE_PATH', profile / 'state.json'),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_state, 'STATE_PATH', profile / 'state.json'),
             ):
-                capture = MAIN.DesktopCapture(
+                capture = watcher_desktop.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
                 capture.lease = WorkspaceLease(flight_root)
@@ -3475,7 +3520,7 @@ class DesktopCaptureRevocationTests(unittest.TestCase):
                         saved_plan = SessionPlan.load(plan.directory)
                         self.assertTrue(saved_plan.completed)
                         self.assertTrue(saved_plan.abandoned)
-                        saved_queue = MAIN.WatchQueueStore.read_journal(
+                        saved_queue = watch_queue.WatchQueueStore.read_journal(
                             plan.directory / 'watch-drain.json',
                         )
                         self.assertTrue(saved_queue['force_finished'])
@@ -3496,18 +3541,18 @@ class DesktopCaptureUtcPreferenceTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder)
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
+            mode = mock.MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             mode.save.side_effect = lambda save, **_options: save()
-            desktop = MAIN.DesktopConfiguration(store, config, mode)
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
-                capture = MAIN.DesktopCapture(
+            desktop = watcher_configuration.DesktopConfiguration(store, config, mode)
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
+                capture = watcher_desktop.DesktopCapture(
                     store, desktop.current, mode, desktop.active,
                     persist_watcher_config=desktop.save_watcher_preference,
                 )
-                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus())
+                capture.snapshot = mock.Mock(return_value=CaptureStatus())
                 capture.utc = mock.Mock()
                 self.assertTrue(capture.set_utc_sync(True))
                 self.assertTrue(store.load().sync_utc_time)
@@ -3533,18 +3578,18 @@ class DesktopCaptureUtcPreferenceTests(unittest.TestCase):
             lease = WorkspaceLease(flight_root)
             WatcherProfile(False, '', preferences).save(lease)
             lease.release()
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
-                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+            mode = mock.MagicMock(spec=GuiModeOwner)
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
+                capture = watcher_desktop.DesktopCapture(store, lambda: config, mode, lambda: None)
                 worker = SimpleNamespace(
                     config=SimpleNamespace(simconnect_dll_path='captured.dll'),
                     stop_event=threading.Event(), drain_event=threading.Event(),
                     is_alive=mock.Mock(return_value=True),
                 )
                 capture.worker = worker
-                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(capturing=True))
+                capture.snapshot = mock.Mock(return_value=CaptureStatus(capturing=True))
                 manager = mock.Mock()
                 capture.utc = manager
                 self.assertTrue(capture.set_utc_sync(True))
@@ -3575,18 +3620,18 @@ class DesktopCaptureUtcPreferenceTests(unittest.TestCase):
             lease = WorkspaceLease(flight_root)
             WatcherProfile(False, '', preferences).save(lease)
             lease.release()
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
-                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
+            mode = mock.MagicMock(spec=GuiModeOwner)
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
+                capture = watcher_desktop.DesktopCapture(store, lambda: config, mode, lambda: None)
                 worker = SimpleNamespace(
                     config=SimpleNamespace(simconnect_dll_path='captured.dll'),
                     stop_event=threading.Event(), drain_event=threading.Event(),
                     is_alive=mock.Mock(return_value=True),
                 )
                 capture.worker = worker
-                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(capturing=True))
+                capture.snapshot = mock.Mock(return_value=CaptureStatus(capturing=True))
                 manager = mock.Mock()
                 capture.utc = manager
                 with mock.patch.object(
@@ -3620,12 +3665,12 @@ class DesktopCaptureUtcPreferenceTests(unittest.TestCase):
             lease = WorkspaceLease(flight_root)
             WatcherProfile(False, '', preferences).save(lease)
             lease.release()
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
-            mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
-                capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
-                capture.snapshot = mock.Mock(return_value=MAIN.CaptureStatus(finishing=True))
+            mode = mock.MagicMock(spec=GuiModeOwner)
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
+                capture = watcher_desktop.DesktopCapture(store, lambda: config, mode, lambda: None)
+                capture.snapshot = mock.Mock(return_value=CaptureStatus(finishing=True))
                 manager = mock.Mock()
                 capture.utc = manager
                 with self.assertRaises(RuntimeError):

@@ -23,6 +23,7 @@ Windows smoke test with the distributed runtime.
 """
 
 import ctypes
+import hashlib
 import importlib.machinery
 import importlib.util
 import queue
@@ -44,6 +45,7 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader import simconnect_location as SIM
 from uploader import game_presence as PRESENCE
 from uploader.diagnostics import redact_text
+from uploader.watcher.workers import watcher as watcher_worker
 
 
 # Purpose: Keep synthetic dispatch expiry independent of host scheduling.
@@ -669,8 +671,12 @@ class SimConnectTransportTests(unittest.TestCase):
         self.assertIsNotNone(location, message)
         self.assertTrue(location.source.startswith("aircraft_position"))
 
-    def test_complete_failure_is_nonfatal_and_closes_connection(self):
-        """Return no location with explicit exception diagnostics when both providers fail."""
+    def test_complete_failure_is_nonfatal_and_closes_connection(self) -> None:
+        """Return no location when both providers fail and close the connection.
+
+        Returns:
+            None: Provider failure remains diagnostic and closes its transport.
+        """
         dll = FakeSimConnectDLL(camera="exception", aircraft="exception")
         location, message, client = self.acquire(dll)
         self.assertIsNone(location)
@@ -728,8 +734,12 @@ class SimConnectTransportTests(unittest.TestCase):
         dll = FakeSimConnectDLL()
         self.assertEqual("camera_world_position", self.acquire(dll, client)[0].source)
 
-    def test_release_failure_still_closes_connection(self):
-        """Close the transport even when camera ownership cleanup raises an error."""
+    def test_release_failure_still_closes_connection(self) -> None:
+        """Close the transport even when camera cleanup raises an error.
+
+        Returns:
+            None: Release failure does not leave the transport open.
+        """
         dll = FakeSimConnectDLL()
         dll.release_fails = True
         location, message, _ = self.acquire(dll)
@@ -963,7 +973,7 @@ class WatchedUploadLocationTests(unittest.TestCase):
         Returns:
             None: Restores process detection after each watched-upload vector.
         """
-        patcher = mock.patch.object(self.main, "msfs_running", return_value=True)
+        patcher = mock.patch.object(watcher_worker, "msfs_running", return_value=True)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -974,7 +984,7 @@ class WatchedUploadLocationTests(unittest.TestCase):
             None: No location request or warning is emitted without MSFS.
         """
         watcher = self.watcher()
-        with mock.patch.object(self.main, "msfs_running", return_value=False):
+        with mock.patch.object(watcher_worker, "msfs_running", return_value=False):
             self.assertEqual({}, watcher.sim_camera_metadata_fields(Path("game.png")))
         watcher.simconnect_client.current_location.assert_not_called()
         self.assertTrue(watcher.events.empty())
@@ -1044,7 +1054,7 @@ class WatchedUploadLocationTests(unittest.TestCase):
                 watcher.upload_watched_file.assert_called_once()
                 self.assertEqual({}, watcher.upload_watched_file.call_args.args[2])
                 watcher.state.mark_uploaded.assert_not_called()
-                self.assertIn((photo, self.main.hashlib.sha256(b"watched image").hexdigest()),
+                self.assertIn((photo, hashlib.sha256(b"watched image").hexdigest()),
                               watcher.remote_skipped_paths)
                 watcher.state.mark_failure.assert_not_called()
 

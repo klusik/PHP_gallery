@@ -21,7 +21,7 @@ from typing import Callable
 from unittest import mock
 
 import test_native_gallery_viewer as native_fixture
-from uploader import app_linking as linking
+from uploader import linking as linking
 from uploader import native_gallery_viewer as viewer_module
 from uploader.config import THUMBNAIL_BATCH_CHOICES, THUMBNAIL_BATCH_DEFAULT_SIZE
 

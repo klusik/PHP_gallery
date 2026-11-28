@@ -23,6 +23,10 @@ from unittest.mock import Mock, patch
 
 import uploader.flight_ui as flight_ui
 import uploader.flight_workflow as flight_workflow
+import uploader.flight.ui.dispatch as flight_ui_dispatch
+import uploader.flight.ui.lifecycle as flight_ui_lifecycle
+import uploader.flight.ui.progress as flight_ui_progress
+import uploader.flight.ui.reports as flight_ui_reports
 from uploader.flight_jobs import (
     FlightPreferences, SavedFlight, SessionPlan, connection_binding,
     ImportBindings, ReportFileDetails,
@@ -269,7 +273,7 @@ class FlightUITests(unittest.TestCase):
                     GameContext("simconnect", "Flight Simulator", "flight")
                     if flight else None
                 )
-                with patch.object(flight_ui, "messagebox") as dialogs:
+                with patch.object(flight_ui_progress, "messagebox") as dialogs:
                     dialogs.askyesno.return_value = False
                     ui.abandon()
                 dialogs.askyesno.assert_called_once_with(
@@ -298,7 +302,7 @@ class FlightUITests(unittest.TestCase):
             setattr(host, name, Mock(is_alive=Mock(return_value=True)))
         with (
             patch.object(flight_ui.messagebox, "askyesno", return_value=True),
-            patch.object(flight_ui, "FinalizationWorker") as factory,
+            patch.object(flight_ui_progress, "FinalizationWorker") as factory,
         ):
             ui.abandon()
         self.assertTrue(previous.cancel.is_set())
@@ -441,7 +445,7 @@ class FlightUITests(unittest.TestCase):
 
         ui.operation = None
         with patch.object(flight_ui.messagebox, "showinfo") as unavailable, \
-                patch.object(flight_ui, "FinalizationWorker") as factory:
+                patch.object(flight_ui_progress, "FinalizationWorker") as factory:
             flight_ui.FlightUI.begin(ui, True, automatic=True)
         factory.assert_not_called()
         unavailable.assert_called_once()
@@ -458,7 +462,7 @@ class FlightUITests(unittest.TestCase):
         plan = SessionPlan(Path('fixture-flight'), ui.binding(), ('en',), True)
         ui.pending.return_value = [plan]
         owner, port, endpoint, key = host.capture_flight_admission.return_value
-        with patch.object(flight_ui, 'FinalizationWorker') as factory:
+        with patch.object(flight_ui_progress, 'FinalizationWorker') as factory:
             ui.begin(False)
         self.assertEqual(endpoint, factory.call_args.args[1])
         self.assertEqual(key, factory.call_args.args[2])
@@ -481,7 +485,7 @@ class FlightUITests(unittest.TestCase):
         owner, port, endpoint, key = host.capture_flight_admission.return_value
         with patch.object(flight_ui.messagebox, 'askyesno', return_value=True), \
                 patch.object(flight_ui.SessionPlan, 'load', return_value=plan), \
-                patch.object(flight_ui, 'FinalizationWorker') as factory:
+                patch.object(flight_ui_reports, 'FinalizationWorker') as factory:
             ui.start_saved_upload(row, revision)
         captured = factory.call_args.kwargs["watched_target"]
         self.assertEqual((endpoint, key), (captured.upload_url, captured.api_key))
@@ -500,7 +504,7 @@ class FlightUITests(unittest.TestCase):
         ui.pending.return_value = [SessionPlan(
             Path('fixture-flight'), ui.binding(), ('en',), True, local_only=True,
         )]
-        with patch.object(flight_ui, 'FinalizationWorker') as factory:
+        with patch.object(flight_ui_progress, 'FinalizationWorker') as factory:
             ui.begin(False)
         host.capture_flight_admission.assert_not_called()
         self.assertIsNone(factory.call_args.kwargs['gui_admission'])
@@ -541,7 +545,7 @@ class FlightUITests(unittest.TestCase):
         host = self._host()
         host.config._snapshot_token = object()
         ui = self._ui(host)
-        with patch.object(flight_ui, "FinalizationWorker") as worker_factory:
+        with patch.object(flight_ui_progress, "FinalizationWorker") as worker_factory:
             ui.begin(True, automatic=True)
         self.assertTrue(worker_factory.call_args.args[5])
         self.assertEqual(
@@ -566,7 +570,7 @@ class FlightUITests(unittest.TestCase):
         ui = self._ui(host)
         with (
             patch.object(flight_ui.messagebox, "showerror") as error,
-            patch.object(flight_ui, "FinalizationWorker") as worker_factory,
+            patch.object(flight_ui_progress, "FinalizationWorker") as worker_factory,
         ):
             ui.begin(True, automatic=True)
         error.assert_called_once()
@@ -636,7 +640,7 @@ class FlightUITests(unittest.TestCase):
             ui.recorder = Mock(directory=Path(temporary) / "current-flight")
             with (
                 patch.object(flight_ui.messagebox, "askyesno", return_value=True),
-                patch.object(flight_ui, "FinalizationWorker") as factory,
+                patch.object(flight_ui_reports, "FinalizationWorker") as factory,
             ):
                 ui.upload_saved_pdf()
             target = factory.call_args.kwargs["watched_target"]
@@ -772,7 +776,7 @@ class FlightUITests(unittest.TestCase):
                 ui.preferences = FlightPreferences(recording=recording)
                 ui.save_preferences = Mock(return_value=True)
                 recorder = Mock(directory=Path(tmp) / "shared-session")
-                with patch.object(flight_ui, "FlightRecorder", return_value=recorder):
+                with patch.object(flight_ui_lifecycle, "FlightRecorder", return_value=recorder):
                     directory = flight_ui.FlightUI.start_session(ui)
                 self.assertEqual(directory, recorder.directory)
                 self.assertEqual(ui.plan.directory, directory)
@@ -819,7 +823,7 @@ class FlightUITests(unittest.TestCase):
             with patch.object(
                 flight_ui.FlightRecorder, "from_session", return_value=recorder,
             ) as restore, patch.object(
-                flight_ui, "load_dispatch", return_value=dispatch,
+                flight_ui_lifecycle, "load_dispatch", return_value=dispatch,
             ):
                 result = flight_ui.FlightUI.resume_session(ui, plan)
 
@@ -998,7 +1002,7 @@ class FlightUITests(unittest.TestCase):
             host.linking_manager.linked_upload_binding.return_value = 'b' * 64
             recorder = Mock()
             recorder.directory = ui.directory / 'linked-flight'
-            with patch.object(flight_ui, 'FlightRecorder', return_value=recorder):
+            with patch.object(flight_ui_lifecycle, 'FlightRecorder', return_value=recorder):
                 directory = flight_ui.FlightUI.start_session(ui)
             plan = SessionPlan.load(directory)
             self.assertEqual('b' * 64, plan.binding)
@@ -1022,7 +1026,7 @@ class FlightUITests(unittest.TestCase):
             wants_revoke=False, local_reports=False, saved_upload=False,
             abandonment=False, start=Mock(), update=Mock(),
         )
-        with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
+        with patch.object(flight_ui_progress, 'FinalizationWorker', return_value=operation) as factory:
             flight_ui.FlightUI.begin(ui, revoke=False)
         self.assertEqual('', factory.call_args.args[1])
         self.assertEqual('', factory.call_args.args[2])
@@ -1042,7 +1046,7 @@ class FlightUITests(unittest.TestCase):
         host.linking_manager.linked_upload_mode_selected.return_value = True
         host.watched_report_target.return_value = None
         with patch.object(flight_ui.messagebox, 'showinfo') as info, patch.object(
-            flight_ui, 'FinalizationWorker',
+            flight_ui_progress, 'FinalizationWorker',
         ) as factory:
             flight_ui.FlightUI.start_saved_upload(ui, Mock(), Mock())
             flight_ui.FlightUI.begin(ui, revoke=True)
@@ -1068,7 +1072,7 @@ class FlightUITests(unittest.TestCase):
                 wants_revoke=False, local_reports=False, saved_upload=False,
                 abandonment=False, start=Mock(), update=Mock(),
             )
-            with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
+            with patch.object(flight_ui_progress, 'FinalizationWorker', return_value=operation) as factory:
                 flight_ui.FlightUI.begin(ui, photos_only=True)
             self.assertFalse(factory.call_args.args[0][0].reports_enabled)
             self.assertFalse(SessionPlan.load(directory).reports_enabled)
@@ -1150,7 +1154,7 @@ class FlightUITests(unittest.TestCase):
                                     saved_upload=False, abandonment=False,
                                     start=Mock(), update=Mock())
         with patch.object(
-            flight_ui, "FinalizationWorker", return_value=operation
+            flight_ui_progress, "FinalizationWorker", return_value=operation
         ) as worker_factory:
             flight_ui.FlightUI.begin(ui, revoke=False)
         host.utc_sync.stop.assert_called_once()
@@ -1188,7 +1192,7 @@ class FlightUITests(unittest.TestCase):
         with (
             patch.object(flight_ui.messagebox, "askyesno") as confirm,
             patch.object(flight_ui.messagebox, "showinfo") as notice,
-            patch.object(flight_ui, "FinalizationWorker") as worker_factory,
+            patch.object(flight_ui_progress, "FinalizationWorker") as worker_factory,
         ):
             flight_ui.FlightUI.begin(ui, revoke=True)
         notice.assert_called_once()
@@ -2072,7 +2076,7 @@ class FlightUITests(unittest.TestCase):
         """
         ui = self._ui(self._host())
         ui.dispatch_results.put(("123", None, None, "No OFP"))
-        with patch.object(flight_ui, "atomic_write_json") as save, patch.object(
+        with patch.object(flight_ui_dispatch, "atomic_write_json") as save, patch.object(
             flight_ui.messagebox, "showerror"
         ):
             ui.accept_simbrief()
@@ -2090,7 +2094,7 @@ class FlightUITests(unittest.TestCase):
         ui.lease = object()
         ui.dispatch_cancelled = True
         ui.dispatch_results.put(("previous", None, None, "cancelled response"))
-        with patch.object(flight_ui, "read_document", return_value={"identity": "123"}), patch.object(
+        with patch.object(flight_ui_dispatch, "read_document", return_value={"identity": "123"}), patch.object(
             flight_ui.threading, "Thread",
         ) as factory:
             ui.load_simbrief()
@@ -2109,7 +2113,7 @@ class FlightUITests(unittest.TestCase):
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
         ui.dispatch_results.put(("123", plan, ui.directory / "old", ""))
         ui.recorder = SimpleNamespace(directory=ui.directory / "new", is_alive=lambda: True)
-        with patch.object(flight_ui, "atomic_write_json"), patch.object(
+        with patch.object(flight_ui_dispatch, "atomic_write_json"), patch.object(
             plan, "save"
         ) as attach, patch.object(flight_ui.messagebox, "showinfo"):
             ui.accept_simbrief()
@@ -2127,7 +2131,7 @@ class FlightUITests(unittest.TestCase):
         ui = self._ui(self._host())
         plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
         ui.dispatch_results.put(("123", plan, ui.directory / "old", ""))
-        with patch.object(flight_ui, "atomic_write_json"), patch.object(
+        with patch.object(flight_ui_dispatch, "atomic_write_json"), patch.object(
             plan, "save"
         ) as attach, patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
             flight_ui.messagebox, "showinfo"
@@ -2417,10 +2421,10 @@ class FlightUITests(unittest.TestCase):
             "en": row.directory / "reports" / "English - v1.pdf",
         }, number=1)]
         details = ReportFileDetails(3, "2026-10-18T12:00:00+00:00", False)
-        with patch.object(flight_ui, "saved_flights", return_value=[row]), \
-                patch.object(flight_ui, "report_revisions", return_value=revisions), \
-                patch.object(flight_ui, "report_file_details", return_value=details), \
-                patch.object(flight_ui, "load_dispatch", return_value=None):
+        with patch.object(flight_ui_reports, "saved_flights", return_value=[row]), \
+                patch.object(flight_ui_reports, "report_revisions", return_value=revisions), \
+                patch.object(flight_ui_reports, "report_file_details", return_value=details), \
+                patch.object(flight_ui_reports, "load_dispatch", return_value=None):
             ui.refresh_reports()
             leaf = "pdf:flight:first:en"
             self.assertEqual((leaf,), ui.report_tree.get_children("flight"))

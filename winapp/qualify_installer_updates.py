@@ -61,23 +61,47 @@ from uploader.flight_jobs import (
     connection_binding, saved_flights,
 )
 from uploader.flight_recorder import FlightRecorder
-from uploader.watcher_profile import WATCHER_PREFERENCE_TYPES, WatcherProfile
-from uploader.watch_queue import WatchQueueStore, observe_watch_source
+from uploader.watcher.profile import WATCHER_PREFERENCE_TYPES, WatcherProfile
+from uploader.watcher.queue import WatchQueueStore, observe_watch_source
 
 
-# Purpose: Identify the immutable public WinApp starting installer.
+# Purpose: Identify the immutable public onefile starting installer.
 # Type: str. Units: GitHub release tag. Scope: update qualification source.
-# Consumers: fetch_public_stable_asset. Rationale: F3 begins at issued 1.7.1.
+# Consumers: fetch_public_stable_asset. Rationale: Retain the real 1.7.1 migration.
 PUBLIC_STABLE_TAG = "v_1.7.1"
 PUBLIC_REPOSITORY_API = "https://api.github.com/repos/klusik/PHP_gallery/"
 # Purpose: Bind the release tag to the commit that supplied the published setup.
 # Type: str. Units: Git commit SHA. Scope: update qualification source.
 # Consumers: fetch_public_stable_asset. Rationale: reject a retargeted release.
 PUBLIC_STABLE_COMMIT = "b63d6d5e5bee014ab3750080833f49dcc27e9a34"
+# Purpose: Identify the immutable public common onedir predecessor.
+# Type: str. Units: GitHub release tag. Scope: installed update qualification.
+# Consumers: fetch_public_onedir_asset. Rationale: Use the authentic 2.0.0 release.
+PUBLIC_ONEDIR_TAG = "v_1.8.0"
+# Purpose: Bind the onedir tag to its exact released source commit.
+# Type: str. Units: Git commit SHA. Scope: installed update qualification.
+# Consumers: fetch_public_onedir_asset. Rationale: Reject a retargeted release.
+PUBLIC_ONEDIR_COMMIT = "4758cb7b8c48f9dc63211755137d613ebf780039"
+# Purpose: Identify the published common onedir application's version.
+# Type: str. Units: semantic version. Scope: prior installed update baseline.
+# Consumers: qualify_updates. Rationale: This exact setup is the real 2.0.0 predecessor.
+PUBLIC_ONEDIR_VERSION = "2.0.0"
 # Purpose: Name the stable Windows setup attached to the exact public release.
 # Type: str. Units: GitHub release asset. Scope: update qualification source.
 # Consumers: fetch_public_stable_asset. Rationale: bind the installed baseline.
 PUBLIC_STABLE_ASSET = "PHPGalleryUploader-1.7.1-Setup.exe"
+# Purpose: Name the authentic released common onedir installer.
+# Type: str. Units: GitHub release asset. Scope: installed update qualification.
+# Consumers: fetch_public_onedir_asset. Rationale: Bind the common 2.0.0 binary.
+PUBLIC_ONEDIR_ASSET = "PHPGalleryUploader-2.0.0-Setup.exe"
+# Purpose: Pin the released onedir asset to the publisher's observed byte count.
+# Type: int. Units: bytes. Scope: public 2.0.0 release validation.
+# Consumers: fetch_public_onedir_asset. Rationale: Reject replaced or truncated bytes.
+PUBLIC_ONEDIR_SIZE = 59139690
+# Purpose: Pin the released onedir asset to its immutable public SHA-256 digest.
+# Type: str. Units: lowercase hexadecimal digest. Scope: public 2.0.0 release validation.
+# Consumers: fetch_public_onedir_asset. Rationale: Match the verified live release asset.
+PUBLIC_ONEDIR_SHA256 = "4c68f3ed79546d927bbf09f5435ba14d5e7f8e791597997904ab908f7957b971"
 # Purpose: Require one canonical setup filename for every published flavor.
 # Type: str. Units: filename template. Scope: internal and public qualification setups.
 # Consumers: _require_standard_setup. Rationale: one release asset contains both backends.
@@ -97,8 +121,12 @@ HTTP_TIMEOUT_SECONDS = 45
 RELEASE_METADATA_MAX_BYTES = 4 * 1024 * 1024
 # Purpose: Bound the known public setup download before buffering.
 # Type: int. Units: bytes. Scope: one stable setup response.
-# Consumers: _read_url. Rationale: exceeds the published 33,818,403-byte asset.
+# Consumers: _read_url. Rationale: Exceeds the published 33,818,403-byte 1.7.1 asset.
 PUBLIC_SETUP_MAX_BYTES = 48 * 1024 * 1024
+# Purpose: Bound the larger published common onedir setup download.
+# Type: int. Units: bytes. Scope: public WinApp 2.0.0 release response.
+# Consumers: fetch_public_onedir_asset. Rationale: Covers its verified 59,139,690 bytes.
+PUBLIC_ONEDIR_MAX_BYTES = 64 * 1024 * 1024
 # Purpose: Supply a non-launchable but digest-valid installer to the real helper.
 # Type: bytes. Units: payload bytes. Scope: one ShellExecute refusal journey.
 # Consumers: installed updater qualification. Rationale: Windows rejects this
@@ -181,7 +209,7 @@ SYNTHETIC_WATCHER_SOURCE_VERSION = "1.7.1"
 # Purpose: Keep the expired checkpoint's version shape valid and independent of expiry.
 # Type: str. Units: application version. Scope: stale Watcher ticket fixture.
 # Consumers: _write_expired_watcher_ticket. Rationale: expiry is the sole refusal reason.
-SYNTHETIC_WATCHER_TARGET_VERSION = "1.7.2"
+SYNTHETIC_WATCHER_TARGET_VERSION = "2.0.0"
 # Purpose: Retain a small real thumbnail-cache preference in the isolated profile.
 # Type: int. Units: bytes. Scope: synthetic hosted profile's shared thumbnail cache.
 # Consumers: _seed_durable_profile_state. Rationale: 8 MiB is enough for the tiny fixture.
@@ -289,23 +317,25 @@ def _read_url(
         return payload
 
 
-def _verify_release_tag_commit(api_token: str) -> None:
-    """Resolve the actual Git tag object to the expected immutable commit.
+def _verify_release_tag_commit(tag: str, expected_commit: str, api_token: str) -> None:
+    """Resolve one public Git tag to its expected immutable commit.
 
     Args:
+        tag (str): Exact public release tag to resolve.
+        expected_commit (str): Full commit SHA pinned by the qualification.
         api_token (str): Hosted token restricted to this repository's API requests.
     Returns:
-        None: The live tag ref resolves directly or through one annotated tag.
+        None: The tag ref resolves directly or through one annotated tag.
     Raises:
         RuntimeError: The tag ref is missing, malformed or points elsewhere.
     """
     base = PUBLIC_REPOSITORY_API + "git/"
     reference = json.loads(_read_url(
-        base + "ref/tags/" + PUBLIC_STABLE_TAG, api_token=api_token,
+        base + "ref/tags/" + tag, api_token=api_token,
     ).decode("utf-8"))
     tag_object = reference.get("object")
     if not isinstance(tag_object, dict):
-        raise RuntimeError("Public stable tag reference is malformed.")
+        raise RuntimeError("Public release tag reference is malformed.")
     if tag_object.get("type") == "tag":
         annotation = json.loads(
             _read_url(base + "tags/" + str(tag_object.get("sha", "")), api_token=api_token)
@@ -314,12 +344,93 @@ def _verify_release_tag_commit(api_token: str) -> None:
         tag_object = annotation.get("object")
     if (not isinstance(tag_object, dict)
             or tag_object.get("type") != "commit"
-            or tag_object.get("sha") != PUBLIC_STABLE_COMMIT):
-        raise RuntimeError("Public stable tag does not resolve to the expected commit.")
+            or tag_object.get("sha") != expected_commit):
+        raise RuntimeError("Public release tag does not resolve to its pinned commit.")
+
+
+def fetch_public_release_asset(
+    destination: Path, *, tag: str, expected_commit: str, version: str,
+    asset_name: str, maximum_bytes: int, expected_size: int | None = None,
+    expected_sha256: str | None = None, api_token: str = "",
+) -> tuple[int, str]:
+    """Download one published setup after checking its full release identity.
+
+    Args:
+        destination (Path): Runner-owned destination for the verified installer.
+        tag (str): Exact public tag attached to the release.
+        expected_commit (str): Full immutable commit for the tag and release.
+        version (str): Application version required in update metadata.
+        asset_name (str): Exact setup filename in both release descriptors.
+        maximum_bytes (int): Maximum response size permitted for this setup.
+        expected_size (int | None): Optional pinned byte count for the release.
+        expected_sha256 (str | None): Optional pinned lowercase SHA-256 digest.
+        api_token (str): Hosted token restricted to this repository's API requests.
+    Returns:
+        tuple[int, str]: Published byte size and lowercase SHA-256 digest.
+    Raises:
+        RuntimeError: Tag, release, descriptor or downloaded bytes do not match.
+    """
+    api = PUBLIC_REPOSITORY_API + "releases/tags/" + tag
+    release = json.loads(_read_url(api, api_token=api_token).decode("utf-8"))
+    _verify_release_tag_commit(tag, expected_commit, api_token)
+    if (release.get("tag_name") != tag
+            or release.get("draft") is not False
+            or release.get("prerelease") is not False
+            or release.get("target_commitish") != expected_commit):
+        raise RuntimeError("Public release identity does not match its checkpoint.")
+    matches = [
+        asset for asset in release.get("assets", [])
+        if asset.get("name") == asset_name
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("The published setup is missing or ambiguous.")
+    asset = matches[0]
+    digest = asset.get("digest", "")
+    size = asset.get("size")
+    url = asset.get("browser_download_url", "")
+    release_asset_prefix = (
+        "https://github.com/klusik/PHP_gallery/releases/download/" + tag + "/"
+    )
+    if (type(size) is not int or size <= 0
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+            or url != release_asset_prefix + asset_name
+            or (expected_size is not None and size != expected_size)
+            or (expected_sha256 is not None
+                and digest != "sha256:" + expected_sha256)):
+        raise RuntimeError("The published setup metadata is incomplete or changed.")
+    metadata_assets = [
+        item for item in release.get("assets", [])
+        if item.get("name") == "winapp-update.json"
+    ]
+    if len(metadata_assets) != 1:
+        raise RuntimeError("The published update metadata is missing or ambiguous.")
+    metadata_url = metadata_assets[0].get("browser_download_url", "")
+    if metadata_url != release_asset_prefix + "winapp-update.json":
+        raise RuntimeError("Published update metadata URL is outside the pinned release.")
+    update_metadata = json.loads(
+        _read_url(metadata_url).decode("utf-8")
+    )
+    descriptors = [
+        item for item in update_metadata.get("assets", [])
+        if item.get("name") == asset_name
+    ]
+    if (len(descriptors) != 1
+            or descriptors[0].get("version") != version
+            or descriptors[0].get("size") != size
+            or descriptors[0].get("sha256") != digest.removeprefix("sha256:")):
+        raise RuntimeError("Published update metadata disagrees with the release asset.")
+    payload = _read_url(url, maximum_bytes)
+    actual = hashlib.sha256(payload).hexdigest()
+    if len(payload) != size or actual != digest.removeprefix("sha256:"):
+        raise RuntimeError("Published setup bytes do not match release metadata.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+    print(f"Verified public {tag} setup: {size} bytes sha256={actual}", flush=True)
+    return size, actual
 
 
 def fetch_public_stable_asset(destination: Path, *, api_token: str = "") -> tuple[int, str]:
-    """Download and authenticate the originally published stable setup.
+    """Download and authenticate the published 1.7.1 onefile setup.
 
     Args:
         destination (Path): Exact runner-owned destination for the installer.
@@ -329,58 +440,32 @@ def fetch_public_stable_asset(destination: Path, *, api_token: str = "") -> tupl
     Raises:
         RuntimeError: The tag, release, asset metadata or downloaded bytes differ.
     """
-    api = PUBLIC_REPOSITORY_API + "releases/tags/" + PUBLIC_STABLE_TAG
-    release = json.loads(_read_url(api, api_token=api_token).decode("utf-8"))
-    _verify_release_tag_commit(api_token)
-    if (release.get("tag_name") != PUBLIC_STABLE_TAG
-            or release.get("draft") is not False
-            or release.get("prerelease") is not False
-            or release.get("target_commitish") != PUBLIC_STABLE_COMMIT):
-        raise RuntimeError("Public 1.7.1 release identity does not match its checkpoint.")
-    matches = [
-        asset for asset in release.get("assets", [])
-        if asset.get("name") == PUBLIC_STABLE_ASSET
-    ]
-    if len(matches) != 1:
-        raise RuntimeError("The published stable setup is missing or ambiguous.")
-    asset = matches[0]
-    digest = asset.get("digest", "")
-    size = asset.get("size")
-    url = asset.get("browser_download_url", "")
-    if (type(size) is not int or size <= 0
-            or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
-            or not url.endswith("/" + PUBLIC_STABLE_ASSET)):
-        raise RuntimeError("The published stable setup metadata is incomplete.")
-    metadata_assets = [
-        item for item in release.get("assets", [])
-        if item.get("name") == "winapp-update.json"
-    ]
-    if len(metadata_assets) != 1:
-        raise RuntimeError("The published stable update metadata is missing or ambiguous.")
-    update_metadata = json.loads(
-        _read_url(metadata_assets[0].get("browser_download_url", ""))
-        .decode("utf-8")
+    return fetch_public_release_asset(
+        destination, tag=PUBLIC_STABLE_TAG,
+        expected_commit=PUBLIC_STABLE_COMMIT, version="1.7.1",
+        asset_name=PUBLIC_STABLE_ASSET, maximum_bytes=PUBLIC_SETUP_MAX_BYTES,
+        api_token=api_token,
     )
-    descriptors = [
-        item for item in update_metadata.get("assets", [])
-        if item.get("name") == PUBLIC_STABLE_ASSET
-    ]
-    if (len(descriptors) != 1
-            or descriptors[0].get("version") != "1.7.1"
-            or descriptors[0].get("size") != size
-            or descriptors[0].get("sha256") != digest.removeprefix("sha256:")):
-        raise RuntimeError("Published WinApp metadata disagrees with the release asset.")
-    payload = _read_url(url, PUBLIC_SETUP_MAX_BYTES)
-    actual = hashlib.sha256(payload).hexdigest()
-    if len(payload) != size or actual != digest.removeprefix("sha256:"):
-        raise RuntimeError("The public stable setup bytes do not match release metadata.")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(payload)
-    print(
-        f"Verified public {PUBLIC_STABLE_TAG} stable setup: "
-        f"{size} bytes sha256={actual}", flush=True,
+
+
+def fetch_public_onedir_asset(destination: Path, *, api_token: str = "") -> tuple[int, str]:
+    """Download and authenticate the published common WinApp 2.0.0 setup.
+
+    Args:
+        destination (Path): Exact runner-owned destination under the scratch root.
+        api_token (str): Hosted token limited to this repository's metadata requests.
+    Returns:
+        tuple[int, str]: Pinned byte size and lowercase SHA-256 digest.
+    Raises:
+        RuntimeError: The tag, release, asset metadata or downloaded bytes differ.
+    """
+    return fetch_public_release_asset(
+        destination, tag=PUBLIC_ONEDIR_TAG,
+        expected_commit=PUBLIC_ONEDIR_COMMIT, version=PUBLIC_ONEDIR_VERSION,
+        asset_name=PUBLIC_ONEDIR_ASSET, maximum_bytes=PUBLIC_ONEDIR_MAX_BYTES,
+        expected_size=PUBLIC_ONEDIR_SIZE,
+        expected_sha256=PUBLIC_ONEDIR_SHA256, api_token=api_token,
     )
-    return size, actual
 
 
 def _require_standard_setup(setup: Path, version: str, role: str) -> None:
@@ -388,12 +473,12 @@ def _require_standard_setup(setup: Path, version: str, role: str) -> None:
 
     Args:
         setup (Path): Build artifact passed into an installed update journey.
-        version (str): Exact temporary application version embedded in the setup.
+        version (str): Exact application version embedded in the setup.
         role (str): Fixed name of the qualification journey input.
     Returns:
         None: The standard all-backends setup name matches the requested version.
     Raises:
-        RuntimeError: The setup is missing or uses a flavor-specific filename.
+        RuntimeError: The setup is missing or its filename names another version.
     """
     expected = COMMON_SETUP_NAME_TEMPLATE.format(version=version)
     if not setup.is_file() or setup.name != expected:
@@ -2573,22 +2658,18 @@ def _assert_durable_profile_preserved(
 
 
 def qualify_updates(
-    stable_installer: Path, earlier_installer: Path, earlier_version: str,
     target_installer: Path, target_version: str, work: Path,
     evidence: list[dict[str, str]],
     staging_metrics: list[dict[str, int | str]],
     backend_switch_results: list[dict[str, str]],
     linked_switch_result: dict[str, str], *, evidence_dir: Path,
-) -> tuple[int, str]:
-    """Run verified stable-to-onedir, active and linked-backend journeys.
+) -> tuple[tuple[int, str], tuple[int, str]]:
+    """Run published onefile and onedir update journeys through the real helper.
 
     Args:
-        stable_installer (Path): Download destination for public stable 1.7.1.
-        earlier_installer (Path): First real standard onedir qualification setup.
-        earlier_version (str): Version embedded in the first standard setup.
-        target_installer (Path): Second real standard onedir qualification setup.
-        target_version (str): Version embedded in the second standard setup.
-        work (Path): New, disposable root created by the calling audit job.
+        target_installer (Path): Exact candidate setup from the frozen audit.
+        target_version (str): Version embedded in the candidate setup.
+        work (Path): New, disposable root reserved by the calling audit job.
         evidence (list[dict[str, str]]): Result rows included in the JSON report.
         staging_metrics (list[dict[str, int | str]]): Per-helper runtime copy sizes and duration.
         backend_switch_results (list[dict[str, str]]): Verified native switch
@@ -2597,21 +2678,22 @@ def qualify_updates(
             native vault and explicit target reconnection evidence.
         evidence_dir (Path): Runner-owned report directory for native linked screenshots.
     Returns:
-        tuple[int, str]: Authenticated public setup size and SHA-256 digest.
+        tuple[tuple[int, str], tuple[int, str]]: Authenticated onefile and
+            onedir asset size/digest pairs, in that order.
     Raises:
         RuntimeError: Any public identity, install or update assertion fails.
     """
     if os.name != "nt" or work.exists():
         raise RuntimeError("Update qualification needs a new Windows-owned work root.")
-    if (not re.fullmatch(r"\d+\.\d+\.\d+", earlier_version)
-            or not re.fullmatch(r"\d+\.\d+\.\d+", target_version)
-            or tuple(map(int, earlier_version.split("."))) <= (1, 7, 1)
+    if (not re.fullmatch(r"\d+\.\d+\.\d+", target_version)
             or tuple(map(int, target_version.split(".")))
-            <= tuple(map(int, earlier_version.split(".")))):
-        raise RuntimeError("Temporary setup versions must increase above released 1.7.1.")
-    _require_standard_setup(earlier_installer, earlier_version, "Earlier-version")
+            <= tuple(map(int, PUBLIC_ONEDIR_VERSION.split(".")))):
+        raise RuntimeError("Candidate setup version must increase above released 2.0.0.")
     _require_standard_setup(target_installer, target_version, "Target-version")
     work.mkdir(parents=True)
+    public_assets = work / "published-assets"
+    stable_installer = public_assets / PUBLIC_STABLE_ASSET
+    earlier_installer = public_assets / PUBLIC_ONEDIR_ASSET
     _mark_evidence(evidence, "public-stable-release", "RUNNING", "Authenticating tag, metadata and setup bytes.")
     # Do not propagate the metadata-only token to setup, helpers or installed apps.
     api_token = os.environ.pop("PHP_GALLERY_RELEASE_API_TOKEN", "")
@@ -2622,6 +2704,20 @@ def qualify_updates(
     _mark_evidence(
         evidence, "public-stable-release", "PASS",
         f"v_1.7.1 {stable_size} bytes sha256={stable_hash}",
+    )
+    _mark_evidence(
+        evidence, "public-onedir-release", "RUNNING",
+        "Authenticating the released 2.0.0 common onedir setup.",
+    )
+    onedir_size, onedir_hash = fetch_public_onedir_asset(
+        earlier_installer, api_token=api_token,
+    )
+    _require_standard_setup(
+        earlier_installer, PUBLIC_ONEDIR_VERSION, "Published onedir predecessor",
+    )
+    _mark_evidence(
+        evidence, "public-onedir-release", "PASS",
+        f"{PUBLIC_ONEDIR_TAG} {onedir_size} bytes sha256={onedir_hash}",
     )
 
     profile = work / "profile"
@@ -2641,19 +2737,19 @@ def qualify_updates(
     _mark_evidence(evidence, "stable-install", "PASS", "Published stable setup installed as 1.7.1.")
     _mark_evidence(evidence, "invalid-ticket", "RUNNING", "Launching installed helper with unsupported schema.")
     _run_rejected_helper_ticket(
-        earlier_installer, earlier_version, stable_install, environment,
+        earlier_installer, PUBLIC_ONEDIR_VERSION, stable_install, environment,
         work / "invalid-ticket", "invalid",
     )
     _mark_evidence(evidence, "invalid-ticket", "PASS", "Real helper refused unsupported ticket schema.")
     _mark_evidence(evidence, "foreign-ticket", "RUNNING", "Launching installed helper with foreign install path.")
     _run_rejected_helper_ticket(
-        earlier_installer, earlier_version, stable_install, environment,
+        earlier_installer, PUBLIC_ONEDIR_VERSION, stable_install, environment,
         work / "foreign-ticket", "foreign",
     )
     _mark_evidence(evidence, "foreign-ticket", "PASS", "Real helper refused an unregistered install path.")
     _mark_evidence(evidence, "failed-update-no-mutation", "RUNNING", "Launching installed helper with a bad setup digest.")
     _run_rejected_helper_ticket(
-        earlier_installer, earlier_version, stable_install, environment,
+        earlier_installer, PUBLIC_ONEDIR_VERSION, stable_install, environment,
         work / "bad-digest-ticket", "digest-mismatch",
     )
     _mark_evidence(evidence, "failed-update-no-mutation", "PASS", "Digest failure retained the 1.7.1 install; valid update follows.")
@@ -2944,26 +3040,18 @@ def qualify_updates(
     )
     if linked_error is not None:
         raise RuntimeError('Installed linked switch qualification failed.') from linked_error
-    return stable_size, stable_hash
+    return (stable_size, stable_hash), (onedir_size, onedir_hash)
 
 
 def main() -> int:
     """Parse the dedicated hosted update qualification inputs.
 
     Returns:
-        int: Zero after both installed update paths pass; one on failure.
+        int: Zero after published migration and installed update paths pass;
+            one when validation or an installed journey fails.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stable-installer", type=Path, required=True)
-    parser.add_argument(
-        "--earlier-installer", "--earlier-qt",
-        dest="earlier_installer", type=Path, required=True,
-    )
-    parser.add_argument("--earlier-version", required=True)
-    parser.add_argument(
-        "--target-installer", "--target-qt",
-        dest="target_installer", type=Path, required=True,
-    )
+    parser.add_argument("--target-installer", type=Path, required=True)
     parser.add_argument("--target-version", required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--work", type=Path, required=True)
@@ -2984,10 +3072,17 @@ def main() -> int:
         "public_source": {
             "tag": PUBLIC_STABLE_TAG,
             "commit": PUBLIC_STABLE_COMMIT,
+            "version": "1.7.1",
             "asset": PUBLIC_STABLE_ASSET,
         },
+        "public_onedir_source": {
+            "tag": PUBLIC_ONEDIR_TAG,
+            "commit": PUBLIC_ONEDIR_COMMIT,
+            "version": PUBLIC_ONEDIR_VERSION,
+            "asset": PUBLIC_ONEDIR_ASSET,
+        },
         "qualification_versions": {
-            "earlier_installer": arguments.earlier_version,
+            "earlier_installer": PUBLIC_ONEDIR_VERSION,
             "target_installer": arguments.target_version,
         },
         "dependencies": dependency_versions(),
@@ -2997,22 +3092,27 @@ def main() -> int:
     }
     status = 1
     try:
-        with arguments.earlier_installer.open("rb") as setup:
-            report["earlier_setup_sha256"] = hashlib.file_digest(setup, "sha256").hexdigest()
         with arguments.target_installer.open("rb") as setup:
             report["target_setup_sha256"] = hashlib.file_digest(setup, "sha256").hexdigest()
-        size, digest = qualify_updates(
-            arguments.stable_installer, arguments.earlier_installer,
-            arguments.earlier_version, arguments.target_installer,
+        onefile_source, onedir_source = qualify_updates(
+            arguments.target_installer,
             arguments.target_version, arguments.work, evidence, staging_metrics,
             backend_switch_results, linked_switch_result,
             evidence_dir=arguments.report.parent,
         )
+        size, digest = onefile_source
+        onedir_size, onedir_hash = onedir_source
         report["public_source"] = {
             **report["public_source"],
             "size": size,
             "sha256": digest,
         }
+        report["public_onedir_source"] = {
+            **report["public_onedir_source"],
+            "size": onedir_size,
+            "sha256": onedir_hash,
+        }
+        report["earlier_setup_sha256"] = onedir_hash
         report["status"] = "PASS"
         report["helper_staging"] = staging_metrics
         status = 0

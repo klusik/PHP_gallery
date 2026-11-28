@@ -38,7 +38,7 @@ from uploader.gui_backend import (
     GUI_STARTUP_RESPONSE, GuiBackend, load_gui_backend,
 )
 from uploader.state_store import atomic_write_json, linked_upload_state_path
-from uploader.watch_queue import WatchQueueStore, observe_watch_source
+from uploader.watcher.queue import WatchQueueStore, observe_watch_source
 
 # Purpose: Bound cold installed process startup and normal shutdown.
 # Type: int. Units: seconds. Scope: one hosted smoke lifecycle.

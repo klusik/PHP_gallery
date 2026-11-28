@@ -21,7 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from uploader.app_linking import (
+from uploader.linking import (
     CREATE_SCOPE, LINKING_MAX_TOKEN_LIFETIME_SECONDS, TOKEN_PREFIX,
     LinkedGallery, LinkedIdentity, LinkingError, LinkingSession,
 )
@@ -1122,7 +1122,7 @@ class GalleryCreateTransportTests(unittest.TestCase):
                                  CREATE_SCOPE)
         cancelled = threading.Event()
         cancelled.set()
-        with mock.patch('uploader.app_linking._request_json') as request:
+        with mock.patch('uploader.linking.session_lifecycle._request_json') as request:
             with self.assertRaises(LinkingError):
                 session.gallery_create_request('a' * 64, 'New', None,
                                                cancelled=cancelled)

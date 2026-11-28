@@ -27,7 +27,42 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal, cast
 
-from .app_linking import LinkingMediaNotCurrent, LinkingResponseError
+from .linking import LinkingMediaNotCurrent, LinkingResponseError
+
+# Purpose: Whitelist exact package-owned Python sources for Watcher diagnostics.
+# Type: dict[str, str]. Units: normalized relative path to safe source label.
+# Scope: Watcher recovery tracebacks. Consumers: format_watch_recovery_diagnostic.
+# Rationale: Package paths are explicit while emitted labels never expose paths.
+_SAFE_WATCHER_SOURCE_SUFFIXES = {
+    "/uploader/http_transport.py": "http_transport.py",
+    "/uploader/watcher/state.py": "watcher/state.py",
+    "/uploader/watcher/runtime.py": "watcher/runtime.py",
+    "/uploader/watcher/queue.py": "watcher/queue.py",
+    "/uploader/watcher/recovery.py": "watcher/recovery.py",
+    "/uploader/watcher/recovery_ui.py": "watcher/recovery_ui.py",
+    "/uploader/watcher/profile.py": "watcher/profile.py",
+    "/uploader/watcher/capture_session.py": "watcher/capture_session.py",
+    "/uploader/watcher/desktop.py": "watcher/desktop.py",
+    "/uploader/watcher/configuration.py": "watcher/configuration.py",
+    "/uploader/watcher/update_policy.py": "watcher/update_policy.py",
+    "/uploader/watcher/event_policy.py": "watcher/event_policy.py",
+    "/uploader/watcher/ui/event_pump.py": "watcher/ui/event_pump.py",
+    "/uploader/watcher/ui/settings/preferences.py": "watcher/ui/settings/preferences.py",
+    "/uploader/watcher/ui/settings/updates.py": "watcher/ui/settings/updates.py",
+    "/uploader/watcher/ui/settings/shutdown.py": "watcher/ui/settings/shutdown.py",
+    "/uploader/watcher/workers/watcher.py": "watcher/workers/watcher.py",
+    "/uploader/imports/manual_upload.py": "imports/manual_upload.py",
+    "/uploader/imports/preflight.py": "imports/preflight.py",
+    "/uploader/ai/worker.py": "ai/worker.py",
+    "/uploader/ai/image_analysis.py": "ai/image_analysis.py",
+    "/uploader/watcher/workers/common.py": "watcher/workers/common.py",
+    "/uploader/ai/heartbeat.py": "ai/heartbeat.py",
+    "/uploader/linking/core.py": "linking/core.py",
+    "/uploader/linking/transport.py": "linking/transport.py",
+    "/uploader/linking/attempt.py": "linking/attempt.py",
+    "/uploader/linking/session.py": "linking/session.py",
+    "/uploader/linking/session_lifecycle.py": "linking/session_lifecycle.py",
+}
 
 _SECRET_RE = re.compile(r"(?i)(api[_ -]?key|authorization|token|secret|password)\s*[:=]\s*([^\s,;]+)")
 
@@ -62,12 +97,18 @@ def format_watch_recovery_diagnostic(
             'error_type=' + (name if name.isascii() and name.isidentifier() else 'Exception')
         )
         for frame in reversed(traceback.extract_tb(error.__traceback__)):
-            source = Path(frame.filename).name
-            if (source in {
-                    'gallery_watch_upload.pyw', 'flight_jobs.py', 'flight_ui.py',
-                    'watch_queue.py', 'linked_upload.py', 'app_linking.py',
+            source_path = Path(frame.filename).as_posix().lower()
+            source = next((label for suffix, label in _SAFE_WATCHER_SOURCE_SUFFIXES.items()
+                           if source_path.endswith(suffix)), None)
+            if source is None:
+                basename = Path(frame.filename).name
+                if basename in {
+                    'gallery_watch_upload.pyw', 'flight_jobs.py',
+                    'flight_ui.py', 'watch_queue.py', 'linked_upload.py',
                     'watcher_profile.py',
-                } and frame.name.isascii() and frame.name.isidentifier()):
+                }:
+                    source = basename
+            if source is not None and frame.name.isascii() and frame.name.isidentifier():
                 parts.append(f'source={source}:{frame.name}:{frame.lineno}')
                 break
         if isinstance(error, LinkingResponseError):
@@ -108,6 +149,33 @@ _SAFE_PHOTOS_SOURCE_FILES = frozenset({
     "native_gallery_viewer.py", "app_linking.py", "photos_workspace.py",
     "gallery_preload.py", "qt_photos.py",
 })
+
+# Purpose: Whitelist exact package-owned Python source suffixes for Photos errors.
+# Type: dict[str, str]. Units: normalized relative path to safe source label.
+# Scope: Photos traceback diagnostics. Consumers: safe_photos_error_site.
+# Rationale: Generic basenames collide across the Photos packages, so identify
+# only the approved package path and emit its fixed label.
+_SAFE_PHOTOS_SOURCE_SUFFIXES = {
+    "/uploader/photos/qt/support.py": "photos/qt/support.py",
+    "/uploader/photos/qt/ui_mixin.py": "photos/qt/ui_mixin.py",
+    "/uploader/photos/qt/link_management.py": "photos/qt/link_management.py",
+    "/uploader/photos/qt/actions.py": "photos/qt/actions.py",
+    "/uploader/photos/qt/media.py": "photos/qt/media.py",
+    "/uploader/photos/tk/workspace/support.py": "photos/tk/workspace/support.py",
+    "/uploader/photos/tk/workspace/layout.py": "photos/tk/workspace/layout.py",
+    "/uploader/photos/tk/workspace/catalogue.py": "photos/tk/workspace/catalogue.py",
+    "/uploader/photos/tk/workspace/cache.py": "photos/tk/workspace/cache.py",
+    "/uploader/photos/tk/workspace/details.py": "photos/tk/workspace/details.py",
+    "/uploader/photos/tk/workspace/actions.py": "photos/tk/workspace/actions.py",
+    "/uploader/photos/tk/viewer/support.py": "photos/tk/viewer/support.py",
+    "/uploader/photos/tk/viewer/view.py": "photos/tk/viewer/view.py",
+    "/uploader/photos/tk/viewer/queue.py": "photos/tk/viewer/queue.py",
+    "/uploader/photos/tk/viewer/image.py": "photos/tk/viewer/image.py",
+    "/uploader/photos/tk/viewer/session.py": "photos/tk/viewer/session.py",
+    "/uploader/linking/models.py": "linking/models.py",
+    "/uploader/linking/media.py": "linking/media.py",
+    "/uploader/linking/session.py": "linking/session.py",
+}
 
 # Purpose: Keep exception classes to concrete labels used by Photos owners.
 # Type: frozenset[str]. Units: exception class names. Scope: Photos diagnostics.
@@ -476,10 +544,15 @@ def safe_photos_error_site(error: Exception) -> str:
         str: Safe basename/function/line label, or the fixed value ``unknown``.
     """
     for frame in reversed(traceback.extract_tb(error.__traceback__)):
-        basename = os.path.basename(frame.filename)
-        if (basename in _SAFE_PHOTOS_SOURCE_FILES
-                and frame.name.isidentifier() and frame.lineno > 0):
-            return f"{basename}:{frame.name}:{frame.lineno}"
+        source_path = Path(frame.filename).as_posix().lower()
+        source = next((label for suffix, label in _SAFE_PHOTOS_SOURCE_SUFFIXES.items()
+                       if source_path.endswith(suffix)), None)
+        if source is None:
+            basename = os.path.basename(frame.filename)
+            if basename in _SAFE_PHOTOS_SOURCE_FILES:
+                source = basename
+        if source is not None and frame.name.isidentifier() and frame.lineno > 0:
+            return f"{source}:{frame.name}:{frame.lineno}"
     return "unknown"
 
 

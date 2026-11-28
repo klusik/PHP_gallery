@@ -11,7 +11,7 @@
 
 from typing import TypeAlias
 
-from .app_linking import LinkedMediaDetails
+from .linking import LinkedMediaDetails
 
 InformationRow: TypeAlias = tuple[str, str | int | float | bool | None]
 InformationGroup: TypeAlias = tuple[str, list[InformationRow]]

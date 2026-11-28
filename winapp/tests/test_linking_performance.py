@@ -29,7 +29,7 @@ from uploader.linking_performance import (
     LinkingRoutePerformanceWindow,
     linking_route_category,
 )
-from uploader.app_linking import (
+from uploader.linking import (
     GALLERIES_SCOPE, LinkingResponseError, LinkingSession, MediaReadTimings,
 )
 
@@ -183,7 +183,7 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
             gallery_tree_supported=True,
         )
         with mock.patch(
-            'uploader.app_linking._request_json',
+            'uploader.linking.session_lifecycle._request_json',
             return_value={'revision': 'a' * 64, 'unchanged': True},
         ) as sender:
             self.assertTrue(session._request('app_linking_gallery_tree'))
@@ -192,7 +192,7 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
             'linking', 'app_linking_galleries', 502, 'html', 'http_status',
         )
         with mock.patch(
-            'uploader.app_linking._request_json', side_effect=failure,
+            'uploader.linking.session_lifecycle._request_json', side_effect=failure,
         ):
             with self.assertRaises(LinkingResponseError):
                 session._request('app_linking_galleries')
@@ -215,13 +215,13 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
             time.monotonic() + 120., GALLERIES_SCOPE,
         )
         with mock.patch(
-            'uploader.app_linking._run_linking_transport',
+            'uploader.linking.session_media_access._run_linking_transport',
             return_value=(b'image', 'image/jpeg', None, False),
         ) as sender:
             session._media_read(12, 'thumbnail', 45, None)
             sender.assert_called_once()
         with mock.patch(
-            'uploader.app_linking._run_linking_transport',
+            'uploader.linking.session_media_access._run_linking_transport',
             return_value=(None, '', '"' + 'a' * 64 + '"', True),
         ):
             session._media_read(12, 'thumbnail', 45, None)
@@ -229,7 +229,7 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
             'media', 'app_linking_media', 503, 'html', 'http_status',
         )
         with mock.patch(
-            'uploader.app_linking._run_linking_transport', side_effect=failure,
+            'uploader.linking.session_media_access._run_linking_transport', side_effect=failure,
         ):
             with self.assertRaises(LinkingResponseError):
                 session._media_read(12, 'thumbnail', 45, None)
@@ -285,7 +285,7 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
             return b'image', 'image/jpeg', None, False
 
         with mock.patch(
-            'uploader.app_linking._run_linking_transport',
+            'uploader.linking.session_media_access._run_linking_transport',
             side_effect=stub_transport,
         ):
             session._media_read(12, 'thumbnail', 45, None, timings=timings)

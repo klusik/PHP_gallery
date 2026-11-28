@@ -23,8 +23,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, call, patch
 
-from uploader import gui_backend
-from uploader.app_linking import (
+from uploader import gui_backend, launcher
+from uploader.linking import (
     ADMIN_DELETE_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX, GALLERY_EDIT_SCOPE_SUFFIX,
     GALLERY_SEARCH_SUFFIX, LinkedIdentity, LinkingError, LinkingSession,
     READ_UPLOAD_OFFLINE_SCOPE, ROLLING_SCOPE_SUFFIX, CREATE_VISIBILITY_SCOPE,
@@ -51,7 +51,11 @@ from uploader.offline_linking import (
 from uploader.state_store import JobStateStore, linked_upload_state_path
 from uploader.tk_backend_settings import TkBackendSettings
 from uploader.upload_mode import ModeRecord
-from uploader.watch_queue import WatchQueueStore, observe_watch_source
+from uploader.mode_coordinator import GuiModeOwner, ModeCoordinatorError
+from uploader.flight_workflow import WatchedReportTarget
+from uploader.watcher import desktop as watcher_desktop
+from uploader.watcher import runtime as watcher_runtime, state as watcher_state
+from uploader.watcher.queue import WatchQueueStore, observe_watch_source
 from test_redesign import MAIN
 
 # Purpose: Keep child crash/hang checks bounded inside the normal WinApp suite.
@@ -161,15 +165,15 @@ class BackendPreferenceTests(unittest.TestCase):
             profile = Path(folder)
             gui_backend.save_gui_backend(profile, "pyside6")
             with (
-                patch.object(MAIN, "CONFIG_DIR", profile),
-                patch.object(MAIN, "WindowsInstance") as instance,
-                patch.object(MAIN, "ConfigStore"),
-                patch.object(MAIN, "setup_logging"),
-                patch.object(MAIN, "WatcherApp") as app,
-                patch.object(MAIN, "supervise_gui_startup") as supervise,
+                patch.object(watcher_state, "CONFIG_DIR", profile),
+                patch.object(launcher, "WindowsInstance") as instance,
+                patch.object(watcher_state, "ConfigStore"),
+                patch.object(launcher, "setup_logging"),
+                patch.object(launcher, "WatcherApp") as app,
+                patch.object(launcher, "supervise_gui_startup") as supervise,
             ):
                 instance.return_value.acquire.return_value = True
-                self.assertEqual(0, MAIN.main(["--gui-backend", "tkinter"]))
+                self.assertEqual(0, launcher.main(["--gui-backend", "tkinter"]))
                 app.return_value.run.assert_called_once_with()
                 supervise.assert_not_called()
             self.assertEqual("pyside6", gui_backend.load_gui_backend(profile))
@@ -221,15 +225,15 @@ class BackendPreferenceTests(unittest.TestCase):
             nonce = "b" * 32
             config = profile / "config.json"
             with (
-                patch.object(MAIN, "CONFIG_DIR", profile),
-                patch.object(MAIN, "WindowsInstance") as instance,
+                patch.object(watcher_state, "CONFIG_DIR", profile),
+                patch.object(launcher, "WindowsInstance") as instance,
                 patch.object(
-                    MAIN, "supervise_gui_startup", return_value="startup_failed",
+                    launcher, "supervise_gui_startup", return_value="startup_failed",
                 ) as supervise,
-                patch.object(MAIN, "_launch_desktop", return_value=0) as launch,
+                patch.object(launcher, "_launch_desktop", return_value=0) as launch,
             ):
                 instance.return_value.acquire.return_value = True
-                self.assertEqual(0, MAIN.main([
+                self.assertEqual(0, launcher.main([
                     "--config", str(config), "--after-update", nonce,
                 ]))
             supervised_command = supervise.call_args.args[0]
@@ -274,8 +278,8 @@ class BackendPreferenceTests(unittest.TestCase):
             installed = installation / 'PHPGalleryUploader.exe'
             installer.write_bytes(b'synthetic installer')
             installed.write_bytes(b'synthetic launcher')
-            ticket = MAIN.update_helper.UpdateTicket(
-                nonce, MAIN.APP_VERSION, hashlib.sha256(installer.read_bytes()).hexdigest(),
+            ticket = launcher.update_helper.UpdateTicket(
+                nonce, watcher_runtime.APP_VERSION, hashlib.sha256(installer.read_bytes()).hexdigest(),
                 installer.stat().st_size, str(installer), str(installed),
             )
             ticket_path.write_text(json.dumps(asdict(ticket)), encoding='utf-8')
@@ -283,33 +287,33 @@ class BackendPreferenceTests(unittest.TestCase):
             handshake = profile / 'handshake'
             handshake.mkdir()
             with (
-                patch.object(MAIN, 'CONFIG_DIR', profile),
-                patch.object(MAIN, 'WindowsInstance') as instance,
-                patch.object(MAIN, 'setup_logging'),
-                patch.object(MAIN, 'ConfigStore') as store,
-                patch.object(MAIN.update_helper, 'updates_root', return_value=updates),
+                patch.object(watcher_state, 'CONFIG_DIR', profile),
+                patch.object(launcher, 'WindowsInstance') as instance,
+                patch.object(launcher, 'setup_logging'),
+                patch.object(watcher_state, 'ConfigStore') as store,
+                patch.object(launcher.update_helper, 'updates_root', return_value=updates),
                 patch.object(
-                    MAIN.update_helper, 'installed_identity', return_value=installed,
+                    launcher.update_helper, 'installed_identity', return_value=installed,
                 ),
                 patch.object(
-                    MAIN, 'inspect_gui_profile_work', wraps=inspect_gui_profile_work,
+                    launcher, 'inspect_gui_profile_work', wraps=inspect_gui_profile_work,
                 ) as inspect,
                 patch.object(
-                    MAIN, 'sys', SimpleNamespace(platform='linux', stderr=sys.stderr),
+                    launcher, 'sys', SimpleNamespace(platform='linux', stderr=sys.stderr),
                 ),
-                patch.object(MAIN, 'run_qt', return_value=False) as run_qt,
-                patch.object(MAIN, 'report_gui_startup') as report,
+                patch.object(launcher, 'run_qt', return_value=False) as run_qt,
+                patch.object(launcher, 'report_gui_startup') as report,
                 patch.dict(os.environ, {gui_backend.GUI_STARTUP_DIRECTORY: str(handshake)}),
             ):
                 instance.return_value.acquire.return_value = True
-                store.return_value.load.return_value = MAIN.WatcherConfig()
-                result = MAIN.main([
+                store.return_value.load.return_value = watcher_state.WatcherConfig()
+                result = launcher.main([
                     '--config', str(config_path), '--after-update', nonce,
                     '--gui-child', child_nonce,
                 ])
                 self.assertEqual(0, result, report.call_args)
                 self.assertEqual(
-                    (nonce, MAIN.APP_VERSION),
+                    (nonce, watcher_runtime.APP_VERSION),
                     inspect.call_args.kwargs['installer_restart'],
                 )
                 run_qt.assert_called_once()
@@ -826,7 +830,7 @@ class BackendPreferenceTests(unittest.TestCase):
             journal = WatchQueueStore(session / 'watch-drain.json', binding, images, False)
             journal.initialize([])
             nonce = 'b' * 32  # Structural helper ticket nonce spelling.
-            source_version, target_version = '1.7.1', '1.7.2'
+            source_version, target_version = '1.7.1', '2.0.0'
             prepared = WatcherContinuation(
                 session.name, binding, WatcherContinuation.profile_digest(root),
                 source_version, target_version, nonce, 'legacy', False, time.time(), 'prepared',
@@ -859,24 +863,24 @@ class BackendPreferenceTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as folder:
             profile = Path(folder).resolve()
-            store = MAIN.ConfigStore(profile / 'config.json')
+            store = watcher_state.ConfigStore(profile / 'config.json')
             config = store.load()
             config.gallery_url = 'https://legacy.example.test/'
             config.api_key = 'non-network fixture key'
             store.save(config)
-            mode = MagicMock(spec=MAIN.GuiModeOwner)
+            mode = MagicMock(spec=GuiModeOwner)
             mode.view.return_value.state = 'linked_active'
-            target = MAIN.LinkedUploadTarget(
+            target = LinkedUploadTarget(
                 MagicMock(), 'https://linked.example.test/', 3, 9, 'Fixture target',
             )
             source = ImportSource(files=(profile / 'example.jpg',))
-            with patch.multiple(MAIN, CONFIG_DIR=profile, STATE_PATH=profile / 'upload_state.json'):
-                actions = MAIN.desktop_import_actions(store, config, lambda: mode, lambda: target)
+            with patch.multiple(watcher_state, CONFIG_DIR=profile, STATE_PATH=profile / 'upload_state.json'):
+                actions = launcher.desktop_import_actions(store, config, lambda: mode, lambda: target)
                 worker = actions.prepare(source, Queue())
                 self.assertIs(target, worker.linked_target)
                 self.assertFalse(worker.is_alive())
-                missing = MAIN.desktop_import_actions(store, config, lambda: mode, lambda: None)
-                with self.assertRaises(MAIN.ModeCoordinatorError):
+                missing = launcher.desktop_import_actions(store, config, lambda: mode, lambda: None)
+                with self.assertRaises(ModeCoordinatorError):
                     missing.prepare(source, Queue())
 
     def test_fresh_rolling_grant_keeps_exact_native_binding(self) -> None:
@@ -1329,8 +1333,8 @@ class BackendPreferenceTests(unittest.TestCase):
             session.can_upload.return_value = True
             session.matches_issuer.return_value = True
             target = LinkedUploadTarget(session, 'https://gallery.example.test', 1, 1, 'Root', 'synthetic key')
-            with patch.object(MAIN, 'CONFIG_DIR', profile):
-                owner = MAIN.DesktopCapture(MagicMock(), MAIN.WatcherConfig, MagicMock(), lambda: None)
+            with patch.object(watcher_state, 'CONFIG_DIR', profile):
+                owner = watcher_desktop.DesktopCapture(MagicMock(), watcher_state.WatcherConfig, MagicMock(), lambda: None)
                 owner.contextual_target = target
                 owner._context_cleanup_due = True
                 owner.reconcile_workers(retire_context=False)
@@ -1362,12 +1366,12 @@ class BackendPreferenceTests(unittest.TestCase):
             plan.save()
             metadata = directory / 'session.json'
             metadata.write_text('{"recording_ended":true}', encoding='ascii')
-            target = MAIN.WatchedReportTarget(
+            target = WatchedReportTarget(
                 'Fixture gallery', upload_url='https://gallery.example.test', api_key='fixture',
                 gui_admission=(MagicMock(), MagicMock()),
             )
-            with patch.object(MAIN, 'CONFIG_DIR', profile):
-                owner = MAIN.DesktopCapture(MagicMock(), MAIN.WatcherConfig, MagicMock(), lambda: None)
+            with patch.object(watcher_state, 'CONFIG_DIR', profile):
+                owner = watcher_desktop.DesktopCapture(MagicMock(), watcher_state.WatcherConfig, MagicMock(), lambda: None)
                 lease = WorkspaceLease(root)
                 owner.lease = lease
                 try:
@@ -1413,9 +1417,9 @@ class BackendPreferenceTests(unittest.TestCase):
             revision = ReportRevision(
                 'revision', {'en': pdf, 'cs': pdf.with_name('saved-cs.pdf')},
             )
-            with (patch.object(MAIN, 'CONFIG_DIR', profile),
-                  patch.object(MAIN, 'report_revisions', return_value=(revision,))):
-                owner = MAIN.DesktopCapture(MagicMock(), MAIN.WatcherConfig, coordinator, lambda: target)
+            with (patch.object(watcher_state, 'CONFIG_DIR', profile),
+                  patch.object(watcher_desktop, 'report_revisions', return_value=(revision,))):
+                owner = watcher_desktop.DesktopCapture(MagicMock(), watcher_state.WatcherConfig, coordinator, lambda: target)
                 self.assertEqual((target.binding(), 'Fixture gallery'), owner.report_target())
                 worker, lease = owner.prepare_report_upload(
                     directory, (('revision', 'en'),), target.binding(),

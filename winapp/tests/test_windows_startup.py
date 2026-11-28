@@ -22,7 +22,8 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import windows_startup as startup
+from uploader import launcher, windows_startup as startup
+from uploader.watcher import runtime as watcher_runtime, state as watcher_state
 from test_redesign import MAIN
 
 # Purpose: Bound native child startup/shutdown without hanging central discovery.
@@ -41,12 +42,12 @@ class StartupPreferenceTests(unittest.TestCase):
         Returns:
             None: Both legacy defaults and persisted opt-out remain stable.
         """
-        self.assertTrue(MAIN.WatcherConfig.from_dict({}).start_with_windows)
-        configured = MAIN.WatcherConfig.from_dict({
+        self.assertTrue(watcher_state.WatcherConfig.from_dict({}).start_with_windows)
+        configured = watcher_state.WatcherConfig.from_dict({
             "start_with_windows": False, "api_key": "kept-key",
         })
         self.assertFalse(configured.start_with_windows)
-        restored = MAIN.WatcherConfig.from_dict(configured.to_dict())
+        restored = watcher_state.WatcherConfig.from_dict(configured.to_dict())
         self.assertFalse(restored.start_with_windows)
         self.assertEqual("kept-key", restored.api_key)
 
@@ -103,8 +104,8 @@ class StartupPreferenceTests(unittest.TestCase):
         Returns:
             None: Saves opt-out immediately without reading the editable form.
         """
-        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
-        app.config = MAIN.WatcherConfig(api_key="saved-key")
+        app = launcher.WatcherApp.__new__(launcher.WatcherApp)
+        app.config = watcher_state.WatcherConfig(api_key="saved-key")
         app.start_with_windows_var = mock.Mock()
         app.start_with_windows_var.get.return_value = False
         app.config_store = mock.Mock()
@@ -145,8 +146,8 @@ class StartupPreferenceTests(unittest.TestCase):
         Returns:
             None: Neither refusal applies an unpersisted registry preference.
         """
-        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
-        app.config = MAIN.WatcherConfig(start_with_windows=True)
+        app = launcher.WatcherApp.__new__(launcher.WatcherApp)
+        app.config = watcher_state.WatcherConfig(start_with_windows=True)
         app.root = mock.Mock()
         app.start_with_windows_var = mock.Mock()
         app.start_with_windows_var.get.return_value = False
@@ -164,7 +165,7 @@ class StartupPreferenceTests(unittest.TestCase):
         app.mode_owner.save.assert_not_called()
         app.updates.blocked.return_value = False
         app.config_store.save.side_effect = OSError("disk unavailable")
-        with mock.patch.object(MAIN, "messagebox") as messages:
+        with mock.patch.object(watcher_runtime, "messagebox") as messages:
             app.save_startup_preference()
             messages.showerror.assert_called_once()
         self.assertTrue(app.config.start_with_windows)
@@ -180,17 +181,17 @@ class StartupPreferenceTests(unittest.TestCase):
         for enabled in (True, False):
             with (
                 self.subTest(enabled=enabled),
-                mock.patch.object(MAIN, "WindowsInstance") as factory,
-                mock.patch.object(MAIN, "setup_logging"),
-                mock.patch.object(MAIN, "ConfigStore") as store,
-                mock.patch.object(MAIN, "synchronize_startup") as synchronize,
-                mock.patch.object(MAIN, "WatcherApp") as app,
+                mock.patch.object(launcher, "WindowsInstance") as factory,
+                mock.patch.object(launcher, "setup_logging"),
+                mock.patch.object(watcher_state, "ConfigStore") as store,
+                mock.patch.object(launcher, "synchronize_startup") as synchronize,
+                mock.patch.object(launcher, "WatcherApp") as app,
             ):
                 factory.return_value.acquire.return_value = True
-                store.return_value.load.return_value = MAIN.WatcherConfig(
+                store.return_value.load.return_value = watcher_state.WatcherConfig(
                     start_with_windows=enabled,
                 )
-                self.assertEqual(0, MAIN.main(["--configure-startup"]))
+                self.assertEqual(0, launcher.main(["--configure-startup"]))
                 synchronize.assert_called_once_with(enabled)
                 app.assert_not_called()
 
@@ -252,23 +253,23 @@ class InstanceCoordinationTests(unittest.TestCase):
             None: A manual duplicate activates once and releases its handles.
         """
         with (
-            mock.patch.object(MAIN, "WindowsInstance") as factory,
-            mock.patch.object(MAIN, "setup_logging") as logging_setup,
-            mock.patch.object(MAIN, "ConfigStore") as store,
-            mock.patch.object(MAIN, "WatcherApp") as app,
+            mock.patch.object(launcher, "WindowsInstance") as factory,
+            mock.patch.object(launcher, "setup_logging") as logging_setup,
+            mock.patch.object(watcher_state, "ConfigStore") as store,
+            mock.patch.object(launcher, "WatcherApp") as app,
         ):
             instance = factory.return_value
             instance.acquire.return_value = False
-            self.assertEqual(0, MAIN.main([]))
+            self.assertEqual(0, launcher.main([]))
             instance.request_activation.assert_called_once_with()
             logging_setup.assert_not_called()
             store.assert_not_called()
             app.assert_not_called()
             instance.close.assert_called_once_with()
             instance.request_activation.reset_mock()
-            self.assertEqual(0, MAIN.main(["--startup"]))
-            self.assertEqual(0, MAIN.main(["--configure-startup"]))
-            self.assertEqual(1, MAIN.main(["--once"]))
+            self.assertEqual(0, launcher.main(["--startup"]))
+            self.assertEqual(0, launcher.main(["--configure-startup"]))
+            self.assertEqual(1, launcher.main(["--once"]))
             instance.request_activation.assert_not_called()
 
     def test_disabled_startup_exits_without_ui(self) -> None:
@@ -278,18 +279,18 @@ class InstanceCoordinationTests(unittest.TestCase):
             None: Removes the stale registration and leaves all GUI work absent.
         """
         with (
-            mock.patch.object(MAIN, "WindowsInstance") as factory,
-            mock.patch.object(MAIN, "setup_logging"),
-            mock.patch.object(MAIN, "ConfigStore") as store,
-            mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
-            mock.patch.object(MAIN, "synchronize_startup") as synchronize,
-            mock.patch.object(MAIN, "WatcherApp") as app,
+            mock.patch.object(launcher, "WindowsInstance") as factory,
+            mock.patch.object(launcher, "setup_logging"),
+            mock.patch.object(watcher_state, "ConfigStore") as store,
+            mock.patch.object(launcher, "load_gui_backend", return_value="tkinter"),
+            mock.patch.object(launcher, "synchronize_startup") as synchronize,
+            mock.patch.object(launcher, "WatcherApp") as app,
         ):
             factory.return_value.acquire.return_value = True
-            store.return_value.load.return_value = MAIN.WatcherConfig(
+            store.return_value.load.return_value = watcher_state.WatcherConfig(
                 start_with_windows=False,
             )
-            self.assertEqual(0, MAIN.main(["--startup"]))
+            self.assertEqual(0, launcher.main(["--startup"]))
             synchronize.assert_called_once_with(False)
             app.assert_not_called()
 
@@ -300,14 +301,14 @@ class InstanceCoordinationTests(unittest.TestCase):
             None: Failed coordination exits nonzero and closes acquired handles.
         """
         with (
-            mock.patch.object(MAIN, "WindowsInstance") as factory,
-            mock.patch.object(MAIN, "setup_logging") as logging_setup,
-            mock.patch.object(MAIN, "ConfigStore") as store,
-            mock.patch.object(MAIN, "WatcherApp") as app,
-            mock.patch.object(MAIN, "messagebox") as messages,
+            mock.patch.object(launcher, "WindowsInstance") as factory,
+            mock.patch.object(launcher, "setup_logging") as logging_setup,
+            mock.patch.object(watcher_state, "ConfigStore") as store,
+            mock.patch.object(launcher, "WatcherApp") as app,
+            mock.patch.object(watcher_runtime, "messagebox") as messages,
         ):
             factory.return_value.acquire.side_effect = OSError("native denied")
-            self.assertEqual(1, MAIN.main([]))
+            self.assertEqual(1, launcher.main([]))
             logging_setup.assert_not_called()
             store.assert_not_called()
             app.assert_not_called()
@@ -322,17 +323,17 @@ class InstanceCoordinationTests(unittest.TestCase):
         """
         order = []
         with (
-            mock.patch.object(MAIN, "WindowsInstance") as factory,
-            mock.patch.object(MAIN, "setup_logging"),
-            mock.patch.object(MAIN, "ConfigStore") as store,
-            mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
-            mock.patch.object(MAIN, "WatcherApp") as app,
+            mock.patch.object(launcher, "WindowsInstance") as factory,
+            mock.patch.object(launcher, "setup_logging"),
+            mock.patch.object(watcher_state, "ConfigStore") as store,
+            mock.patch.object(launcher, "load_gui_backend", return_value="tkinter"),
+            mock.patch.object(launcher, "WatcherApp") as app,
         ):
             factory.return_value.acquire.return_value = True
-            store.return_value.load.return_value = MAIN.WatcherConfig()
+            store.return_value.load.return_value = watcher_state.WatcherConfig()
             app.return_value.run.side_effect = lambda: order.append("run")
             factory.return_value.close.side_effect = lambda: order.append("close")
-            self.assertEqual(0, MAIN.main(["--startup"]))
+            self.assertEqual(0, launcher.main(["--startup"]))
             app.assert_called_once_with(
                 config_store=store.return_value, start_minimized=True,
             )
@@ -348,22 +349,22 @@ class InstanceCoordinationTests(unittest.TestCase):
         for frozen in (False, True):
             with (
                 self.subTest(frozen=frozen),
-                mock.patch.object(MAIN, "WindowsInstance") as factory,
-                mock.patch.object(MAIN, "setup_logging"),
-                mock.patch.object(MAIN, "ConfigStore") as store,
-                mock.patch.object(MAIN, "load_gui_backend", return_value="tkinter"),
-                mock.patch.object(MAIN, "WatcherApp") as app,
-                mock.patch.object(MAIN.subprocess, "Popen") as launch,
-                mock.patch.object(MAIN.sys, "frozen", frozen, create=True),
+                mock.patch.object(launcher, "WindowsInstance") as factory,
+                mock.patch.object(launcher, "setup_logging"),
+                mock.patch.object(watcher_state, "ConfigStore") as store,
+                mock.patch.object(launcher, "load_gui_backend", return_value="tkinter"),
+                mock.patch.object(launcher, "WatcherApp") as app,
+                mock.patch.object(launcher.subprocess, "Popen") as launch,
+                mock.patch.object(launcher.sys, "frozen", frozen, create=True),
             ):
                 order: list[str] = []
                 factory.return_value.acquire.return_value = True
-                store.return_value.load.return_value = MAIN.WatcherConfig()
+                store.return_value.load.return_value = watcher_state.WatcherConfig()
                 app.return_value._restart_requested = True
                 app.return_value.run.side_effect = lambda: order.append("run")
                 factory.return_value.close.side_effect = lambda: order.append("unlock")
                 launch.side_effect = lambda *_args, **_kwargs: order.append("launch")
-                self.assertEqual(0, MAIN.main(["--config", "test-profile.json"]))
+                self.assertEqual(0, launcher.main(["--config", "test-profile.json"]))
                 self.assertEqual(["run", "unlock", "launch"], order)
                 command = [sys.executable]
                 if not frozen:
@@ -472,7 +473,7 @@ class TrayStartupTests(unittest.TestCase):
         Returns:
             None: A visible native icon admits the hidden main window.
         """
-        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app = launcher.WatcherApp.__new__(launcher.WatcherApp)
         app.exiting = False
         app.startup_waiting_for_tray = True
         app.tray_icon = types.SimpleNamespace(visible=True)
@@ -490,7 +491,7 @@ class TrayStartupTests(unittest.TestCase):
         Returns:
             None: Missing and timed-out initialization both restore the window.
         """
-        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app = launcher.WatcherApp.__new__(launcher.WatcherApp)
         app.exiting = False
         app.startup_waiting_for_tray = True
         app.write_log = mock.Mock()
@@ -511,7 +512,7 @@ class TrayStartupTests(unittest.TestCase):
         Returns:
             None: Restores the existing root and schedules the next native poll.
         """
-        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app = launcher.WatcherApp.__new__(launcher.WatcherApp)
         app.exiting = False
         app.instance = mock.Mock()
         app.instance.activation_requested.return_value = True

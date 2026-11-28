@@ -112,7 +112,9 @@ their counters do not replace central SQL observations or establish worker exit.
 
 ## WinApp desktop composition
 
-WinApp reads the per-profile GUI choice before opening a desktop event loop.
+The stable `gallery_watch_upload.pyw` bootstrap handles early flags before
+desktop imports. `uploader/launcher.py` assembles CLI and backend startup, then
+reads the per-profile GUI choice before opening a desktop event loop.
 WinApp 2.0.0 defaults to Qt for profiles without a saved choice. The common
 PyInstaller onedir package includes both Qt and Legacy Tk, with one registered
 executable, interpreter, updater and profile.
@@ -120,12 +122,45 @@ The startup supervisor starts the same executable with a backend-specific
 handshake and waits for a failed Qt startup to exit before starting Legacy Tk.
 
 Tk and Qt present the same profile, Watcher queue, Flight recorder, upload mode,
-credential vault, gallery transport and update owners. Approved active capture
-restart uses those owners' durable continuation records. Qt Widgets presents
+credential vault, gallery transport and update owners. Watcher runtime and
+durable state live under `uploader/watcher/`; its `workers/` and `ui/` packages
+separate background execution from Tk orchestration. Configuration policy is
+owned by `uploader/watcher/configuration.py`; settings modules for preferences,
+updates and shutdown live under `uploader/watcher/ui/settings/`. Manual
+import and AI use their `uploader/imports/` and `uploader/ai/` owners. Approved
+active capture restart uses those owners' durable continuation records. Qt Widgets presents
 the shell, forms and operator tables. Its embedded Qt Quick scene virtualizes
 the photo grid and keeps its Lightbox image across layout and viewport changes.
 GPU scene-graph support depends on the host graphics device and driver.
 [WinApp backend ownership and qualification](docs/WINAPP_GUI_BACKENDS.md).
+
+Within the Tk Watcher UI, `watcher/ui/event_pump.py` owns a single scheduled
+timer slot, stale-callback rejection and cancellation during teardown.
+`watcher/ui/event_delivery.py` owns bounded worker-event dispatch and
+presentation. The focused lifecycle and owner-contract coverage is in
+`winapp/tests/test_watcher_continuation.py` and
+`winapp/tests/test_launcher_module_contracts.py`.
+
+Linked-gallery transport, request attempts, media access and session lifecycle
+are owned by `winapp/uploader/linking/`; its `ui/` package owns the Tk manager,
+dialogs, picker and polling callbacks. The historical `app_linking.py` and
+`app_linking_ui.py` modules remain narrow import facades. Flight report labels
+are grouped by locale and interface domain in
+`winapp/uploader/translation_catalog/`, with `flight_report_translations.py`
+retaining the lookup API. Flight report implementation lives under
+`winapp/uploader/flight/reports/`; `flight_report.py` remains a legacy
+navigation/import facade. `flight_ui.py` remains the `FlightUI` composition and
+import entry, while dispatch, report actions, lifecycle, progress and ports are
+implemented under `winapp/uploader/flight/ui/`.
+
+## WinApp updater and installed verification
+
+`self_update.py` owns release discovery and verified downloads, `update_ui.py`
+owns update notice and process-drain coordination, and `update_helper.py` owns
+the external installer handoff. Watcher settings integration is in
+`watcher/ui/settings/`. `winapp/qualify_installer_updates.py` runs the installed
+update audit; its supported hosted verification and evidence are documented in
+`TESTING.md`.
 
 ## Native gallery presentation and single-field editing
 
@@ -330,7 +365,7 @@ Viewer/public callers. Upload binding limits count requests; account/IP/global
 storage limits charge every multipart original, preserving the existing API cap.
 
 WinApp capture admission belongs to `discovery.py` and the version-two journal
-in `watch_queue.py`, using `state_store.py` durable atomic publication. The
+in `watcher/queue.py`, using `state_store.py` durable atomic publication. The
 producer continues independently while one shared consumer resolves only the
 FIFO head. Watcher, import, recovery and one-shot mode share a native profile
 pipeline lease; target leases and server gallery mutation locking remain
@@ -338,11 +373,11 @@ independent. Explicit Finish owns its cutoff and a new final-scan generation,
 never the last error checkpoint. See the queue contract for chronological,
 legacy-migration and uncertain-operation evidence boundaries.
 
-`watch_recovery.py` owns explicit head-only receipt confirmation and user skip.
+`watcher/recovery.py` owns explicit head-only receipt confirmation and user skip.
 It validates immutable review tokens under the consumer's current upload leases
 and persists a decision intent before linked-history review and queue publication.
 Interrupted decisions are repaired idempotently before advancing FIFO.
-`watch_recovery_ui.py` owns the shared Resume preview; `flight_ui.py` exposes
+`watcher/recovery_ui.py` owns the shared Resume preview; `flight_ui.py` exposes
 blocked Finish, explicit stop/retention and always available Hide. Folder
 inspection reads filesystem observations independently from the capture journal.
 Neither remote preview nor hash inventory is an upload acknowledgement.
@@ -5281,13 +5316,15 @@ snapshots carry planned evidence into analysis identity without replacing
 measured telemetry. `flight_navdata.py` retains bounded AIRAC-scoped coordinate
 evidence in private SQLite. `flight_maps.py` projects captured/planned routes
 over cached OSM tiles in the report worker, with attribution and an offline
-route fallback. `flight_ui.py` owns identity prompts, late-response session
-checks and explicitly selected historical attachments. `flight_data.py`
-normalizes available
+route fallback. The `FlightUI` composition/import entry remains
+`flight_ui.py`; dispatch, report actions, lifecycle, progress and adapter ports
+are implemented in `flight/ui/{dispatch,reports,lifecycle,progress,ports}.py`.
+`flight_report.py` remains a legacy navigation/import facade for report code in
+`flight/reports/`. `flight_data.py` normalizes available
 samples into one analysis model; unavailable generation/build/aircraft fields
-remain unavailable rather than being fabricated. `flight_report.py` renders
-the same immutable analysis into one PDF per selected language using the bundled
-ReportLab/DejaVu assets and shared translations.
+remain unavailable rather than being fabricated. The implementation under
+`flight/reports/` renders the same immutable analysis into one PDF per selected
+language using the bundled ReportLab/DejaVu assets and shared translations.
 Map raster dimensions derive from physical PDF placement at 300 dpi; native OSM
 tiles sit beneath vector recorded/purple-planned routes, endpoints and
 attribution.

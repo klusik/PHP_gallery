@@ -4814,8 +4814,8 @@ package inventory for the removed file.
   80 later accepted photos. A gallery ordinal or matching image does not prove
   that operation committed. Folder inspection changed displayed dry-run labels;
   a durable queue reset was not established by the incident evidence.
-- **Owner:** `watch_queue.py` retains source generations and explicit
-  dispositions; `watch_recovery.py` coordinates leased, head-specific decisions.
+- **Owner:** `watcher/queue.py` retains source generations and explicit
+  dispositions; `watcher/recovery.py` coordinates leased, head-specific decisions.
   Watcher marshals consumer decisions; the shared recovery dialog and FlightUI
   expose Resume, safe skip, retained stop and Hide.
 - **Compatibility:** Existing v1/v2 journals retain target, session, cutoff and
@@ -4852,7 +4852,7 @@ package inventory for the removed file.
   normal Exit refused to close the app. Queue refresh was the reported trigger;
   its direct responsibility for starting Finish was not established by the log.
   The historical HTTP 503 does not prove a current failed transfer.
-- **Owners:** `watch_queue.py` persists terminal force-finish intent;
+- **Owners:** `watcher/queue.py` persists terminal force-finish intent;
   `flight_jobs.py` retains capture-plan abandonment; the app owns dispatch,
   worker generations, diagnostics and shutdown; FlightUI owns scoped drain and
   the explicit Force finish action.
