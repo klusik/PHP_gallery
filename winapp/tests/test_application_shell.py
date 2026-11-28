@@ -26,6 +26,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
+from uploader.watcher.ui import shell as watcher_ui_shell
 from uploader.ui_shell import EmbeddedWindow, initialize_shell
 from uploader.app_header import CompactAppHeader
 from uploader.ui_theme import Button, configure_theme
@@ -94,10 +95,10 @@ class MenuCommandTests(unittest.TestCase):
         app.root = mock.Mock()
         app.exiting = False
         command = mock.Mock()
-        with mock.patch.object(MAIN, "active_panel", return_value=object()):
+        with mock.patch.object(watcher_ui_shell, "active_panel", return_value=object()):
             self.assertEqual(app.menu_command(command), "break")
         command.assert_not_called()
-        with mock.patch.object(MAIN, "active_panel", return_value=None):
+        with mock.patch.object(watcher_ui_shell, "active_panel", return_value=None):
             app.menu_command(command)
             command.assert_called_once_with()
             app.exiting = True

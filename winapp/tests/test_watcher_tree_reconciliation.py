@@ -27,12 +27,14 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.import_history_reader import ImportHistoryReadResult
+from uploader.imports import policy as import_policy
 from uploader.import_ui_snapshot import (
     ImportHistorySummary,
     ImportProgressSnapshot,
     new_worker_generation,
 )
 from uploader.models import ActivityEvent, ImportItem, ImportJob
+from uploader.watcher.ui import support as watcher_support
 
 
 # Purpose: Provide one over-cap item so both import views prove their row bound.
@@ -477,7 +479,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
                 job,
                 new_worker_generation(),
                 revision,
-                MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+                import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
             )
             summaries.append(replace(
                 snapshot.history,
@@ -522,7 +524,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         jobs = [
             self.make_job(f"job-{index}", float(-index))
             for index in range(
-                MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
+                watcher_support.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
                 + HISTORY_OVER_CAP_EXTRA_ROWS
             )
         ]
@@ -541,7 +543,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
                 (ImportHistoryReadResult(
                     kind="history", ticket=1,
                     history=self._history_rows(
-                        jobs[:MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT], 1,
+                        jobs[:watcher_support.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT], 1,
                     ),
                 ),),
             )),
@@ -565,7 +567,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
             kind="history", ticket=2,
             history=self._history_rows(
                 [newest_job, *jobs][
-                    :MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
+                    :watcher_support.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT
                 ],
                 2,
             ),
@@ -574,7 +576,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
             kind="detail", ticket=3, job=selected_job,
             snapshot=ImportProgressSnapshot.from_job(
                 selected_job, new_worker_generation(), 3,
-                MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+                import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
             ),
         )
         reader.poll_ready.side_effect = (
@@ -586,7 +588,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         MAIN.WatcherApp._flush_import_presentation(self.app, force=True)
 
         self.assertEqual(
-            MAIN.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT,
+            watcher_support.WATCHER_JOB_HISTORY_TREE_ROW_LIMIT,
             len(history.get_children("")),
         )
         self.assertEqual(
@@ -630,7 +632,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         current_generation = new_worker_generation()
         current_snapshot = ImportProgressSnapshot.from_job(
             current_job, current_generation, 22,
-            MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+            import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
         )
         reader = SimpleNamespace(
             request_history=Mock(),
@@ -640,7 +642,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
                     kind="detail", ticket=21, job=stale_job,
                     snapshot=ImportProgressSnapshot.from_job(
                         stale_job, new_worker_generation(), 21,
-                        MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+                        import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
                     ),
                 ),
                 ImportHistoryReadResult(
@@ -813,7 +815,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         """
         items: list[ImportItem] = []
         total_rows = (
-            MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT + IMPORT_OVER_CAP_EXTRA_ROWS
+            import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT + IMPORT_OVER_CAP_EXTRA_ROWS
         )
         for index in range(total_rows):
             items.append(ImportItem(
@@ -841,11 +843,11 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         MAIN.WatcherApp.refresh_import_item_tree(self.app, job)
 
         self.assertEqual(
-            MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+            import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
             len(self.app.import_item_tree.get_children("")),
         )
         self.assertEqual(
-            MAIN.WATCHER_IMPORT_TREE_ROW_LIMIT,
+            import_policy.WATCHER_IMPORT_TREE_ROW_LIMIT,
             len(self.app.activity_item_tree.get_children("")),
         )
         self.assertEqual(
@@ -914,7 +916,7 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         """
         events: list[ActivityEvent] = []
         event_total = (
-            MAIN.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT
+            watcher_support.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT
             * ACTIVITY_FIXTURE_CAP_MULTIPLIER
         )
         for index in range(event_total):
@@ -940,15 +942,15 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
         drawer = self.app.activity_drawer
         warning_rows = drawer.get_children("")
         self.assertEqual(
-            MAIN.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
+            watcher_support.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
             len(warning_rows),
         )
         warning_snapshot = cast(
-            MAIN._TreeRowSnapshot,
+            watcher_support._TreeRowSnapshot,
             getattr(drawer, "_watcher_row_snapshot"),
         )
         self.assertEqual(
-            MAIN.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
+            watcher_support.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
             len(warning_snapshot.retained_activity_events),
         )
         self.assertIs(
@@ -975,16 +977,16 @@ class WatcherTreeReconciliationTests(unittest.TestCase):
 
         all_rows = drawer.get_children("")
         self.assertEqual(
-            MAIN.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
+            watcher_support.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT,
             len(all_rows),
         )
         all_snapshot = cast(
-            MAIN._TreeRowSnapshot,
+            watcher_support._TreeRowSnapshot,
             getattr(drawer, "_watcher_row_snapshot"),
         )
         expected_event_references = tuple(reversed(
             self.app.activity_events[
-                -MAIN.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT:
+                -watcher_support.WATCHER_ACTIVITY_DRAWER_ROW_LIMIT:
             ],
         ))
         self.assertTrue(all(

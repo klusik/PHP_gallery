@@ -24,7 +24,8 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import transport as linking_transport
 from uploader.linked_upload import UploadPipelineLease
 
 
@@ -54,9 +55,9 @@ class UploadTransportRecoveryTests(unittest.TestCase):
         response.__enter__.return_value = response
         connection = mock.Mock()
         connection.getresponse.return_value = response
-        with mock.patch.object(linking, '_linking_connection', return_value=connection):
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example.test', 'app_linking_upload', 'POST',
                     b'body', 'pga_' + 'a' * 64,
                     multipart_boundary='PHPGalleryFixtureBoundary', content_length=4,
@@ -101,9 +102,9 @@ class UploadTransportRecoveryTests(unittest.TestCase):
         """
         connection = mock.Mock()
         connection.connect.side_effect = socket.gaierror('synthetic unavailable DNS')
-        with mock.patch.object(linking, '_linking_connection', return_value=connection):
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example.test', 'app_linking_upload', 'POST',
                     b'body', 'pga_' + 'a' * 64,
                     multipart_boundary='PHPGalleryFixtureBoundary', content_length=4,

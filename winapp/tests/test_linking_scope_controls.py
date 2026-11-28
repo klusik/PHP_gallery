@@ -17,7 +17,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import (
+from uploader.linking import (
     GALLERIES_OFFLINE_SCOPE, GALLERIES_SCOPE, IDENTITY_OFFLINE_SCOPE, READ_SCOPE,
     UPLOAD_SCOPE, LinkingError,
     requested_linking_scope,

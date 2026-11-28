@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from uploader import credential_store
 from uploader import upload_mode
-from uploader.app_linking import (
+from uploader.linking import (
     READ_UPLOAD_CREATE_SCOPE, READ_UPLOAD_SCOPE, UPLOAD_CREATE_SCOPE,
     UPLOAD_SCOPE,
 )

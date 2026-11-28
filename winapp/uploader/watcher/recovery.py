@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
-# File: winapp/uploader/watch_recovery.py
+# File: winapp/uploader/watcher/recovery.py
 # Module Type: Recovery Service
 # Purpose: Coordinate receipt, skip and one-photo approval for uncertain uploads.
 # Responsibilities:
@@ -20,10 +20,10 @@ import re
 from typing import Callable, ContextManager, Literal
 import uuid
 
-from .linked_upload import (LinkedTargetLease, UploadPipelineLease,
+from ..linked_upload import (LinkedTargetLease, UploadPipelineLease,
                             capture_linked_source, verify_linked_source)
-from .models import JsonValue
-from .watch_queue import (WatchQueueItem, WatchQueueStore,
+from ..models import JsonValue
+from .queue import (WatchQueueItem, WatchQueueStore,
                           observe_watch_source)
 
 # Purpose: Bound image bytes admitted by the recovery preview readers.

@@ -29,7 +29,7 @@ if os.name == 'nt':
     import msvcrt
 
 from .flight_delivery import FlightDeliveryError
-from .app_linking import (
+from .linking import (
     LINKING_GALLERY_ID_MAX, LinkingError, LinkingSession, LinkedGallery,
     LinkedGalleryPage, UPLOAD_SCOPE, scope_base,
 )

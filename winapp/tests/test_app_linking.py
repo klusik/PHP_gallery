@@ -19,6 +19,7 @@ import json
 import os
 import queue
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -31,13 +32,25 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Callable
 from unittest import mock
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import attempt as linking_attempt
+from uploader.linking import core as linking_core
+from uploader.linking import media as linking_media
+from uploader.linking import models as linking_models
+from uploader.linking import session as linking_session
+from uploader.linking import session_gallery as linking_session_gallery
+from uploader.linking import session_lifecycle as linking_session_lifecycle
+from uploader.linking import session_media_access as linking_session_media_access
+from uploader.linking import transport as linking_transport
+from uploader.models import JsonValue
+from uploader.gallery_media_cache import GalleryMediaCache, PHOTO_CACHE_FRESH_SECONDS
+from uploader.passive_server_timing import PassiveServerTiming
 from uploader import gallery_media_cache, offline_linking, session_resume
 from uploader.credential_store import CredentialStoreUnavailable
 from uploader.diagnostics import (
@@ -118,7 +131,7 @@ TEST_POOLED_GET_COUNT = 3
 
 def discovery_response(
     issuer: str, scope: str, extra_capabilities: tuple[str, ...] = (),
-) -> dict[str, linking.JsonValue]:
+) -> dict[str, JsonValue]:
     """Build a supported public-discovery envelope for one attempt.
 
     Args:
@@ -128,7 +141,7 @@ def discovery_response(
             markers used to test optional discovery negotiation.
 
     Returns:
-        dict[str, linking.JsonValue]: Public capability response with every
+        dict[str, JsonValue]: Public capability response with every
             requested non-identity scope and the browser linking capability.
     """
     capabilities = ['linking', *sorted(set(scope.split()) - {linking.IDENTITY_SCOPE})]
@@ -148,7 +161,7 @@ def discovery_response(
 def handoff_response(
     issuer: str, request_handle: str = TEST_REQUEST_HANDLE,
     expires_in: int = linking.HANDOFF_MAX_LIFETIME_SECONDS,
-) -> dict[str, linking.JsonValue]:
+) -> dict[str, JsonValue]:
     """Build a valid browser handoff response, optionally with test overrides.
 
     Args:
@@ -157,7 +170,7 @@ def handoff_response(
         expires_in (int): Synthetic server-provided handoff lifetime in seconds.
 
     Returns:
-        dict[str, linking.JsonValue]: Versioned handoff response with the exact
+        dict[str, JsonValue]: Versioned handoff response with the exact
             server-derived browser approval URL.
     """
     return {
@@ -175,7 +188,8 @@ except ModuleNotFoundError as exc:
         raise
     LinkingManager = None
 else:
-    from uploader.app_linking_ui import LinkingManager, _LinkedSite
+    from uploader.linking.ui import LinkingManager
+    from uploader.desktop_connection import DesktopLinkedSite as _LinkedSite
 
 
 class LinkingTransportTests(unittest.TestCase):
@@ -188,7 +202,7 @@ class LinkingTransportTests(unittest.TestCase):
             None: Waiting calls acquire one serial slot in registration order;
                 nonblocking attempts cannot jump the queue or double-release.
         """
-        gate = linking._FairRequestGate()
+        gate = linking_core._FairRequestGate()
         self.assertTrue(gate.acquire(blocking=False))
         registered = [threading.Event(), threading.Event()]
         order: list[int] = []
@@ -245,7 +259,7 @@ class LinkingTransportTests(unittest.TestCase):
         # This arbitrary nonzero port stands for an OS-assigned loopback port.
         self.listener.getsockname.return_value = ('127.0.0.1', 56321)
         self.socket_patch = mock.patch.object(
-            linking.socket, 'socket', return_value=self.listener,
+            socket, 'socket', return_value=self.listener,
         )
         self.socket_patch.start()
         self.addCleanup(self.socket_patch.stop)
@@ -305,7 +319,7 @@ class LinkingTransportTests(unittest.TestCase):
         ):
             with self.subTest(outcome=outcome):
                 connection = mock.Mock()
-                linking._reply(
+                linking_core._reply(
                     connection, outcome, time.monotonic() + TEST_WORKER_WAIT_SECONDS,
                 )
                 response = connection.sendall.call_args.args[0]
@@ -325,11 +339,11 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: No TCP socket is opened for an external answer.
         """
-        control = linking._LinkingTransportControl(
+        control = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_WORKER_WAIT_SECONDS,
             None, TEST_WORKER_WAIT_SECONDS,
         )
-        connection = linking._DeadlineLoopbackConnection(
+        connection = linking_transport._DeadlineLoopbackConnection(
             http.client.HTTP_PORT, control,
         )
         # The system resolver is simulated with a documentation-range address.
@@ -383,7 +397,7 @@ class LinkingTransportTests(unittest.TestCase):
                 )
                 self.addCleanup(attempt.close)
                 with mock.patch.object(
-                    linking, '_request_json', side_effect=[
+                    linking_attempt, '_request_json', side_effect=[
                         envelope, handoff_response(issuer),
                     ],
                 ) as request:
@@ -413,7 +427,7 @@ class LinkingTransportTests(unittest.TestCase):
                 attempt = linking.LinkingAttempt(issuer, scope=linking.GALLERIES_SCOPE)
                 self.addCleanup(attempt.close)
                 with mock.patch.object(
-                    linking, '_request_json',
+                    linking_attempt, '_request_json',
                     side_effect=[envelope, handoff_response(issuer)],
                 ) as request:
                     attempt.push_request(prefer_upload=True, prefer_rolling=True)
@@ -453,7 +467,7 @@ class LinkingTransportTests(unittest.TestCase):
                 attempt = linking.LinkingAttempt(issuer, scope=linking.GALLERIES_SCOPE)
                 self.addCleanup(attempt.close)
                 with mock.patch.object(
-                    linking, '_request_json',
+                    linking_attempt, '_request_json',
                     side_effect=[envelope, handoff_response(issuer)],
                 ) as request:
                     attempt.push_request(
@@ -509,14 +523,14 @@ class LinkingTransportTests(unittest.TestCase):
                 attempt = linking.LinkingAttempt(issuer)
                 self.addCleanup(attempt.close)
                 with mock.patch.object(
-                    linking, '_request_json', side_effect=[supported, response],
+                    linking_attempt, '_request_json', side_effect=[supported, response],
                 ) as request:
                     with self.assertRaises(linking.LinkingError):
                         attempt.push_request()
                     self.assertEqual(2, request.call_count)
         attempt = linking.LinkingAttempt(issuer)
         self.addCleanup(attempt.close)
-        with mock.patch.object(linking, '_request_json', side_effect=[
+        with mock.patch.object(linking_attempt, '_request_json', side_effect=[
             {**supported, 'future_field': {'ignored': True}},
             {**good, 'future_field': 'ignored'},
         ]):
@@ -539,7 +553,7 @@ class LinkingTransportTests(unittest.TestCase):
         token = linking.TOKEN_PREFIX + base64.urlsafe_b64encode(
             b't' * linking.ATTEMPT_RANDOM_BYTES,
         ).rstrip(b'=').decode('ascii')
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_attempt, '_request_json') as request_json:
             request_json.side_effect = [
                 discovery_response(
                     'https://gallery.example/Galerie', linking.IDENTITY_SCOPE,
@@ -579,13 +593,13 @@ class LinkingTransportTests(unittest.TestCase):
             })
             wrong_state_value = ('A' if state[0] != 'A' else 'B') + state[1:]
             wrong_state = callback.replace(state, wrong_state_value)
-            self.assertIsNone(linking._callback_values(
+            self.assertIsNone(linking_core._callback_values(
                 wrong_state, state, 'https://gallery.example/Galerie',
             ))
-            self.assertIsNone(linking._callback_values(
+            self.assertIsNone(linking_core._callback_values(
                 callback, state, 'https://other.example/Galerie',
             ))
-            self.assertIsNone(linking._callback_values(
+            self.assertIsNone(linking_core._callback_values(
                 callback.replace(linking.CALLBACK_PATH, '/wrong'), state,
                 'https://gallery.example/Galerie',
             ))
@@ -623,7 +637,7 @@ class LinkingTransportTests(unittest.TestCase):
         """
         attempt = linking.LinkingAttempt('https://gallery.example')
         self.addCleanup(attempt.close)
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_attempt, '_request_json') as request_json:
             request_json.side_effect = [
                 discovery_response('https://gallery.example', linking.IDENTITY_SCOPE),
                 handoff_response('https://gallery.example'),
@@ -659,7 +673,10 @@ class LinkingTransportTests(unittest.TestCase):
             'https://gallery.example', scope=linking.GALLERIES_SCOPE,
         )
         self.addCleanup(attempt.close)
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_attempt, '_request_json') as request_json, \
+                mock.patch.object(
+                    linking_session_lifecycle, '_request_json', new=request_json,
+                ):
             request_json.side_effect = [
                 discovery_response(
                     'https://gallery.example', linking.GALLERIES_SCOPE,
@@ -711,7 +728,7 @@ class LinkingTransportTests(unittest.TestCase):
         def fake_request(
             _issuer: str, route: str, *_args: str | bytes | Iterable[bytes] | None,
             **_kwargs: threading.Event | str | int | None,
-        ) -> dict[str, linking.JsonValue]:
+        ) -> dict[str, JsonValue]:
             """Hold the first request while the second waits for admission.
 
             Args:
@@ -723,7 +740,7 @@ class LinkingTransportTests(unittest.TestCase):
                     cancellation, boundary, length and cursor arguments.
 
             Returns:
-                dict[str, linking.JsonValue]: Empty JSON object fixture for the
+                dict[str, JsonValue]: Empty JSON object fixture for the
                     private transport wrapper.
             """
             calls.append(route)
@@ -747,7 +764,7 @@ class LinkingTransportTests(unittest.TestCase):
             except Exception as exc:
                 failures.append(exc)
 
-        with mock.patch.object(linking, '_request_json', side_effect=fake_request):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=fake_request):
             first = threading.Thread(target=call, args=('app_linking_galleries',))
             second = threading.Thread(target=call, args=('app_linking_upload',))
             first.start()
@@ -813,7 +830,7 @@ class LinkingTransportTests(unittest.TestCase):
         def fake_request(
             _issuer: str, route: str, *_args: str | bytes | Iterable[bytes] | None,
             **_kwargs: threading.Event | str | int | None,
-        ) -> dict[str, linking.JsonValue]:
+        ) -> dict[str, JsonValue]:
             """Pause a single upload while the listing queues behind it.
 
             Args:
@@ -825,7 +842,7 @@ class LinkingTransportTests(unittest.TestCase):
                     cancellation, boundary, length and cursor arguments.
 
             Returns:
-                dict[str, linking.JsonValue]: Empty JSON object fixture for the
+                dict[str, JsonValue]: Empty JSON object fixture for the
                     private transport wrapper.
             """
             calls.append(route)
@@ -848,7 +865,7 @@ class LinkingTransportTests(unittest.TestCase):
             except Exception as exc:
                 failures.append((route, exc))
 
-        with mock.patch.object(linking, '_request_json', side_effect=fake_request):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=fake_request):
             upload = threading.Thread(target=call, args=('app_linking_upload',))
             listing = threading.Thread(target=call, args=('app_linking_galleries',))
             upload.start()
@@ -886,7 +903,7 @@ class LinkingTransportTests(unittest.TestCase):
             {'id': index, 'parent_id': None, 'title': f'Gallery {index}'}
             for index in range(1, linking.LINKING_GALLERY_PAGE_MAX + 1)
         ]
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request_json:
             request_json.return_value = {
                 'galleries': rows, 'next_after': linking.LINKING_GALLERY_PAGE_MAX,
             }
@@ -925,7 +942,7 @@ class LinkingTransportTests(unittest.TestCase):
             'https://gallery.example', token, time.monotonic() + 120,
         )
         self.addCleanup(identity_only.close)
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request_json:
             self.assertFalse(identity_only.can_list_galleries())
             with self.assertRaises(linking.LinkingError):
                 identity_only.gallery_page()
@@ -938,7 +955,7 @@ class LinkingTransportTests(unittest.TestCase):
             None: Unknown fields, coercible types and changed revisions fail closed.
         """
         revision = 'a' * 64
-        complete: dict[str, linking.JsonValue] = {
+        complete: dict[str, JsonValue] = {
             'version': 1,
             'revision': revision,
             'unchanged': False,
@@ -947,14 +964,14 @@ class LinkingTransportTests(unittest.TestCase):
                 {'id': 9, 'parent_id': None, 'title': 'Root'},
             ],
         }
-        tree = linking._linked_gallery_tree(complete, None)
+        tree = linking_models._linked_gallery_tree(complete, None)
         self.assertEqual((2, 9), tuple(row.gallery_id for row in tree.galleries))
         self.assertEqual(revision, tree.revision)
         self.assertFalse(tree.unchanged)
-        unchanged: dict[str, linking.JsonValue] = {
+        unchanged: dict[str, JsonValue] = {
             'version': 1, 'revision': revision, 'unchanged': True,
         }
-        self.assertTrue(linking._linked_gallery_tree(unchanged, revision).unchanged)
+        self.assertTrue(linking_models._linked_gallery_tree(unchanged, revision).unchanged)
         invalid = (
             ({**complete, 'extra': True}, None),
             ({**complete, 'version': True}, None),
@@ -983,8 +1000,8 @@ class LinkingTransportTests(unittest.TestCase):
         for payload, requested in invalid:
             with self.subTest(payload=payload):
                 with self.assertRaises(linking.LinkingError):
-                    linking._linked_gallery_tree(payload, requested)
-        bounded_rows: list[linking.JsonValue] = [
+                    linking_models._linked_gallery_tree(payload, requested)
+        bounded_rows: list[JsonValue] = [
             {'id': gallery_id, 'parent_id': None, 'title': 'Row'}
             for gallery_id in range(
                 1, linking.LINKING_GALLERY_TREE_MAX_ROWS + 1,
@@ -993,7 +1010,7 @@ class LinkingTransportTests(unittest.TestCase):
         bounded = {**complete, 'galleries': bounded_rows}
         self.assertEqual(
             linking.LINKING_GALLERY_TREE_MAX_ROWS,
-            len(linking._linked_gallery_tree(bounded, None).galleries),
+            len(linking_models._linked_gallery_tree(bounded, None).galleries),
         )
         over_limit = {
             **complete,
@@ -1003,7 +1020,7 @@ class LinkingTransportTests(unittest.TestCase):
             ],
         }
         with self.assertRaises(linking.LinkingError):
-            linking._linked_gallery_tree(over_limit, None)
+            linking_models._linked_gallery_tree(over_limit, None)
 
     def test_gallery_tree_is_capability_gated_and_falls_back_safely(self) -> None:
         """Use tree-v1 only when advertised and preserve terminal refusals.
@@ -1017,7 +1034,7 @@ class LinkingTransportTests(unittest.TestCase):
         ).rstrip(b'=').decode('ascii')
         issuer = 'https://gallery.example/Galerie'
         revision = 'c' * 64
-        response: dict[str, linking.JsonValue] = {
+        response: dict[str, JsonValue] = {
             'version': 1, 'revision': revision, 'unchanged': False,
             'galleries': [{'id': 3, 'parent_id': None, 'title': 'Fresh'}],
         }
@@ -1026,7 +1043,7 @@ class LinkingTransportTests(unittest.TestCase):
             linking.GALLERIES_SCOPE, gallery_tree_supported=True,
         )
         self.addCleanup(session.close)
-        with mock.patch.object(linking, '_request_json', return_value=response) as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value=response) as request:
             tree = session.gallery_tree(revision)
         self.assertIsNotNone(tree)
         self.assertEqual(3, tree.galleries[0].gallery_id)
@@ -1034,7 +1051,7 @@ class LinkingTransportTests(unittest.TestCase):
         self.assertEqual('GET', request.call_args.args[2])
         self.assertEqual(revision, request.call_args.kwargs['tree_revision'])
         with mock.patch.object(
-            linking, '_request_json',
+            linking_session_lifecycle, '_request_json',
             return_value={
                 'version': 1, 'revision': revision, 'unchanged': True,
             },
@@ -1043,7 +1060,7 @@ class LinkingTransportTests(unittest.TestCase):
         self.assertIsNotNone(unchanged)
         self.assertTrue(unchanged.unchanged)
         with mock.patch.object(
-            linking, '_request_json',
+            linking_session_lifecycle, '_request_json',
             return_value={
                 'version': 1, 'revision': 'e' * 64, 'unchanged': True,
             },
@@ -1052,7 +1069,7 @@ class LinkingTransportTests(unittest.TestCase):
 
         cancelled = threading.Event()
         cancelled.set()
-        with mock.patch.object(linking, '_request_json') as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request:
             with self.assertRaises(linking.LinkingError):
                 session.gallery_tree(cancelled=cancelled)
             request.assert_not_called()
@@ -1061,7 +1078,7 @@ class LinkingTransportTests(unittest.TestCase):
             issuer, token, time.monotonic() + 120, linking.GALLERIES_SCOPE,
         )
         self.addCleanup(unsupported.close)
-        with mock.patch.object(linking, '_request_json') as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request:
             self.assertIsNone(unsupported.gallery_tree())
             request.assert_not_called()
 
@@ -1090,15 +1107,15 @@ class LinkingTransportTests(unittest.TestCase):
             ),
         ):
             with self.subTest(error=type(error).__name__), mock.patch.object(
-                linking, '_request_json', side_effect=error,
+                linking_session_lifecycle, '_request_json', side_effect=error,
             ):
                 self.assertIsNone(session.gallery_tree())
-        malformed: dict[str, linking.JsonValue] = {
+        malformed: dict[str, JsonValue] = {
             'version': 1, 'revision': revision, 'unchanged': False,
             'galleries': [{'id': '3', 'parent_id': None, 'title': 'Bad ID'}],
         }
         with mock.patch.object(
-            linking, '_request_json', return_value=malformed,
+            linking_session_lifecycle, '_request_json', return_value=malformed,
         ):
             self.assertIsNone(session.gallery_tree())
         for error in (
@@ -1118,7 +1135,7 @@ class LinkingTransportTests(unittest.TestCase):
             linking.LinkingError('Linking request expired or was cancelled.'),
         ):
             with self.subTest(error=type(error).__name__), mock.patch.object(
-                linking, '_request_json', side_effect=error,
+                linking_session_lifecycle, '_request_json', side_effect=error,
             ):
                 with self.assertRaises(type(error)):
                     session.gallery_tree()
@@ -1151,14 +1168,14 @@ class LinkingTransportTests(unittest.TestCase):
         response.__exit__ = mock.Mock(return_value=False)
         connection = mock.Mock()
         connection.getresponse.return_value = response
-        control = linking._LinkingTransportControl(
+        control = linking_transport._LinkingTransportControl(
             time.monotonic() + 60, None,
         )
         control.server_timing_out = []
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            linking._request_json_once(
+            linking_transport._request_json_once(
                 'https://gallery.example/Galerie',
                 'app_linking_gallery_tree', 'GET', None, token, control,
                 tree_revision='d' * 64,
@@ -1179,13 +1196,13 @@ class LinkingTransportTests(unittest.TestCase):
             response.read.call_args.args[0],
         )
         control.stop()
-        page_control = linking._LinkingTransportControl(
+        page_control = linking_transport._LinkingTransportControl(
             time.monotonic() + 60, None,
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            linking._request_json_once(
+            linking_transport._request_json_once(
                 'https://gallery.example/Galerie',
                 'app_linking_galleries', 'GET', None, token, page_control,
             )
@@ -1195,14 +1212,14 @@ class LinkingTransportTests(unittest.TestCase):
         )
         page_control.stop()
         response.read.return_value = b'x' * TEST_GALLERY_TREE_OVER_LIMIT_BYTES
-        rejected_control = linking._LinkingTransportControl(
+        rejected_control = linking_transport._LinkingTransportControl(
             time.monotonic() + 60, None,
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._request_json_once(
+                linking_transport._request_json_once(
                     'https://gallery.example/Galerie',
                     'app_linking_gallery_tree', 'GET', None, token,
                     rejected_control,
@@ -1235,7 +1252,7 @@ class LinkingTransportTests(unittest.TestCase):
             'id': 2, 'parent_id': None, 'title': 'Night City',
             'depth': 0, 'ancestors': [],
         }
-        with mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request_json:
             with self.assertRaises(linking.LinkingError):
                 basic.gallery_picker_page('cyberpnuk')
             request_json.assert_not_called()
@@ -1278,9 +1295,9 @@ class LinkingTransportTests(unittest.TestCase):
             issuer: str, route: str, method: str, body: bytes | None,
             bearer: str | None, cancelled: threading.Event | None = None,
             server_timing_out: list[
-                tuple[linking.PassiveServerTiming | None, float | None]
+                tuple[PassiveServerTiming | None, float | None]
             ] | None = None,
-        ) -> dict[str, linking.JsonValue]:
+        ) -> dict[str, JsonValue]:
             """Wait for the page owner's explicit cancellation signal.
 
             Args:
@@ -1294,7 +1311,7 @@ class LinkingTransportTests(unittest.TestCase):
                     sink, left empty by the cancelled test transport.
 
             Returns:
-                dict[str, linking.JsonValue]: No value when cancellation succeeds.
+                dict[str, JsonValue]: No value when cancellation succeeds.
 
             Raises:
                 linking.LinkingError: The request is explicitly cancelled.
@@ -1315,7 +1332,7 @@ class LinkingTransportTests(unittest.TestCase):
             except linking.LinkingError:
                 finished.set()
 
-        with mock.patch.object(linking, '_request_json', side_effect=request_json):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=request_json):
             thread = threading.Thread(target=worker, daemon=True)
             thread.start()
             self.assertTrue(started.wait(TEST_WORKER_WAIT_SECONDS))
@@ -1342,10 +1359,10 @@ class LinkingTransportTests(unittest.TestCase):
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
         with mock.patch.object(
-            linking, '_DeadlineHTTPSConnection', return_value=connection,
+            linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
         ) as factory:
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example/Galerie', 'app_linking_push',
                     'POST', b'client_id=php-gallery-winapp', None,
                 )
@@ -1376,9 +1393,9 @@ class LinkingTransportTests(unittest.TestCase):
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
         with mock.patch.object(
-            linking, '_DeadlineHTTPSConnection', return_value=connection,
+            linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
         ) as factory:
-            result = linking._request_json(
+            result = linking_transport._request_json(
                 'https://[::1]/Galerie', 'app_linking_push', 'POST', b'a=b', None,
             )
         self.assertEqual(handoff_response('https://[::1]/Galerie'), result)
@@ -1420,9 +1437,9 @@ class LinkingTransportTests(unittest.TestCase):
                 connection = mock.MagicMock()
                 connection.getresponse.return_value = response
                 with mock.patch.object(
-                    linking, '_DeadlineHTTPSConnection', return_value=connection,
+                    linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
                 ) as factory, self.assertRaises(linking.LinkingError) as caught:
-                    linking._request_json(issuer, 'app_linking_token', 'POST', form, None)
+                    linking_transport._request_json(issuer, 'app_linking_token', 'POST', form, None)
                 self.assertEqual(definite, isinstance(
                     caught.exception, linking.LinkingRefreshRejected,
                 ))
@@ -1453,9 +1470,9 @@ class LinkingTransportTests(unittest.TestCase):
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
         with mock.patch.object(
-            linking, '_DeadlineHTTPSConnection', return_value=connection,
+            linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
         ) as factory:
-            result = linking._request_json(
+            result = linking_transport._request_json(
                 'https://gallery.example/Galerie', 'app_linking_discovery',
                 'GET', None, None,
             )
@@ -1502,10 +1519,10 @@ class LinkingTransportTests(unittest.TestCase):
                 connection = mock.MagicMock()
                 connection.getresponse.return_value = response
                 with mock.patch.object(
-                    linking, '_DeadlineHTTPSConnection',
+                    linking_transport, '_DeadlineHTTPSConnection',
                     return_value=connection,
                 ), self.assertRaises(linking.LinkingResponseError) as raised:
-                    linking._request_json(
+                    linking_transport._request_json(
                         issuer, 'app_linking_discovery', 'GET', None, None,
                     )
                 summary = raised.exception.safe_summary
@@ -1534,9 +1551,9 @@ class LinkingTransportTests(unittest.TestCase):
         connection.getresponse.return_value = response
         bearer = 'pgl_fixture_secret'
         with mock.patch.object(
-            linking, '_DeadlineHTTPSConnection', return_value=connection,
+            linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
         ):
-            linking._request_json(
+            linking_transport._request_json(
                 'https://gallery.example/Galerie', 'app_linking_galleries',
                 'GET', None, bearer, after_id=50,
             )
@@ -1564,13 +1581,13 @@ class LinkingTransportTests(unittest.TestCase):
         response.read.return_value = b'{"error":"revision_conflict"}'
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
-        with mock.patch.object(linking, '_DeadlineHTTPSConnection', return_value=connection):
-            result = linking._request_json(
+        with mock.patch.object(linking_transport, '_DeadlineHTTPSConnection', return_value=connection):
+            result = linking_transport._request_json(
                 'https://gallery.example/Galerie',
                 'app_linking_photo_visibility', 'POST', b'{}', 'fixture',
             )
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example/Galerie',
                     'app_linking_photo_visibility', 'GET', None, 'fixture',
                 )
@@ -1612,14 +1629,14 @@ class LinkingTransportTests(unittest.TestCase):
         ] + [b'{}']
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
-        with mock.patch.object(linking, '_DeadlineHTTPSConnection', return_value=connection):
+        with mock.patch.object(linking_transport, '_DeadlineHTTPSConnection', return_value=connection):
             key = session.open_watch_key(gallery_id)
             session.close_watch_key(gallery_id, key)
-            linking._request_json(
+            linking_transport._request_json(
                 issuer, 'app_linking_inventory', 'POST', b'{}', token, watch_key=key,
             )
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     issuer, 'app_linking_identity', 'GET', None, token, watch_key=key,
                 )
         calls = connection.request.call_args_list
@@ -1646,13 +1663,13 @@ class LinkingTransportTests(unittest.TestCase):
         response.headers = headers
         connection = mock.MagicMock()
         connection.getresponse.return_value = response
-        with mock.patch.object(linking, '_DeadlineHTTPSConnection', return_value=connection):
+        with mock.patch.object(linking_transport, '_DeadlineHTTPSConnection', return_value=connection):
             for reason in ('scheduled_publication_active', 'revision_conflict'):
                 response.status = 409
                 response.read.return_value = json.dumps({'error': reason}).encode()
                 self.assertEqual(
                     {'__client_visibility_conflict': reason},
-                    linking._request_json(
+                    linking_transport._request_json(
                         'https://gallery.example/Galerie',
                         'app_linking_gallery_visibility', 'POST', b'{}', 'fixture',
                     ),
@@ -1665,7 +1682,7 @@ class LinkingTransportTests(unittest.TestCase):
                 response.status = status
                 response.read.return_value = payload
                 with self.assertRaises(linking.LinkingError):
-                    linking._request_json(
+                    linking_transport._request_json(
                         'https://gallery.example/Galerie',
                         'app_linking_gallery_visibility', 'POST', b'{}', 'fixture',
                     )
@@ -1673,7 +1690,7 @@ class LinkingTransportTests(unittest.TestCase):
             response.read.return_value = b'{"error":"revision_conflict"}'
             del headers['Cache-Control']
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example/Galerie',
                     'app_linking_gallery_visibility', 'POST', b'{}', 'fixture',
                 )
@@ -1684,7 +1701,7 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: The waiting caller starts once and leaves the semaphore available.
         """
-        slots = linking._LINKING_TRANSPORT_SLOTS
+        slots = linking_core._LINKING_TRANSPORT_SLOTS
         self.assertTrue(slots.acquire(blocking=False))
         waiting = threading.Event()
         request_started = threading.Event()
@@ -1704,15 +1721,15 @@ class LinkingTransportTests(unittest.TestCase):
             return slots.acquire(timeout=timeout)
 
         def request_once(
-            control: linking._LinkingTransportControl,
-        ) -> dict[str, linking.JsonValue]:
+            control: linking_transport._LinkingTransportControl,
+        ) -> dict[str, JsonValue]:
             """Complete one synthetic request after successful admission.
 
             Args:
                 control (_LinkingTransportControl): Admitted deadline owner.
 
             Returns:
-                dict[str, linking.JsonValue]: Empty successful response object.
+                dict[str, JsonValue]: Empty successful response object.
             """
             control.remaining()
             request_started.set()
@@ -1725,7 +1742,7 @@ class LinkingTransportTests(unittest.TestCase):
                 None: Appends success or a fixed linking failure marker.
             """
             try:
-                linking._run_linking_transport(
+                linking_transport._run_linking_transport(
                     request_once, None, TEST_WORKER_WAIT_SECONDS,
                     TEST_WORKER_WAIT_SECONDS,
                 )
@@ -1740,7 +1757,7 @@ class LinkingTransportTests(unittest.TestCase):
         caller = original_thread(target=call_transport, daemon=True)
         slots_held_by_fixture = True
         try:
-            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate):
+            with mock.patch.object(linking_transport, '_LINKING_TRANSPORT_SLOTS', gate):
                 caller.start()
                 self.assertTrue(waiting.wait(TEST_WORKER_WAIT_SECONDS))
                 slots.release()
@@ -1763,7 +1780,7 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: Cancellation returns promptly and leaves the fixture-owned slot.
         """
-        slots = linking._LINKING_TRANSPORT_SLOTS
+        slots = linking_core._LINKING_TRANSPORT_SLOTS
         self.assertTrue(slots.acquire(blocking=False))
         slots_held_by_fixture = True
         waiting = threading.Event()
@@ -1790,7 +1807,7 @@ class LinkingTransportTests(unittest.TestCase):
                 None: Reports only whether the bounded call was refused.
             """
             try:
-                linking._run_linking_transport(
+                linking_transport._run_linking_transport(
                     lambda _control: {}, cancelled, TEST_WORKER_WAIT_SECONDS,
                     TEST_WORKER_WAIT_SECONDS,
                 )
@@ -1805,8 +1822,8 @@ class LinkingTransportTests(unittest.TestCase):
         thread_factory = mock.Mock()
         caller = original_thread(target=call_transport, daemon=True)
         try:
-            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
-                    mock.patch.object(linking.threading, 'Thread', thread_factory):
+            with mock.patch.object(linking_transport, '_LINKING_TRANSPORT_SLOTS', gate), \
+                    mock.patch.object(threading, 'Thread', thread_factory):
                 original_thread.start(caller)
                 self.assertTrue(waiting.wait(TEST_WORKER_WAIT_SECONDS))
                 cancelled.set()
@@ -1835,7 +1852,7 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: Admission consumes the total deadline and creates no worker.
         """
-        slots = linking._LINKING_TRANSPORT_SLOTS
+        slots = linking_core._LINKING_TRANSPORT_SLOTS
         self.assertTrue(slots.acquire(blocking=False))
         waiting = threading.Event()
         original_thread = threading.Thread
@@ -1858,10 +1875,10 @@ class LinkingTransportTests(unittest.TestCase):
         thread_factory = mock.Mock()
         started = time.monotonic()
         try:
-            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
-                    mock.patch.object(linking.threading, 'Thread', thread_factory):
+            with mock.patch.object(linking_transport, '_LINKING_TRANSPORT_SLOTS', gate), \
+                    mock.patch.object(threading, 'Thread', thread_factory):
                 with self.assertRaises(linking.LinkingResponseError) as raised:
-                    linking._run_linking_transport(
+                    linking_transport._run_linking_transport(
                         lambda _control: {}, None,
                         TEST_REQUEST_DEADLINE_SECONDS,
                         TEST_WORKER_WAIT_SECONDS,
@@ -1889,10 +1906,10 @@ class LinkingTransportTests(unittest.TestCase):
             'https://private.example/Galerie bearer=fixture-secret',
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._request_json(
+                linking_transport._request_json(
                     'https://private.example/Galerie',
                     'app_linking_discovery', 'GET', None, None,
                 )
@@ -1909,7 +1926,7 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: The caller refuses before creating a transport worker.
         """
-        slots = linking._LINKING_TRANSPORT_SLOTS
+        slots = linking_core._LINKING_TRANSPORT_SLOTS
         cancelled = threading.Event()
         original_thread = threading.Thread
 
@@ -1931,10 +1948,10 @@ class LinkingTransportTests(unittest.TestCase):
         gate.acquire.side_effect = acquire_then_cancel
         gate.release.side_effect = slots.release
         thread_factory = mock.Mock()
-        with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
-                mock.patch.object(linking.threading, 'Thread', thread_factory):
+        with mock.patch.object(linking_transport, '_LINKING_TRANSPORT_SLOTS', gate), \
+                mock.patch.object(threading, 'Thread', thread_factory):
             with self.assertRaises(linking.LinkingError):
-                linking._run_linking_transport(
+                linking_transport._run_linking_transport(
                     lambda _control: {}, cancelled, TEST_WORKER_WAIT_SECONDS,
                     TEST_WORKER_WAIT_SECONDS,
                 )
@@ -1951,17 +1968,17 @@ class LinkingTransportTests(unittest.TestCase):
         Returns:
             None: Start refusal maps to LinkingError and releases the slot once.
         """
-        slots = linking._LINKING_TRANSPORT_SLOTS
+        slots = linking_core._LINKING_TRANSPORT_SLOTS
         gate = mock.Mock()
         gate.acquire.side_effect = slots.acquire
         gate.release.side_effect = slots.release
         failed_worker = mock.Mock()
         failed_worker.start.side_effect = RuntimeError('fixture failure')
         thread_factory = mock.Mock(return_value=failed_worker)
-        with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
-                mock.patch.object(linking.threading, 'Thread', thread_factory):
+        with mock.patch.object(linking_transport, '_LINKING_TRANSPORT_SLOTS', gate), \
+                mock.patch.object(threading, 'Thread', thread_factory):
             with self.assertRaises(linking.LinkingError):
-                linking._run_linking_transport(
+                linking_transport._run_linking_transport(
                     lambda _control: {}, None, TEST_WORKER_WAIT_SECONDS,
                     TEST_WORKER_WAIT_SECONDS,
                 )
@@ -2002,7 +2019,7 @@ class LinkingTransportTests(unittest.TestCase):
             dns_started.set()
             if not dns_release.wait(TEST_WORKER_WAIT_SECONDS):
                 raise OSError('Fake DNS was not released.')
-            return [(linking.socket.AF_INET, linking.socket.SOCK_STREAM, 6,
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6,
                      '', ('127.0.0.1', 443))]
 
         def request() -> None:
@@ -2012,7 +2029,7 @@ class LinkingTransportTests(unittest.TestCase):
                 None: Appends the generic result marker.
             """
             try:
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example', 'app_linking_push', 'POST',
                     b'client_id=php-gallery-winapp', None, cancelled=cancelled,
                 )
@@ -2021,7 +2038,7 @@ class LinkingTransportTests(unittest.TestCase):
             else:
                 outcome.append('unexpected-success')
 
-        with mock.patch.object(linking.socket, 'getaddrinfo', side_effect=resolve):
+        with mock.patch.object(socket, 'getaddrinfo', side_effect=resolve):
             caller = threading.Thread(target=request, daemon=True)
             caller.start()
             self.assertTrue(dns_started.wait(TEST_WORKER_WAIT_SECONDS))
@@ -2046,14 +2063,14 @@ class LinkingTransportTests(unittest.TestCase):
                 original_start(thread)
 
             with mock.patch.object(
-                linking, 'LINKING_REQUEST_DEADLINE_SECONDS',
+                linking_transport, 'LINKING_REQUEST_DEADLINE_SECONDS',
                 TEST_REQUEST_DEADLINE_SECONDS,
             ), mock.patch.object(
-                linking.threading.Thread, 'start', count_transport_start,
+                threading.Thread, 'start', count_transport_start,
             ):
                 waiting_started = time.monotonic()
                 with self.assertRaises(linking.LinkingError):
-                    linking._request_json(
+                    linking_transport._request_json(
                         'https://gallery.example', 'app_linking_push', 'POST',
                         b'client_id=php-gallery-winapp', None,
                     )
@@ -2067,11 +2084,11 @@ class LinkingTransportTests(unittest.TestCase):
                 )
             self.assertEqual([], worker_starts)
             dns_release.set()
-            self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(
+            self.assertTrue(linking_core._LINKING_TRANSPORT_SLOTS.acquire(
                 timeout=TEST_WORKER_WAIT_SECONDS,
             ))
-            linking._LINKING_TRANSPORT_SLOTS.release()
-            linking.socket.socket.assert_not_called()
+            linking_core._LINKING_TRANSPORT_SLOTS.release()
+            socket.socket.assert_not_called()
 
     def test_total_deadline_interrupts_a_stalled_response(self) -> None:
         """Bound a response even when individual socket reads keep waiting.
@@ -2086,8 +2103,8 @@ class LinkingTransportTests(unittest.TestCase):
 
         def delayed(
             issuer: str, route: str, method: str, body: bytes | None,
-            bearer: str | None, control: linking._LinkingTransportControl,
-        ) -> dict[str, linking.JsonValue]:
+            bearer: str | None, control: linking_transport._LinkingTransportControl,
+        ) -> dict[str, JsonValue]:
             """Keep a fake response in flight until the deadline interrupts it.
 
             Args:
@@ -2096,10 +2113,10 @@ class LinkingTransportTests(unittest.TestCase):
                 method (str): HTTP method selected by the caller.
                 body (bytes | None): Request body, if present.
                 bearer (str | None): Request bearer, if present.
-                control (linking._LinkingTransportControl): Deadline owner.
+                control (linking_transport._LinkingTransportControl): Deadline owner.
 
             Returns:
-                dict[str, linking.JsonValue]: Empty object only if still active.
+                dict[str, JsonValue]: Empty object only if still active.
             """
             control.set_socket(connection)
             request_started.set()
@@ -2109,25 +2126,25 @@ class LinkingTransportTests(unittest.TestCase):
             return {}
 
         with mock.patch.object(
-            linking, 'LINKING_REQUEST_DEADLINE_SECONDS',
+            linking_transport, 'LINKING_REQUEST_DEADLINE_SECONDS',
             TEST_REQUEST_DEADLINE_SECONDS,
-        ), mock.patch.object(linking, '_request_json_once', side_effect=delayed) as send:
+        ), mock.patch.object(linking_transport, '_request_json_once', side_effect=delayed) as send:
             started = time.monotonic()
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     'https://gallery.example', 'app_linking_push', 'POST',
                     b'client_id=php-gallery-winapp', None,
                 )
             self.assertTrue(request_started.is_set())
             self.assertLess(time.monotonic() - started, TEST_WORKER_WAIT_SECONDS)
-            connection.shutdown.assert_called_once_with(linking.socket.SHUT_RDWR)
+            connection.shutdown.assert_called_once_with(socket.SHUT_RDWR)
             connection.close.assert_called_once_with()
             send.assert_called_once()
             request_release.set()
-            self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(
+            self.assertTrue(linking_core._LINKING_TRANSPORT_SLOTS.acquire(
                 timeout=TEST_WORKER_WAIT_SECONDS,
             ))
-            linking._LINKING_TRANSPORT_SLOTS.release()
+            linking_core._LINKING_TRANSPORT_SLOTS.release()
 
 
 class VisibilitySessionTests(unittest.TestCase):
@@ -2150,7 +2167,7 @@ class VisibilitySessionTests(unittest.TestCase):
             'client_thumbnails': {'installed': 0, 'skipped': 0, 'failed': 1,
                                   'errors': ['Optional derivative failed.']},
         }
-        with mock.patch.object(linking, '_request_json', return_value=good) as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value=good) as request:
             self.assertEqual(good, session.upload_multipart(7, iter([b'body']),
                                                              'a' * 20, 4))
             request.assert_called_once()
@@ -2166,7 +2183,7 @@ class VisibilitySessionTests(unittest.TestCase):
             {**good, 'client_thumbnails': None},
         ):
             with self.subTest(response=bad), mock.patch.object(
-                linking, '_request_json', return_value=bad,
+                linking_session_lifecycle, '_request_json', return_value=bad,
             ) as request:
                 with self.assertRaises(linking.LinkingError):
                     session.upload_multipart(7, iter([b'body']), 'a' * 20, 4)
@@ -2193,10 +2210,10 @@ class VisibilitySessionTests(unittest.TestCase):
                 'existing': [match], 'deep_check_applied': False,
                 'fingerprint': 'fingerprint', 'server_time': 'time',
                 'inventory_evidence': 'verified_file_v1'}
-        with mock.patch.object(linking, '_request_json', return_value=good):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value=good):
             self.assertEqual(good, session.inventory(7, [candidate]))
         empty = {**good, 'matched': 0, 'existing': []}
-        with mock.patch.object(linking, '_request_json', return_value=empty):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value=empty):
             self.assertEqual(empty, session.inventory(7, [candidate]))
         bad_rows = (
             {**match, 'sha256': 'c' * 64}, {**match, 'size': 1025},
@@ -2213,17 +2230,17 @@ class VisibilitySessionTests(unittest.TestCase):
         )
         for bad in bad_responses:
             with self.subTest(response=bad), mock.patch.object(
-                linking, '_request_json', return_value=bad,
+                linking_session_lifecycle, '_request_json', return_value=bad,
             ):
                 with self.assertRaises(linking.LinkingError):
                     session.inventory(7, [candidate])
         changed = {**candidate, 'filename': 'second.jpg'}
         last_match = {**match, 'filename': 'second.jpg'}
-        with mock.patch.object(linking, '_request_json', return_value={
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value={
             **good, 'existing': [last_match],
         }):
             session.inventory(7, [candidate, changed])
-        with mock.patch.object(linking, '_request_json') as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request:
             with self.assertRaises(linking.LinkingError):
                 session.inventory(7, [candidate, {**candidate, 'size': 1025}])
             request.assert_not_called()
@@ -2243,12 +2260,12 @@ class VisibilitySessionTests(unittest.TestCase):
              'size': 1, 'sha256': f'{number:064x}'}
             for number in range(10)
         ]
-        calls: list[list[dict[str, linking.JsonValue]]] = []
+        calls: list[list[dict[str, JsonValue]]] = []
 
         def response(
             issuer: str, route: str, method: str, body: bytes, bearer: str | None,
             *, cancelled: threading.Event | None = None,
-        ) -> dict[str, linking.JsonValue]:
+        ) -> dict[str, JsonValue]:
             """Return a verified empty result for the supplied synthetic batch.
 
             Args:
@@ -2260,7 +2277,7 @@ class VisibilitySessionTests(unittest.TestCase):
                 cancelled (threading.Event | None): Unused cancellation signal.
 
             Returns:
-                dict[str, linking.JsonValue]: Verified envelope with counts,
+                dict[str, JsonValue]: Verified envelope with counts,
                     gallery identity, timestamps, evidence and an empty list.
             """
             batch = json.loads(body)['files']
@@ -2271,7 +2288,7 @@ class VisibilitySessionTests(unittest.TestCase):
                     'fingerprint': 'fingerprint', 'server_time': 'time',
                     'inventory_evidence': 'verified_file_v1'}
 
-        with mock.patch.object(linking, '_request_json', side_effect=response):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=response):
             result = session.inventory(7, candidates)
         self.assertEqual([8, 2], [len(batch) for batch in calls])
         self.assertEqual(10, result['checked'])
@@ -2280,7 +2297,7 @@ class VisibilitySessionTests(unittest.TestCase):
         large = [{**candidates[0], 'size': 80000000},
                  {**candidates[1], 'size': 80000000},
                  {**candidates[2], 'size': 200000000}]
-        with mock.patch.object(linking, '_request_json', side_effect=response):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=response):
             session.inventory(7, large)
         self.assertEqual([1, 1, 1], [len(batch) for batch in calls])
         calls.clear()
@@ -2288,7 +2305,7 @@ class VisibilitySessionTests(unittest.TestCase):
         def fail_second(
             issuer: str, route: str, method: str, body: bytes, bearer: str | None,
             *, cancelled: threading.Event | None = None,
-        ) -> dict[str, linking.JsonValue]:
+        ) -> dict[str, JsonValue]:
             """Fail after the first otherwise valid batch has completed.
 
             Args:
@@ -2300,7 +2317,7 @@ class VisibilitySessionTests(unittest.TestCase):
                 cancelled (threading.Event | None): Unused cancellation signal.
 
             Returns:
-                dict[str, linking.JsonValue]: The first valid verified inventory
+                dict[str, JsonValue]: The first valid verified inventory
                     envelope, including one synthetic positive match.
 
             Raises:
@@ -2317,11 +2334,11 @@ class VisibilitySessionTests(unittest.TestCase):
             first['matched'] = 1
             return first
 
-        with mock.patch.object(linking, '_request_json', side_effect=fail_second):
+        with mock.patch.object(linking_session_lifecycle, '_request_json', side_effect=fail_second):
             with self.assertRaises(linking.LinkingError):
                 session.inventory(7, candidates)
-        with mock.patch.object(linking, 'LINKING_INVENTORY_TOTAL_SECONDS', 0), \
-                mock.patch.object(linking, '_request_json') as request:
+        with mock.patch.object(linking_session_gallery, 'LINKING_INVENTORY_TOTAL_SECONDS', 0), \
+                mock.patch.object(linking_session_lifecycle, '_request_json') as request:
             with self.assertRaises(linking.LinkingError):
                 session.inventory(7, candidates)
             request.assert_not_called()
@@ -2339,7 +2356,7 @@ class VisibilitySessionTests(unittest.TestCase):
         digest = 'a' * 64
         response = {'ok': True, 'action': 'recovery', 'gallery_id': 7,
                     'result': 'present'}
-        with mock.patch.object(linking, '_request_json', return_value=response) as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value=response) as request:
             self.assertEqual('present', session.probe_uncertain_upload(7, digest, 1024))
             request.assert_called_once()
             self.assertEqual({
@@ -2347,7 +2364,7 @@ class VisibilitySessionTests(unittest.TestCase):
                 'files': [{'client_id': digest, 'filename': 'recovery.jpg',
                            'size': 1024, 'sha256': digest}],
             }, json.loads(request.call_args.args[3]))
-        with mock.patch.object(linking, '_request_json', return_value={
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value={
             **response, 'result': 'unknown',
         }) as request:
             self.assertEqual('unknown', session.probe_uncertain_upload(7, digest, 1024))
@@ -2358,12 +2375,12 @@ class VisibilitySessionTests(unittest.TestCase):
             {**response, 'extra': True},
         ):
             with self.subTest(response=bad), mock.patch.object(
-                linking, '_request_json', return_value=bad,
+                linking_session_lifecycle, '_request_json', return_value=bad,
             ):
                 with self.assertRaises(linking.LinkingError):
                     session.probe_uncertain_upload(7, digest, 1024)
         for size in (0, -1, True, linking.LINKING_RECOVERY_MAX_FILE_BYTES + 1):
-            with self.subTest(size=size), mock.patch.object(linking, '_request_json') as request:
+            with self.subTest(size=size), mock.patch.object(linking_session_lifecycle, '_request_json') as request:
                 with self.assertRaises(linking.LinkingError):
                     session.probe_uncertain_upload(7, digest, size)
                 request.assert_not_called()
@@ -2371,7 +2388,7 @@ class VisibilitySessionTests(unittest.TestCase):
             'https://gallery.example', 'pgla_' + 'A' * 43,
             time.monotonic() + 60, linking.GALLERIES_SCOPE,
         )
-        with mock.patch.object(linking, '_request_json') as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as request:
             with self.assertRaises(linking.LinkingError):
                 without_upload.probe_uncertain_upload(7, digest, 1024)
             request.assert_not_called()
@@ -2398,7 +2415,7 @@ class VisibilitySessionTests(unittest.TestCase):
             linking.CREATE_SCOPE, linking.READ_CREATE_SCOPE,
             linking.VISIBILITY_SCOPE, linking.CREATE_VISIBILITY_SCOPE,
         )
-        with mock.patch.object(linking, '_request_json', return_value={}) as request:
+        with mock.patch.object(linking_session_lifecycle, '_request_json', return_value={}) as request:
             for scope in accepted:
                 with self.subTest(scope=scope):
                     session = linking.LinkingSession(
@@ -2700,14 +2717,14 @@ class NativeMediaSessionTests(unittest.TestCase):
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             self.assertTrue(cache.write(
                 cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(session, '_media_read') as network, mock.patch.object(
                 session, '_request_gate',
@@ -2741,11 +2758,11 @@ class NativeMediaSessionTests(unittest.TestCase):
         )
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(cache, 'read', return_value=None):
                 self.assertIsNone(session.cached_media_photo(
@@ -2775,7 +2792,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         )
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             self.assertTrue(cache.write(
@@ -2784,7 +2801,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             entry = cache.read(cache.key(issuer, 4, 7, True))
             self.assertIsNotNone(entry)
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ):
                 self.assertIsNone(session.cached_media_photo(
@@ -2792,10 +2809,10 @@ class NativeMediaSessionTests(unittest.TestCase):
                 ))
                 self.assertEqual('changed', timings.cache_state)
                 stale_now = (
-                    entry.stored_at + linking.PHOTO_CACHE_FRESH_SECONDS + 1
+                    entry.stored_at + PHOTO_CACHE_FRESH_SECONDS + 1
                 )
                 with mock.patch.object(
-                    linking.time, 'time', return_value=stale_now,
+                    time, 'time', return_value=stale_now,
                 ):
                     self.assertIsNone(session.cached_media_photo(
                         4,
@@ -2821,14 +2838,14 @@ class NativeMediaSessionTests(unittest.TestCase):
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         photo = linking.LinkedPhoto(7, 'photo', cache_eligible=True)
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             self.assertTrue(cache.write(
                 cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ):
                 self.assertIsNone(session.cached_media_photo(4, photo))
@@ -2868,7 +2885,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             7, 'photo', preload_eligible=True,
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             expired_body = b'current cached thumbnail'
@@ -2878,10 +2895,10 @@ class NativeMediaSessionTests(unittest.TestCase):
                 'image/jpeg', expired_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
-                linking.time, 'monotonic',
+                time, 'monotonic',
                 return_value=expired_at + TEST_WORKER_WAIT_SECONDS,
             ):
                 expired_timings = linking.MediaReadTimings()
@@ -2905,28 +2922,28 @@ class NativeMediaSessionTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            time.monotonic() + PHOTO_CACHE_FRESH_SECONDS,
             linking.GALLERIES_SCOPE,
         )
         body = b'verified timing thumbnail'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             self.assertTrue(cache.write(
                 cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 session, '_request_gate',
             ) as gate, mock.patch.object(
-                linking, '_run_linking_transport',
+                linking_session_media_access, '_run_linking_transport',
             ) as transport, mock.patch.object(
-                linking.time, 'perf_counter', side_effect=(0.0, 0.002),
+                time, 'perf_counter', side_effect=(0.0, 0.002),
             ):
                 # An exact cache hit must not wait for any other session read.
                 gate.acquire.side_effect = AssertionError('Unexpected gate.')
@@ -2958,19 +2975,19 @@ class NativeMediaSessionTests(unittest.TestCase):
         """
         session = linking.LinkingSession(
             'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
-            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            time.monotonic() + PHOTO_CACHE_FRESH_SECONDS,
             linking.GALLERIES_SCOPE,
         )
         timings = linking.MediaReadTimings()
         with mock.patch.object(
-            linking, '_run_linking_transport',
+            linking_session_media_access, '_run_linking_transport',
             return_value=(b'transient', 'image/jpeg', None, False),
         ) as transport, mock.patch.object(
             session, '_renew_if_expired', wraps=session._renew_if_expired,
         ) as renew, mock.patch.object(
-            linking.GalleryMediaCache, 'for_current_user',
+            GalleryMediaCache, 'for_current_user',
         ) as cache, mock.patch.object(
-            linking.time, 'perf_counter',
+            time, 'perf_counter',
             side_effect=(0.0, 0.002, 0.002, 0.005, 0.005, 0.012),
         ):
             self.assertEqual(
@@ -3002,7 +3019,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            time.monotonic() + PHOTO_CACHE_FRESH_SECONDS,
             linking.GALLERIES_SCOPE,
         )
         stale_body, fresh_body = b'stale timing bytes', b'fresh timing bytes'
@@ -3019,7 +3036,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         # Two cache clock pairs and two sets of three transport clock pairs.
         ticks = tuple(step / 1000.0 for step in range(2 + 2 * 6 + 2))
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.key(issuer, 4, 7, True)
@@ -3027,17 +3044,17 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, stale_body, 'image/jpeg', stale_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
             ), mock.patch.object(
-                linking, '_run_linking_transport',
+                linking_session_media_access, '_run_linking_transport',
                 side_effect=(
                     refusal, (fresh_body, 'image/jpeg', fresh_etag, True),
                 ),
             ) as transport, mock.patch.object(
-                linking.time, 'perf_counter', side_effect=ticks,
+                time, 'perf_counter', side_effect=ticks,
             ):
                 self.assertEqual(
                     (fresh_body, 'image/jpeg'),
@@ -3063,7 +3080,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
             issuer, 'pgla_' + 'A' * 43,
-            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            time.monotonic() + PHOTO_CACHE_FRESH_SECONDS,
             linking.GALLERIES_SCOPE,
         )
         body = b'revalidated timing bytes'
@@ -3072,22 +3089,22 @@ class NativeMediaSessionTests(unittest.TestCase):
         # Two cache pairs and the gate/renewal/transport pairs, one ms each.
         ticks = tuple(step / 1000.0 for step in range(2 + 6 + 2))
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             self.assertTrue(cache.write(
                 cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
             ), mock.patch.object(
-                linking, '_run_linking_transport',
+                linking_session_media_access, '_run_linking_transport',
                 return_value=(None, 'image/jpeg', etag, True),
             ) as transport, mock.patch.object(
-                linking.time, 'perf_counter', side_effect=ticks,
+                time, 'perf_counter', side_effect=ticks,
             ):
                 self.assertEqual(
                     (body, 'image/jpeg'),
@@ -3117,7 +3134,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             with self.subTest(failure=type(failure).__name__):
                 session = linking.LinkingSession(
                     'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
-                    time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+                    time.monotonic() + PHOTO_CACHE_FRESH_SECONDS,
                     linking.GALLERIES_SCOPE,
                 )
                 cancelled = threading.Event()
@@ -3131,10 +3148,10 @@ class NativeMediaSessionTests(unittest.TestCase):
                     )[1]) if type(failure) is linking.LinkingError else failure
                 )
                 with mock.patch.object(
-                    linking, '_run_linking_transport',
+                    linking_session_media_access, '_run_linking_transport',
                     side_effect=transport_effect,
                 ) as transport, mock.patch.object(
-                    linking.time, 'perf_counter',
+                    time, 'perf_counter',
                     side_effect=(0.0, 0.001, 0.001, 0.002, 0.002, 0.003),
                 ):
                     with self.assertRaises(type(failure)):
@@ -3177,12 +3194,12 @@ class NativeMediaSessionTests(unittest.TestCase):
             7, 'Photo', thumbnail_etag=etag,
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             key = cache.key(issuer, 4, 7, True)
             gallery_key = cache.gallery_key(issuer, 4)
             self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ):
                 self.assertTrue(session.set_gallery_pinned(4, True))
@@ -3208,10 +3225,10 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'no-store image bytes'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 session, '_media_read',
@@ -3247,7 +3264,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             ),
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.key(issuer, 4, 7, True)
@@ -3255,7 +3272,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, stale_body, 'image/jpeg', stale_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
@@ -3265,7 +3282,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                     refusal,
                     (current_body, 'image/jpeg', current_etag, True),
                 ),
-            ) as read, self.assertLogs(linking.__name__, level='INFO') as logs:
+            ) as read, self.assertLogs('uploader.app_linking', level='INFO') as logs:
                 self.assertEqual(
                     (current_body, 'image/jpeg'),
                     session.media_photo(4, 7, True),
@@ -3312,7 +3329,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             media_policy_facts=facts,
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.key(issuer, 4, 7, True)
@@ -3320,7 +3337,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, stale_body, 'image/jpeg', stale_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
@@ -3355,7 +3372,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         current_etag = '"' + hashlib.sha256(current_body).hexdigest() + '"'
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.key(issuer, 4, 7, True)
@@ -3363,7 +3380,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, stale_body, 'image/jpeg', stale_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
@@ -3424,7 +3441,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 stale_body = b'stale image bytes'
                 stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
                 with TemporaryDirectory() as directory:
-                    cache = linking.GalleryMediaCache(
+                    cache = GalleryMediaCache(
                         Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
                     )
                     key = cache.key(issuer, 4, 7, True)
@@ -3432,7 +3449,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                         key, stale_body, 'image/jpeg', stale_etag,
                     ))
                     with mock.patch.object(
-                        linking.GalleryMediaCache, 'for_current_user',
+                        GalleryMediaCache, 'for_current_user',
                         return_value=cache,
                     ), mock.patch.object(
                         cache, 'is_fresh', return_value=False,
@@ -3470,7 +3487,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             request_cancelled: threading.Event | None,
             if_none_match: str | None = None,
             *, admin_preload: bool = False,
-        ) -> linking._NativeMediaResponse:
+        ) -> linking_core._NativeMediaResponse:
             """Set cancellation before returning the conditional refusal.
 
             Args:
@@ -3482,7 +3499,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 admin_preload (bool): Whether the explicit preload lane was requested.
 
             Returns:
-                linking._NativeMediaResponse: Unreachable because the fixture
+                linking_core._NativeMediaResponse: Unreachable because the fixture
                     raises the refused response.
 
             Raises:
@@ -3497,7 +3514,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         stale_body = b'stale image bytes'
         stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.key(issuer, 4, 7, True)
@@ -3505,7 +3522,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, stale_body, 'image/jpeg', stale_etag,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 cache, 'is_fresh', return_value=False,
@@ -3539,7 +3556,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         self.assertTrue(legacy.can_read_media())
         self.assertFalse(legacy.can_read_presentation())
         with mock.patch.object(
-            linking, '_run_linking_transport',
+            linking_session_media_access, '_run_linking_transport',
             return_value=(b'{"photos":[]}', 'application/json', None, False),
         ) as request:
             self.assertEqual(
@@ -3552,7 +3569,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         identity = linking.LinkingSession(
             issuer, token, time.monotonic() + 60, linking.IDENTITY_SCOPE,
         )
-        with mock.patch.object(linking, '_run_linking_transport') as request:
+        with mock.patch.object(linking_session_media_access, '_run_linking_transport') as request:
             with self.assertRaises(linking.LinkingError):
                 identity._media_read(42, 'photos', None, None)
             request.assert_not_called()
@@ -3586,7 +3603,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         self.assertFalse(session.can_change_photo_visibility())
         self.assertFalse(linking.scope_allows_admin_media(linking.GALLERIES_SCOPE))
         self.assertFalse(linking.scope_allows_admin_media(scope + ' offline_access'))
-        with mock.patch.object(linking.GalleryMediaCache, 'for_current_user') as cache:
+        with mock.patch.object(GalleryMediaCache, 'for_current_user') as cache:
             self.assertFalse(session.has_cached_photo(4, restricted))
             with mock.patch.object(
                 session, '_media_read', return_value=(b'photo', 'image/jpeg', None, False),
@@ -3662,7 +3679,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
         )
         with mock.patch.object(
-            linking, '_DeadlineHTTPSConnection', return_value=connection,
+            linking_transport, '_DeadlineHTTPSConnection', return_value=connection,
         ):
             result = session.delete_media_photos(44, (301,))
         self.assertEqual((301,), result)
@@ -3726,7 +3743,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             'gps_lat': 49.5, 'gps_lng': 14.5, 'relative_path': 'internal/path.jpg',
         }
         response = json.dumps(photo).encode(), 'application/json', None, False
-        with mock.patch.object(linking, '_run_linking_transport', return_value=response) as read:
+        with mock.patch.object(linking_session_media_access, '_run_linking_transport', return_value=response) as read:
             details = admin.media_photo_info(4, 7)
             self.assertEqual((1200, 49.5), (details['width'], details['gps_lat']))
             self.assertNotIn('relative_path', details)
@@ -3746,7 +3763,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'bounded test image bytes'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             key = cache.key('https://gallery.example/Galerie', 4, 7, True)
             detail_key = cache.key('https://gallery.example/Galerie', 4, 7, False)
             other_site = cache.key('https://other.example', 4, 7, True)
@@ -3791,7 +3808,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertFalse(cache.is_fresh(current, now=revalidated_at))
             unavailable = Path(directory) / 'not-a-directory'
             unavailable.write_text('file')
-            broken = linking.GalleryMediaCache(unavailable / 'cache', 1024)
+            broken = GalleryMediaCache(unavailable / 'cache', 1024)
             self.assertFalse(broken.write(key, body, 'image/jpeg', etag, now=stored_at))
             self.assertIsNone(broken.read(key, now=stored_at))
 
@@ -3820,10 +3837,10 @@ class NativeMediaSessionTests(unittest.TestCase):
         )
         timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             key = cache.private_key(issuer, user_id, gallery_id, photo_id, False)
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
                 session, '_media_read',
                 return_value=(None, '', etag, True),
@@ -3876,14 +3893,14 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'first view verified image bytes'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
             )
             # A shared gallery pin must not move this account's automatic
             # thumbnail outside the ordinary quota without its own opt-in.
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
                 session, '_media_read',
                 return_value=(body, 'image/jpeg', etag, True),
@@ -3943,7 +3960,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             None: Cancellation releases the waiting caller without admitting it
                 or requiring the current request to give up its serial slot.
         """
-        gate = linking._FairRequestGate()
+        gate = linking_core._FairRequestGate()
         cancelled, finished = threading.Event(), threading.Event()
         admitted: list[bool] = []
         self.assertTrue(gate.acquire())
@@ -3989,8 +4006,8 @@ class NativeMediaSessionTests(unittest.TestCase):
         # positive observation without depending on host uptime or weakening
         # the production fail-closed lower bound.
         monotonic_clock = mock.patch.object(
-            linking.time, 'monotonic',
-            return_value=2.0 * linking.PHOTO_CACHE_FRESH_SECONDS,
+            time, 'monotonic',
+            return_value=2.0 * PHOTO_CACHE_FRESH_SECONDS,
         )
         monotonic_clock.start()
         self.addCleanup(monotonic_clock.stop)
@@ -4005,7 +4022,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         thumbnail_etag = '"' + 'c' * 64 + '"'
         # The mounted descriptor predates the freshness boundary. A subsequent
         # authenticated page, represented by the ledger below, remains current.
-        descriptor_at = observed_at - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+        descriptor_at = observed_at - PHOTO_CACHE_FRESH_SECONDS - 1
         photo = linking.LinkedPhoto(
             7, 'Preloaded photo', cache_eligible=False, nsfw=False,
             preload_eligible=True, preload_thumbnail_etag=thumbnail_etag,
@@ -4014,13 +4031,13 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'verified full photo response'
         full_etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             key = cache.private_key(issuer, 42, 4, 7, False)
             self.assertTrue(cache.write(key, body, 'image/jpeg', full_etag))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(session, '_media_read') as remote:
                 self.assertIsNone(session.cached_media_photo(4, photo, thumbnail=False))
                 session._private_preload_proofs[4] = (
@@ -4075,15 +4092,15 @@ class NativeMediaSessionTests(unittest.TestCase):
             } for image_id in image_ids],
         }
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             gallery_key = cache.gallery_key(issuer, 4)
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
-                linking, '_run_linking_transport', return_value=(
+                linking_session_media_access, '_run_linking_transport', return_value=(
                     json.dumps(page_response).encode(), 'application/json', None, False,
                 ),
             ) as transport, mock.patch.object(
@@ -4176,15 +4193,15 @@ class NativeMediaSessionTests(unittest.TestCase):
             } for image_id in (7, 8)],
         }
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             body = b'downloaded full version'
             etag = '"' + hashlib.sha256(body).hexdigest() + '"'
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
-                linking, '_run_linking_transport', return_value=(
+                linking_session_media_access, '_run_linking_transport', return_value=(
                     json.dumps(page_response).encode(), 'application/json', None, False,
                 ),
             ) as transport, mock.patch.object(
@@ -4200,7 +4217,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                         body, 'image/jpeg', etag, now=100,
                     ))
                 proof = session._private_preload_proofs[4]
-                expired_at = time.monotonic() - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+                expired_at = time.monotonic() - PHOTO_CACHE_FRESH_SECONDS - 1
                 session._private_preload_proofs[4] = (
                     proof[0], expired_at,
                     {image_id: (row[0], expired_at, row[2], row[3])
@@ -4273,15 +4290,15 @@ class NativeMediaSessionTests(unittest.TestCase):
                     admin_preload_supported=True,
                 )
                 session._bound_user_id = 42
-                cache = linking.GalleryMediaCache(
+                cache = GalleryMediaCache(
                     Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
                 )
                 key = cache.private_key(issuer, 42, 4, 7, False)
                 cancelled = threading.Event()
                 with mock.patch.object(
-                    linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                    GalleryMediaCache, 'for_current_user', return_value=cache,
                 ), mock.patch.object(
-                    linking, '_run_linking_transport', return_value=(
+                    linking_session_media_access, '_run_linking_transport', return_value=(
                         json.dumps(page_response).encode(), 'application/json', None, False,
                     ),
                 ) as transport:
@@ -4297,7 +4314,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                     elif case == 'stale_page':
                         row = session._private_preload_proofs[4][2][7]
                         session._private_preload_proofs[4][2][7] = (
-                            row[0], row[1] - linking.PHOTO_CACHE_FRESH_SECONDS - 1,
+                            row[0], row[1] - PHOTO_CACHE_FRESH_SECONDS - 1,
                             row[2], row[3],
                         )
                     elif case == 'nsfw':
@@ -4349,11 +4366,11 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'previously downloaded full photo'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
                 session, '_media_read', side_effect=linking.LinkingResponseError(
                     'media', 'app_linking_media', 403, 'other', 'http_status',
@@ -4364,7 +4381,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                     cache.private_key(issuer, 42, 4, 7, False),
                     body, 'image/jpeg', etag, now=100,
                 ))
-                expired_at = time.monotonic() - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+                expired_at = time.monotonic() - PHOTO_CACHE_FRESH_SECONDS - 1
                 session._private_preload_proofs[4] = (
                     42, expired_at, {7: (etag, expired_at, 1, None)}, True,
                 )
@@ -4386,9 +4403,9 @@ class NativeMediaSessionTests(unittest.TestCase):
             None: The summary preserves its fixed validator stage while arbitrary
                 diagnostic values are rejected before they can be retained.
         """
-        headers = linking.http.client.HTTPMessage()
+        headers = http.client.HTTPMessage()
         headers['Cache-Control'] = 'no-store'
-        facts = linking._native_media_policy_facts(
+        facts = linking_models._native_media_policy_facts(
             headers, 'X-PHP-Gallery-Photo-Cache',
             'private, max-age=60, must-revalidate', False,
             binary_check='validator',
@@ -4429,11 +4446,11 @@ class NativeMediaSessionTests(unittest.TestCase):
             time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES)
+            cache = GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES)
             key = cache.key(issuer, gallery_id, photo_id, True)
             # This epoch predates the server's ordinary cache freshness window.
             self.assertTrue(cache.write(key, body, 'image/jpeg', etag, now=100))
-            with mock.patch.object(linking.GalleryMediaCache, 'for_current_user', return_value=cache):
+            with mock.patch.object(GalleryMediaCache, 'for_current_user', return_value=cache):
                 with mock.patch.object(
                     session, '_media_read',
                     return_value=(new_body, 'image/jpeg', new_etag, True),
@@ -4465,7 +4482,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         with TemporaryDirectory() as directory, mock.patch.object(
             gallery_media_cache, 'MEDIA_CACHE_MAX_ENTRIES', 2,
         ):
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             recent = cache.key(issuer, 4, 7, True)
             old = cache.key(issuer, 4, 8, True)
             track = cache.track_key(issuer, 4, 'a' * 32, digest)
@@ -4494,8 +4511,8 @@ class NativeMediaSessionTests(unittest.TestCase):
             MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES=1,
             MEDIA_THUMBNAIL_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
         ):
-            detail_cache = linking.GalleryMediaCache(Path(directory), 1024)
-            thumbnail_cache = linking.GalleryMediaCache(
+            detail_cache = GalleryMediaCache(Path(directory), 1024)
+            thumbnail_cache = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
             thumbnail_key = thumbnail_cache.key(issuer, 4, 7, True)
@@ -4535,14 +4552,14 @@ class NativeMediaSessionTests(unittest.TestCase):
         """
         issuer = 'https://gallery.example'
         self.assertNotEqual(
-            linking.GalleryMediaCache.key(issuer, 4, 7, True),
-            linking.GalleryMediaCache.private_key(issuer, 42, 4, 7, True),
+            GalleryMediaCache.key(issuer, 4, 7, True),
+            GalleryMediaCache.private_key(issuer, 42, 4, 7, True),
         )
         body = b'legacy-thumbnail-fixture'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            legacy_cache = linking.GalleryMediaCache(Path(directory), 1024)
-            thumbnail_cache = linking.GalleryMediaCache(
+            legacy_cache = GalleryMediaCache(Path(directory), 1024)
+            thumbnail_cache = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
             gallery_key = legacy_cache.gallery_key(issuer, 4)
@@ -4598,14 +4615,14 @@ class NativeMediaSessionTests(unittest.TestCase):
         )
         photo_id, gallery_id = 7, 4
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
             photo = linking.LinkedPhoto(
                 photo_id, 'Eligible', cache_eligible=True,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ) as factory, mock.patch.object(
                 session, '_media_read',
@@ -4661,10 +4678,10 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'linked-thumbnail-child'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory, TemporaryDirectory() as target:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
-            legacy = linking.GalleryMediaCache(Path(directory), 1024)
+            legacy = GalleryMediaCache(Path(directory), 1024)
             key = cache.key('https://gallery.example', 4, 7, True)
             self.assertTrue(legacy.write(key, body, 'image/jpeg', etag))
             child = Path(directory) / 'thumbnails'
@@ -4688,8 +4705,8 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'pinned-rendition-fixture'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            detail = linking.GalleryMediaCache(Path(directory), 1024)
-            thumbnails = linking.GalleryMediaCache(
+            detail = GalleryMediaCache(Path(directory), 1024)
+            thumbnails = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
             gallery_key = detail.gallery_key(issuer, 4)
@@ -4725,8 +4742,8 @@ class NativeMediaSessionTests(unittest.TestCase):
             gallery_media_cache, 'MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES',
             TEST_THUMBNAIL_UNPIN_MAX_ENTRIES,
         ):
-            detail = linking.GalleryMediaCache(Path(directory), 1024)
-            thumbnails = linking.GalleryMediaCache(
+            detail = GalleryMediaCache(Path(directory), 1024)
+            thumbnails = GalleryMediaCache(
                 Path(directory), 1024, thumbnails=True,
             )
             gallery_key = detail.gallery_key(issuer, 4)
@@ -4758,7 +4775,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             MEDIA_CACHE_MAX_ENTRIES=1,
             MEDIA_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
         ):
-            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            cache = GalleryMediaCache(Path(directory), len(body))
             gallery_key = cache.gallery_key(issuer, 4)
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
             pinned_keys = [
@@ -4775,7 +4792,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertTrue(cache.write(ordinary_key, body, 'image/jpeg', etag))
             self.assertEqual(1, len(cache._inventory()))
 
-            restarted = linking.GalleryMediaCache(Path(directory), len(body))
+            restarted = GalleryMediaCache(Path(directory), len(body))
             self.assertTrue(restarted.is_gallery_pinned(issuer, 4))
             for key in pinned_keys:
                 self.assertIsNotNone(restarted.read(
@@ -4796,7 +4813,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'account-bound private bytes'
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             key = cache.private_key(issuer, 42, 4, 7, False)
             self.assertNotEqual(key, cache.private_key(issuer, 43, 4, 7, False))
             self.assertNotEqual(key, cache.private_key(issuer, 42, 5, 7, False))
@@ -4812,7 +4829,7 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertTrue(cache.write(
                 key, body, 'image/jpeg', etag, gallery_key=gallery_key,
             ))
-            restarted = linking.GalleryMediaCache(Path(directory), 1024)
+            restarted = GalleryMediaCache(Path(directory), 1024)
             self.assertTrue(restarted.has_private_preload_intent(issuer, 42, 4))
             self.assertEqual(
                 body, restarted.read(key, gallery_key=gallery_key).body,
@@ -4835,7 +4852,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'q' * TEST_PINNED_CACHE_BODY_BYTES
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            cache = GalleryMediaCache(Path(directory), len(body))
             key = cache.key(issuer, 4, 7, True)
             other_key = cache.key(other_issuer, 4, 7, True)
             gallery_key = cache.gallery_key(issuer, 4)
@@ -4873,7 +4890,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b's' * TEST_PINNED_CACHE_BODY_BYTES
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            cache = GalleryMediaCache(Path(directory), len(body))
             key = cache.key(issuer, 4, 7, True)
             gallery_key = cache.gallery_key(issuer, 4)
             self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
@@ -4897,7 +4914,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b'r' * TEST_PINNED_CACHE_BODY_BYTES
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            cache = GalleryMediaCache(Path(directory), len(body))
             gallery_key = cache.gallery_key(issuer, 4)
             key = cache.key(issuer, 4, 7, True)
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
@@ -4905,7 +4922,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 key, body, 'image/jpeg', etag, gallery_key=gallery_key,
             ))
             with mock.patch.object(
-                linking.GalleryMediaCache, '_write_locked', return_value=False,
+                GalleryMediaCache, '_write_locked', return_value=False,
             ):
                 self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
             self.assertTrue(cache.is_gallery_pinned(issuer, 4))
@@ -4922,7 +4939,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         body = b't' * TEST_PINNED_CACHE_BODY_BYTES
         etag = '"' + hashlib.sha256(body).hexdigest() + '"'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            cache = GalleryMediaCache(Path(directory), len(body))
             gallery_key = cache.gallery_key(issuer, 4)
             key = cache.key(issuer, 4, 7, True)
             self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
@@ -4947,7 +4964,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         """
         issuer = 'https://gallery.example/Galerie'
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             retained_root = Path(directory) / '.retained'
             retained_root.write_text('not a directory', encoding='utf-8')
             self.assertFalse(cache.set_gallery_pinned(issuer, 4, True))
@@ -4961,7 +4978,7 @@ class NativeMediaSessionTests(unittest.TestCase):
                 the direct no-follow path stat matches the actual cache object.
         """
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            cache = GalleryMediaCache(Path(directory), 1024)
             gallery_key = cache.gallery_key('https://gallery.example', 4)
             retained_directory = Path(directory) / '.retained' / gallery_key
             retained_directory.mkdir(parents=True)
@@ -5017,14 +5034,14 @@ class NativeMediaTransportTests(unittest.TestCase):
         return response
 
     def _pooled_connection(
-        self, control: linking._LinkingTransportControl,
+        self, control: linking_transport._LinkingTransportControl,
         responses: tuple[mock.MagicMock, ...],
         request_failures: tuple[Exception | None, ...] = (),
     ) -> tuple[mock.MagicMock, mock.MagicMock]:
         """Make a fake HTTP connection and socket owned by one request.
 
         Args:
-            control (linking._LinkingTransportControl): Initial socket owner.
+            control (linking_transport._LinkingTransportControl): Initial socket owner.
             responses (tuple[mock.MagicMock, ...]): Ordered response fixtures.
             request_failures (tuple[Exception | None, ...]): Optional ordered
                 send outcomes; None represents a successful send.
@@ -5059,9 +5076,9 @@ class NativeMediaTransportTests(unittest.TestCase):
             None: Counts show one setup and two reuses with three safe responses.
         """
         issuer = 'https://gallery.example/Galerie'
-        pool = linking._MediaConnectionPool()
+        pool = linking_transport._MediaConnectionPool()
         controls = tuple(
-            linking._LinkingTransportControl(
+            linking_transport._LinkingTransportControl(
                 time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
             )
             for _ in range(TEST_POOLED_GET_COUNT)
@@ -5071,16 +5088,16 @@ class NativeMediaTransportTests(unittest.TestCase):
         created: list[mock.MagicMock] = []
 
         def make_connection(
-            _issuer: linking.SplitResult,
-            control: linking._LinkingTransportControl,
-            *, context: linking.ssl.SSLContext | None = None,
+            _issuer: SplitResult,
+            control: linking_transport._LinkingTransportControl,
+            *, context: ssl.SSLContext | None = None,
         ) -> mock.MagicMock:
             """Create one fake TLS client using the pool's context.
 
             Args:
-                _issuer (linking.SplitResult): Parsed installation issuer.
-                control (linking._LinkingTransportControl): Current socket owner.
-                context (linking.ssl.SSLContext | None): Certificate context
+                _issuer (SplitResult): Parsed installation issuer.
+                control (linking_transport._LinkingTransportControl): Current socket owner.
+                context (ssl.SSLContext | None): Certificate context
                     supplied by the pool.
 
             Returns:
@@ -5091,14 +5108,14 @@ class NativeMediaTransportTests(unittest.TestCase):
             return client
 
         with mock.patch.object(
-            linking.ssl, 'create_default_context', return_value=mock.Mock(),
+            ssl, 'create_default_context', return_value=mock.Mock(),
         ) as context_factory, mock.patch.object(
-            linking, '_linking_connection', side_effect=make_connection,
+            linking_transport, '_linking_connection', side_effect=make_connection,
         ):
             for control, timing in zip(controls, timings, strict=True):
                 self.assertEqual(
                     (b'{}', 'application/json', None, False),
-                    linking._native_media_read_once(
+                    linking_media._native_media_read_once(
                         issuer,
                         'page=app_linking_media&gallery_id=4&kind=photos',
                         'opaque-test-bearer', ('application/json',), control,
@@ -5225,7 +5242,7 @@ class NativeMediaTransportTests(unittest.TestCase):
             daemon=True,
         )
         serve_thread.start()
-        pool = linking._MediaConnectionPool()
+        pool = linking_transport._MediaConnectionPool()
         timings = tuple(
             linking.MediaReadTimings() for _ in range(TEST_POOLED_GET_COUNT)
         )
@@ -5264,11 +5281,11 @@ class NativeMediaTransportTests(unittest.TestCase):
 
         try:
             with mock.patch.object(
-                linking.socket, 'getaddrinfo', side_effect=resolve_fixture_host,
+                socket, 'getaddrinfo', side_effect=resolve_fixture_host,
             ):
                 for timing in timings:
-                    result = linking._run_linking_transport(
-                        lambda control: linking._native_media_read_once(
+                    result = linking_transport._run_linking_transport(
+                        lambda control: linking_media._native_media_read_once(
                             issuer,
                             'page=app_linking_media&gallery_id=4&kind=photos',
                             'opaque-test-bearer', ('application/json',), control,
@@ -5333,10 +5350,10 @@ class NativeMediaTransportTests(unittest.TestCase):
             None: The second GET has a fresh client and identical SSLContext.
         """
         issuer = 'https://gallery.example/Galerie'
-        pool = linking._MediaConnectionPool()
+        pool = linking_transport._MediaConnectionPool()
         context = mock.Mock()
         controls = tuple(
-            linking._LinkingTransportControl(
+            linking_transport._LinkingTransportControl(
                 time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
             )
             for _ in range(2)
@@ -5348,16 +5365,16 @@ class NativeMediaTransportTests(unittest.TestCase):
         response_index = 0
 
         def make_connection(
-            _issuer: linking.SplitResult,
-            control: linking._LinkingTransportControl,
-            *, context: linking.ssl.SSLContext | None = None,
+            _issuer: SplitResult,
+            control: linking_transport._LinkingTransportControl,
+            *, context: ssl.SSLContext | None = None,
         ) -> mock.MagicMock:
             """Create a fake client and record its context identity.
 
             Args:
-                _issuer (linking.SplitResult): Parsed installation issuer.
-                control (linking._LinkingTransportControl): Current socket owner.
-                context (linking.ssl.SSLContext | None): Shared verified context.
+                _issuer (SplitResult): Parsed installation issuer.
+                control (linking_transport._LinkingTransportControl): Current socket owner.
+                context (ssl.SSLContext | None): Shared verified context.
 
             Returns:
                 mock.MagicMock: Fresh connection with a queued response.
@@ -5369,12 +5386,12 @@ class NativeMediaTransportTests(unittest.TestCase):
             return self._pooled_connection(control, (response,))[0]
 
         with mock.patch.object(
-            linking.ssl, 'create_default_context', return_value=context,
+            ssl, 'create_default_context', return_value=context,
         ) as context_factory, mock.patch.object(
-            linking, '_linking_connection', side_effect=make_connection,
+            linking_transport, '_linking_connection', side_effect=make_connection,
         ) as factory:
             for control in controls:
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     issuer,
                     'page=app_linking_media&gallery_id=4&kind=photos',
                     'opaque-test-bearer', ('application/json',), control,
@@ -5393,8 +5410,8 @@ class NativeMediaTransportTests(unittest.TestCase):
             None: One stale send is replaced by one new connection request.
         """
         issuer = 'https://gallery.example/Galerie'
-        pool = linking._MediaConnectionPool()
-        first_control = linking._LinkingTransportControl(
+        pool = linking_transport._MediaConnectionPool()
+        first_control = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
         )
         first_client, _sock = self._pooled_connection(
@@ -5403,20 +5420,20 @@ class NativeMediaTransportTests(unittest.TestCase):
             (None, http.client.RemoteDisconnected('stale socket')),
         )
         created: list[mock.MagicMock] = []
-        replacement_control: list[linking._LinkingTransportControl] = []
+        replacement_control: list[linking_transport._LinkingTransportControl] = []
         factory_calls = 0
 
         def make_connection(
-            _issuer: linking.SplitResult,
-            control: linking._LinkingTransportControl,
-            *, context: linking.ssl.SSLContext | None = None,
+            _issuer: SplitResult,
+            control: linking_transport._LinkingTransportControl,
+            *, context: ssl.SSLContext | None = None,
         ) -> mock.MagicMock:
             """Create the replacement connection after stale detection.
 
             Args:
-                _issuer (linking.SplitResult): Parsed installation issuer.
-                control (linking._LinkingTransportControl): Retry socket owner.
-                context (linking.ssl.SSLContext | None): Optional session context.
+                _issuer (SplitResult): Parsed installation issuer.
+                control (linking_transport._LinkingTransportControl): Retry socket owner.
+                context (ssl.SSLContext | None): Optional session context.
 
             Returns:
                 mock.MagicMock: Replacement client with a complete response.
@@ -5434,19 +5451,19 @@ class NativeMediaTransportTests(unittest.TestCase):
             return client
 
         with mock.patch.object(
-            linking, '_linking_connection', side_effect=make_connection,
+            linking_transport, '_linking_connection', side_effect=make_connection,
         ):
-            linking._native_media_read_once(
+            linking_media._native_media_read_once(
                 issuer,
                 'page=app_linking_media&gallery_id=4&kind=photos',
                 'opaque-test-bearer', ('application/json',), first_control,
                 pool=pool,
             )
-            retry_control = linking._LinkingTransportControl(
+            retry_control = linking_transport._LinkingTransportControl(
                 time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
             )
             timing = linking.MediaReadTimings()
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 issuer,
                 'page=app_linking_media&gallery_id=4&kind=photos',
                 'opaque-test-bearer', ('application/json',), retry_control,
@@ -5470,18 +5487,18 @@ class NativeMediaTransportTests(unittest.TestCase):
             None: One body read fails and leaves no idle pool connection.
         """
         issuer = 'https://gallery.example/Galerie'
-        pool = linking._MediaConnectionPool()
-        control = linking._LinkingTransportControl(
+        pool = linking_transport._MediaConnectionPool()
+        control = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
         )
         response = self._pooled_response()
         response.read.side_effect = http.client.IncompleteRead(b'{', 1)
         connection, _sock = self._pooled_connection(control, (response,))
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(http.client.IncompleteRead):
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     issuer,
                     'page=app_linking_media&gallery_id=4&kind=photos',
                     'opaque-test-bearer', ('application/json',), control,
@@ -5498,9 +5515,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         Returns:
             None: A released owner cannot close a socket borrowed by its successor.
         """
-        issuer = linking.urlsplit('https://gallery.example/Galerie')
-        pool = linking._MediaConnectionPool()
-        old = linking._LinkingTransportControl(
+        issuer = urlsplit('https://gallery.example/Galerie')
+        pool = linking_transport._MediaConnectionPool()
+        old = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
         )
         sock = mock.MagicMock()
@@ -5509,7 +5526,7 @@ class NativeMediaTransportTests(unittest.TestCase):
         connection.sock = sock
         self.assertTrue(pool.release(issuer, connection, old, 0))
 
-        current = linking._LinkingTransportControl(
+        current = linking_transport._LinkingTransportControl(
             time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
         )
         borrowed, reused, _epoch = pool.borrow(issuer, current)
@@ -5528,15 +5545,15 @@ class NativeMediaTransportTests(unittest.TestCase):
         Returns:
             None: No stale control can publish a connection into the pool.
         """
-        issuer = linking.urlsplit('https://gallery.example/Galerie')
+        issuer = urlsplit('https://gallery.example/Galerie')
         for mode in ('cancelled', 'expired', 'revoked'):
             with self.subTest(mode=mode):
-                pool = linking._MediaConnectionPool()
+                pool = linking_transport._MediaConnectionPool()
                 deadline = (
                     time.monotonic() - 1 if mode == 'expired'
                     else time.monotonic() + TEST_WORKER_WAIT_SECONDS
                 )
-                control = linking._LinkingTransportControl(deadline, None)
+                control = linking_transport._LinkingTransportControl(deadline, None)
                 sock = mock.MagicMock()
                 connection = mock.MagicMock()
                 connection.sock = sock
@@ -5583,11 +5600,11 @@ class NativeMediaTransportTests(unittest.TestCase):
             'https://private.example/gallery bearer=fixture-secret',
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._run_linking_transport(
-                    lambda control: linking._native_media_read_once(
+                linking_transport._run_linking_transport(
+                    lambda control: linking_media._native_media_read_once(
                         'https://private.example/gallery',
                         'page=app_linking_media&gallery_id=4&kind=photos',
                         'fixture-secret', ('application/json',), control,
@@ -5615,11 +5632,11 @@ class NativeMediaTransportTests(unittest.TestCase):
         connection, response = self._response(200, headers)
         response.read.side_effect = socket.timeout('private response body')
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingResponseError) as raised:
-                linking._run_linking_transport(
-                    lambda control: linking._native_media_read_once(
+                linking_transport._run_linking_transport(
+                    lambda control: linking_media._native_media_read_once(
                         'https://private.example/gallery',
                         'page=app_linking_media&gallery_id=4&kind=photos',
                         'fixture-secret', ('application/json',), control,
@@ -5652,11 +5669,13 @@ class NativeMediaTransportTests(unittest.TestCase):
             # runner-independent; they do not define application timing policy.
             fake_clock = [100.0]
             deadline = 200.0 if currentness_reason == 'deadline' else None
-            with mock.patch.object(
-                linking, 'time', SimpleNamespace(
-                    monotonic=lambda: fake_clock[0],
-                    perf_counter=time.perf_counter,
-                ),
+            fake_time = SimpleNamespace(
+                monotonic=lambda: fake_clock[0],
+                perf_counter=time.perf_counter,
+            )
+            with (
+                mock.patch.object(linking_session_media_access, 'time', fake_time),
+                mock.patch.object(linking_session, 'time', fake_time),
             ):
                 session = linking.LinkingSession(
                     'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
@@ -5667,38 +5686,38 @@ class NativeMediaTransportTests(unittest.TestCase):
 
                 def finish_transport(
                     request_once: Callable[
-                        [linking._LinkingTransportControl],
-                        linking._NativeMediaResponse,
+                        [linking_transport._LinkingTransportControl],
+                        linking_core._NativeMediaResponse,
                     ],
                     transport_cancelled: threading.Event | None,
                     deadline_seconds: float,
                     inactivity_seconds: float,
-                    *, phase: linking._LinkingDiagnosticPhase,
-                    route: linking._LinkingDiagnosticRoute,
+                    *, phase: linking_core._LinkingDiagnosticPhase,
+                    route: linking_core._LinkingDiagnosticRoute,
                     timings: linking.MediaReadTimings | None = None,
                     server_timing_out: list[
-                        tuple[linking.PassiveServerTiming | None, float | None]
+                        tuple[PassiveServerTiming | None, float | None]
                     ] | None = None,
-                ) -> linking._NativeMediaResponse:
+                ) -> linking_core._NativeMediaResponse:
                     """Return one safe media body after staging a fence state.
 
                     Args:
-                        request_once (Callable[[linking._LinkingTransportControl], linking._NativeMediaResponse]): Native response reader is unused by
+                        request_once (Callable[[linking_transport._LinkingTransportControl], linking_core._NativeMediaResponse]): Native response reader is unused by
                             this controlled transport.
                         transport_cancelled (threading.Event | None): Current
                             read's cancellation signal.
                         deadline_seconds (float): Existing transport bound.
                         inactivity_seconds (float): Existing socket bound.
-                        phase (linking._LinkingDiagnosticPhase): Fixed media
+                        phase (linking_core._LinkingDiagnosticPhase): Fixed media
                             diagnostic phase.
-                        route (linking._LinkingDiagnosticRoute): Fixed media
+                        route (linking_core._LinkingDiagnosticRoute): Fixed media
                             route.
                         timings (linking.MediaReadTimings | None): Optional
                             physical read metrics.
-                        server_timing_out (list[tuple[linking.PassiveServerTiming | None, float | None]] | None): Optional passive timing output.
+                        server_timing_out (list[tuple[PassiveServerTiming | None, float | None]] | None): Optional passive timing output.
 
                     Returns:
-                        linking._NativeMediaResponse: Valid-shaped response accepted by the media owner.
+                        linking_core._NativeMediaResponse: Valid-shaped response accepted by the media owner.
                     """
                     del request_once, deadline_seconds, inactivity_seconds
                     del phase, route, timings, server_timing_out
@@ -5714,7 +5733,7 @@ class NativeMediaTransportTests(unittest.TestCase):
                     return b'{}', 'application/json', None, False
 
                 with self.subTest(currentness_reason=currentness_reason), mock.patch.object(
-                    linking, '_run_linking_transport', side_effect=finish_transport,
+                    linking_session_media_access, '_run_linking_transport', side_effect=finish_transport,
                 ) as transport:
                     with self.assertRaises(
                         linking.LinkingMediaNotCurrent,
@@ -5780,12 +5799,12 @@ class NativeMediaTransportTests(unittest.TestCase):
         headers['X-PHP-Gallery-Media-Restricted'] = '1'
         query = 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7'
         connection, _response = self._response(200, headers, body)
-        with mock.patch.object(linking, '_linking_connection', return_value=connection):
+        with mock.patch.object(linking_transport, '_linking_connection', return_value=connection):
             with self.assertRaises(linking.LinkingError):
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     'https://gallery.example', query, 'fixture', ('image/jpeg',), mock.Mock(),
                 )
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example', query, 'fixture', ('image/jpeg',), mock.Mock(),
                 allow_restricted=True,
             )
@@ -5810,9 +5829,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         headers['Vary'] = 'Authorization, X-PHP-Gallery-Photo-Cache'
         connection, _response = self._response(200, headers, body)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example',
                 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
                 'opaque-test-bearer', ('image/jpeg',), control,
@@ -5833,9 +5852,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         not_modified['Vary'] = 'Authorization, X-PHP-Gallery-Photo-Cache'
         connection, _response = self._response(304, not_modified)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example',
                 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
                 'opaque-test-bearer', ('image/jpeg',), control, etag,
@@ -5865,9 +5884,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         )
         connection, _response = self._response(200, headers, body)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example', query, 'opaque-test-bearer',
                 ('image/jpeg',), mock.Mock(), admin_preload=True,
             )
@@ -5888,9 +5907,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         )
         connection, _response = self._response(304, headers)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example', query, 'opaque-test-bearer',
                 ('image/jpeg',), mock.Mock(), etag, admin_preload=True,
             )
@@ -5911,9 +5930,9 @@ class NativeMediaTransportTests(unittest.TestCase):
                 invalid['X-PHP-Gallery-Preload'] = confirmation
             connection, _response = self._response(200, invalid, body)
             with mock.patch.object(
-                linking, '_linking_connection', return_value=connection,
+                linking_transport, '_linking_connection', return_value=connection,
             ), self.assertRaises(linking.LinkingError):
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     'https://gallery.example', query, 'opaque-test-bearer',
                     ('image/jpeg',), mock.Mock(), admin_preload=True,
                 )
@@ -5998,9 +6017,9 @@ class NativeMediaTransportTests(unittest.TestCase):
                     headers.add_header(field, value)
                 connection, _response = self._response(200, headers, b'img')
                 with mock.patch.object(
-                    linking, '_linking_connection', return_value=connection,
+                    linking_transport, '_linking_connection', return_value=connection,
                 ), self.assertRaises(linking.LinkingResponseError) as raised:
-                    linking._native_media_read_once(
+                    linking_media._native_media_read_once(
                         'https://gallery.example', query, 'opaque-test-bearer',
                         ('image/jpeg',), mock.Mock(), admin_preload=True,
                     )
@@ -6070,9 +6089,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         headers['Cache-Control'] = 'token=private'
         connection, _response = self._response(503, headers)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ), self.assertRaises(linking.LinkingResponseError) as raised:
-            linking._native_media_read_once(
+            linking_media._native_media_read_once(
                 'https://gallery.example',
                 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
                 'opaque-test-bearer', ('image/jpeg',), mock.Mock(),
@@ -6103,10 +6122,10 @@ class NativeMediaTransportTests(unittest.TestCase):
                 429, headers, b'{\"error\":\"temporarily_unavailable\"}',
             )
             with mock.patch.object(
-                linking, '_linking_connection', return_value=connection,
+                linking_transport, '_linking_connection', return_value=connection,
             ), self.assertRaises(linking.LinkingMediaThrottled) as raised:
-                linking._run_linking_transport(
-                    lambda control: linking._native_media_read_once(
+                linking_transport._run_linking_transport(
+                    lambda control: linking_media._native_media_read_once(
                         'https://gallery.example', query, 'opaque-test-bearer',
                         ('image/jpeg',), control, admin_preload=True,
                     ),
@@ -6136,9 +6155,9 @@ class NativeMediaTransportTests(unittest.TestCase):
         headers['Cache-Control'] = 'no-store'
         connection, _response = self._response(200, headers, body)
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
-            result = linking._native_media_read_once(
+            result = linking_media._native_media_read_once(
                 'https://gallery.example',
                 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
                 'opaque-test-bearer', ('image/jpeg',), mock.Mock(),
@@ -6166,9 +6185,9 @@ class NativeMediaTransportTests(unittest.TestCase):
                 headers['Vary'] = 'Authorization, X-PHP-Gallery-Track-Cache'
             connection, _response = self._response(200, headers, body)
             with self.subTest(cacheable=cacheable), mock.patch.object(
-                linking, '_linking_connection', return_value=connection,
+                linking_transport, '_linking_connection', return_value=connection,
             ):
-                result = linking._native_media_read_once(
+                result = linking_media._native_media_read_once(
                     'https://gallery.example',
                     'page=app_linking_media&gallery_id=4&kind=track&track_id=' + 'a' * 32,
                     'opaque-test-bearer', ('audio/wav',), mock.Mock(),
@@ -6191,10 +6210,10 @@ class NativeMediaTransportTests(unittest.TestCase):
             404, headers, b'{"error":"target_unavailable"}',
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingMediaUnavailable):
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     'https://gallery.example',
                     'page=app_linking_media&gallery_id=4&kind=photos',
                     'opaque-test-bearer', ('application/json',), mock.Mock(),
@@ -6204,10 +6223,10 @@ class NativeMediaTransportTests(unittest.TestCase):
             404, headers, b'{"error":"target_unavailable"}',
         )
         with mock.patch.object(
-            linking, '_linking_connection', return_value=connection,
+            linking_transport, '_linking_connection', return_value=connection,
         ):
             with self.assertRaises(linking.LinkingError) as raised:
-                linking._native_media_read_once(
+                linking_media._native_media_read_once(
                     'https://gallery.example',
                     'page=app_linking_media&gallery_id=4&kind=photos',
                     'opaque-test-bearer', ('application/json',), mock.Mock(),
@@ -6325,8 +6344,8 @@ class NativeMediaTransportTests(unittest.TestCase):
         with TemporaryDirectory() as directory, mock.patch.object(
             session, 'media_presentation', return_value=legacy_playlist,
         ) as presentation, mock.patch.object(
-            linking.GalleryMediaCache, 'for_current_user',
-            return_value=linking.GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES),
+            GalleryMediaCache, 'for_current_user',
+            return_value=GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES),
         ), mock.patch.object(
             session, '_media_read', return_value=(body, track.mime, etag, False),
         ) as read:
@@ -6347,7 +6366,7 @@ class NativeMediaTransportTests(unittest.TestCase):
             # The same issuer can downgrade and still offer the same playlist.
             presentation.return_value = legacy_playlist
             read.return_value = (body, track.mime, etag, False)
-            with mock.patch.object(linking.GalleryMediaCache, 'read') as disk_read:
+            with mock.patch.object(GalleryMediaCache, 'read') as disk_read:
                 self.assertEqual(body, session.media_track(42, track))
                 disk_read.assert_not_called()
             read.assert_called_once_with(42, 'track', track.track_id, None)
@@ -6641,7 +6660,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._session_user_id = 7
                 gallery = linking.LinkedGallery(42, None, 'Listed gallery')
                 with mock.patch(
-                    'uploader.app_linking_ui.webbrowser.open',
+                    'uploader.linking.ui.manager.webbrowser.open',
                     return_value=True,
                 ) as open_browser:
                     self.assertTrue(
@@ -6665,7 +6684,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._current_issuer = manager._session_issuer
                 manager._session_user_id = 7
                 with mock.patch(
-                    'uploader.app_linking_ui.webbrowser.open',
+                    'uploader.linking.ui.manager.webbrowser.open',
                 ) as open_browser:
                     self.assertFalse(manager.open_photos_gallery_editor(
                         session,
@@ -6684,7 +6703,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._current_issuer = manager._session_issuer
         manager._session_user_id = 7
         with mock.patch(
-            'uploader.app_linking_ui.webbrowser.open',
+            'uploader.linking.ui.manager.webbrowser.open',
         ) as open_browser:
             self.assertFalse(manager.open_photos_gallery_editor(
                 session, linking.LinkedGallery(42, None, 'Stale'),
@@ -6710,11 +6729,11 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._session_user_id = 7
         gallery = linking.LinkedGallery(42, None, 'Listed gallery')
         with mock.patch(
-            'uploader.app_linking_ui.webbrowser.open', return_value=False,
+            'uploader.linking.ui.manager.webbrowser.open', return_value=False,
         ):
             self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
         with mock.patch(
-            'uploader.app_linking_ui.webbrowser.open',
+            'uploader.linking.ui.manager.webbrowser.open',
             side_effect=OSError('private browser error'),
         ):
             self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
@@ -6773,15 +6792,15 @@ class LinkingDeliveryTests(unittest.TestCase):
                 confirm.instate.return_value = False
                 hint = mock.Mock()
                 with (
-                    mock.patch('uploader.app_linking_ui.tk') as tk,
-                    mock.patch('uploader.app_linking_ui.EmbeddedWindow') as embedded_window,
-                    mock.patch('uploader.app_linking_ui.ttk') as widgets,
-                    mock.patch('uploader.app_linking_ui.Button') as build_button,
-                    mock.patch('uploader.app_linking_ui.GlassCard'),
-                    mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
-                    mock.patch('uploader.app_linking_ui.icon_button'),
-                    mock.patch('uploader.app_linking_ui.place_dialog'),
-                    mock.patch('uploader.app_linking_ui.sys') as platform,
+                    mock.patch('uploader.linking.ui.picker_behavior.tk') as tk,
+                    mock.patch('uploader.linking.ui.picker_behavior.EmbeddedWindow') as embedded_window,
+                    mock.patch('uploader.linking.ui.picker_behavior.ttk') as widgets,
+                    mock.patch('uploader.linking.ui.picker_behavior.Button') as build_button,
+                    mock.patch('uploader.linking.ui.picker_behavior.GlassCard'),
+                    mock.patch('uploader.linking.ui.picker_behavior._LinkAddressChoices'),
+                    mock.patch('uploader.linking.ui.picker_behavior.icon_button'),
+                    mock.patch('uploader.linking.ui.picker_behavior.place_dialog'),
+                    mock.patch('uploader.linking.ui.manager.sys') as platform,
                 ):
                     platform.platform = 'linux'
                     build_button.side_effect = [confirm, mock.Mock()]
@@ -6847,11 +6866,11 @@ class LinkingDeliveryTests(unittest.TestCase):
         for explicit in (False, True):
             with (
                 self.subTest(explicit=explicit),
-                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar',
                            side_effect=lambda *_a, **_kw: mock.Mock()),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
                 mock.patch('uploader.offline_linking.discover_linking_capabilities',
                            return_value=frozenset({'rolling_access'})),
                 mock.patch('uploader.offline_linking.rotate_saved_offline_access',
@@ -6901,16 +6920,16 @@ class LinkingDeliveryTests(unittest.TestCase):
             with (
                 self.subTest(explicit=explicit),
                 TemporaryDirectory() as directory,
-                mock.patch('uploader.app_linking_ui.tk.StringVar'),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-                mock.patch('uploader.app_linking_ui.restore_saved_offline_session',
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.connection.restore_saved_offline_session',
                            side_effect=CredentialStoreUnavailable),
-                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempts,
-                mock.patch('uploader.app_linking_ui.webbrowser.open',
+                mock.patch('uploader.linking.ui.connection.LinkingAttempt') as attempts,
+                mock.patch('uploader.linking.ui.manager.webbrowser.open',
                            return_value=True) as open_browser,
-                mock.patch('uploader.app_linking_ui.remember_desktop_transient_link') as remember,
+                mock.patch('uploader.linking.ui.connection.remember_desktop_transient_link') as remember,
             ):
                 thread.return_value.is_alive.return_value = False
                 manager = LinkingManager(mock.Mock())
@@ -6977,12 +6996,12 @@ class LinkingDeliveryTests(unittest.TestCase):
         ):
             with (
                 self.subTest(expected=expected),
-                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar',
                            side_effect=lambda *_a, **_kw: mock.Mock()),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
                 mock.patch(
-                    'uploader.app_linking_ui.sys',
+                    'uploader.linking.ui.manager.sys',
                     SimpleNamespace(platform='darwin'),
                 ),
                 mock.patch(
@@ -6994,7 +7013,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 mock.patch('uploader.desktop_connection.discover_linking_capabilities',
                            return_value=capabilities),
                 mock.patch('uploader.desktop_connection.LinkingSession') as factory,
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
             ):
                 session = mock.Mock()
                 session.identity.return_value = linking.LinkedIdentity(7, 'admin')
@@ -7043,9 +7062,9 @@ class LinkingDeliveryTests(unittest.TestCase):
             with (
                 self.subTest(expected=expected),
                 TemporaryDirectory() as offline_directory,
-                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar',
                            side_effect=lambda *_a, **_kw: mock.Mock()),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
                 mock.patch('uploader.offline_linking.discover_linking_capabilities',
                            return_value=capabilities),
@@ -7053,7 +7072,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                            return_value=access),
                 mock.patch('uploader.offline_linking.LinkingSession') as factory,
                 mock.patch('uploader.offline_linking.enable_rolling_renewal'),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
             ):
                 session = mock.Mock()
                 session.identity.return_value = linking.LinkedIdentity(7, 'admin')
@@ -7086,14 +7105,14 @@ class LinkingDeliveryTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         binding = offline_linking.OfflineBinding(issuer, 7, linking.ROLLING_GALLERIES_SCOPE)
         with (
-            mock.patch('uploader.app_linking_ui.tk.StringVar'),
-            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
-            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+            mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
             mock.patch('uploader.offline_linking.discover_linking_capabilities',
                        return_value=frozenset({'rolling_access'})),
             mock.patch('uploader.offline_linking.rotate_saved_offline_access',
                        side_effect=RuntimeError('Uncertain rotation')) as rotate,
-            mock.patch('uploader.app_linking_ui.remove_saved_offline_link') as remove,
+            mock.patch('uploader.linking.ui.connection.remove_saved_offline_link') as remove,
         ):
             thread.return_value.is_alive.return_value = False
             manager = LinkingManager(mock.Mock())
@@ -7125,10 +7144,10 @@ class LinkingDeliveryTests(unittest.TestCase):
         issuer = 'https://gallery.example/Galerie'
         binding = offline_linking.OfflineBinding(issuer, 7, linking.ROLLING_GALLERIES_SCOPE)
         with (
-            mock.patch('uploader.app_linking_ui.tk.StringVar'),
-            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
-            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-            mock.patch('uploader.app_linking_ui.remove_saved_offline_link', return_value=None) as remove,
+            mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+            mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
+            mock.patch('uploader.linking.ui.connection.remove_saved_offline_link', return_value=None) as remove,
         ):
             thread.return_value.is_alive.return_value = False
             manager = LinkingManager(mock.Mock())
@@ -7159,8 +7178,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         """
         issuer = 'https://gallery.example/Galerie'
         with (
-            mock.patch('uploader.app_linking_ui.tk.StringVar'),
-            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+            mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()),
         ):
             manager = LinkingManager(mock.Mock())
             old = mock.Mock(spec=linking.LinkingSession)
@@ -7188,9 +7207,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                 photo dispatched or authorization scope changed.
         """
         with (
-            mock.patch('uploader.app_linking_ui.tk.StringVar'),
-            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
-            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+            mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
         ):
             thread.return_value.is_alive.return_value = False
             manager = LinkingManager(mock.Mock())
@@ -7226,10 +7245,10 @@ class LinkingDeliveryTests(unittest.TestCase):
         ):
             with (
                 self.subTest(accepted=accepted, keep_selection=keep_selection),
-                mock.patch('uploader.app_linking_ui.tk.StringVar'),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
             ):
                 thread.return_value.is_alive.return_value = False
                 commit = mock.Mock(return_value=True)
@@ -7296,8 +7315,8 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: The Watcher receives the guard reason and a queued result
                 prevents the background gallery search from taking ownership.
         """
-        with (mock.patch('uploader.app_linking_ui.tk.StringVar'),
-              mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+        with (mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+              mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                          return_value=())):
             manager = LinkingManager(mock.Mock())
             session = mock.Mock()
@@ -7341,12 +7360,12 @@ class LinkingDeliveryTests(unittest.TestCase):
             with (
                 self.subTest(scenario=scenario, outcome=outcome),
                 TemporaryDirectory() as directory,
-                mock.patch('uploader.app_linking_ui.tk.StringVar'),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempt_factory,
-                mock.patch('uploader.app_linking_ui.store_approved_refresh') as persist,
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.connection.LinkingAttempt') as attempt_factory,
+                mock.patch('uploader.linking.ui.connection.store_approved_refresh') as persist,
                 mock.patch('uploader.desktop_connection.store_approved_refresh', new=persist),
             ):
                 legacy = scenario == 'legacy'
@@ -7559,13 +7578,13 @@ class LinkingDeliveryTests(unittest.TestCase):
                 thread = mock.Mock()
                 thread.is_alive.return_value = False
                 with mock.patch(
-                    'uploader.app_linking_ui.LinkingAttempt', return_value=attempt,
+                    'uploader.linking.ui.connection.LinkingAttempt', return_value=attempt,
                 ) as factory, mock.patch(
-                    'uploader.app_linking_ui.threading.Thread', return_value=thread,
+                    'uploader.linking.ui.manager.threading.Thread', return_value=thread,
                 ) as thread_factory, mock.patch(
-                    'uploader.app_linking_ui.webbrowser.open', return_value=True,
+                    'uploader.linking.ui.manager.webbrowser.open', return_value=True,
                 ) as open_browser, mock.patch(
-                    'uploader.app_linking_ui.sys',
+                    'uploader.linking.ui.manager.sys',
                 ) as platform:
                     platform.platform = 'linux'
                     if mode == 'direct':
@@ -7661,19 +7680,19 @@ class LinkingDeliveryTests(unittest.TestCase):
                     other_handle, start_url + other_handle, deadline,
                 )
                 with (
-                    mock.patch('uploader.app_linking_ui.tk') as tk,
-                    mock.patch('uploader.app_linking_ui.EmbeddedWindow') as window,
-                    mock.patch('uploader.app_linking_ui.ttk'),
-                    mock.patch('uploader.app_linking_ui.GlassCard'),
-                    mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
-                    mock.patch('uploader.app_linking_ui.icon_button'),
-                    mock.patch('uploader.app_linking_ui.place_dialog'),
-                    mock.patch('uploader.app_linking_ui.Button') as make_button,
-                    mock.patch('uploader.app_linking_ui.LinkingAttempt',
+                    mock.patch('uploader.linking.ui.picker_behavior.tk') as tk,
+                    mock.patch('uploader.linking.ui.picker_behavior.EmbeddedWindow') as window,
+                    mock.patch('uploader.linking.ui.picker_behavior.ttk'),
+                    mock.patch('uploader.linking.ui.picker_behavior.GlassCard'),
+                    mock.patch('uploader.linking.ui.picker_behavior._LinkAddressChoices'),
+                    mock.patch('uploader.linking.ui.picker_behavior.icon_button'),
+                    mock.patch('uploader.linking.ui.picker_behavior.place_dialog'),
+                    mock.patch('uploader.linking.ui.picker_behavior.Button') as make_button,
+                    mock.patch('uploader.linking.ui.connection.LinkingAttempt',
                                side_effect=[old, new]) as attempts,
-                    mock.patch('uploader.app_linking_ui.threading.Thread',
+                    mock.patch('uploader.linking.ui.manager.threading.Thread',
                                side_effect=[old_worker, new_worker]),
-                    mock.patch('uploader.app_linking_ui.webbrowser.open',
+                    mock.patch('uploader.linking.ui.manager.webbrowser.open',
                                side_effect=[outcome != 'launch_failed', True]) as browser,
                 ):
                     confirm = mock.Mock()
@@ -7765,14 +7784,14 @@ class LinkingDeliveryTests(unittest.TestCase):
             with (
                 self.subTest(account=account),
                 TemporaryDirectory() as directory,
-                mock.patch('uploader.app_linking_ui.tk.StringVar'),
-                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                mock.patch('uploader.linking.ui.picker_behavior.tk.StringVar'),
+                mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses',
                            return_value=()),
-                mock.patch('uploader.app_linking_ui.threading.Thread') as worker,
-                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempts,
-                mock.patch('uploader.app_linking_ui.discard_uncertain_refresh') as discard,
-                mock.patch('uploader.app_linking_ui.store_approved_refresh') as persist,
-                mock.patch('uploader.app_linking_ui.enable_rolling_renewal'),
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as worker,
+                mock.patch('uploader.linking.ui.connection.LinkingAttempt') as attempts,
+                mock.patch('uploader.linking.ui.connection.discard_uncertain_refresh') as discard,
+                mock.patch('uploader.linking.ui.connection.store_approved_refresh') as persist,
+                mock.patch('uploader.linking.ui.connection.enable_rolling_renewal'),
             ):
                 manager = LinkingManager(mock.Mock())
                 manager._offline_path = Path(directory) / 'offline-link.json'
@@ -7831,7 +7850,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         )
         manager._events.put((manager._owner, 'handoff', handoff))
         with mock.patch(
-            'uploader.app_linking_ui.webbrowser.open', return_value=True,
+            'uploader.linking.ui.manager.webbrowser.open', return_value=True,
         ) as open_browser:
             manager._poll()
             self.assertIs(handoff, manager._handoff)
@@ -7903,7 +7922,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager.selected_upload_target = mock.Mock(side_effect=(
                     target, mock.Mock() if change_target else target,
                 ))
-                with mock.patch('uploader.app_linking_ui.messagebox.askyesno',
+                with mock.patch('uploader.linking.ui.manager.messagebox.askyesno',
                                 return_value=confirm) as ask:
                     manager._review_uncertain_upload()
                 self.assertEqual('no', ask.call_args.kwargs['default'])
@@ -7941,8 +7960,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
         manager._start_gallery_create = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.messagebox.askyesno',
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.messagebox.askyesno',
                            return_value=False) as confirm:
             manager._resume_gallery_create()
             thread.call_args.kwargs['target']()
@@ -7992,8 +8011,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
         manager._start_gallery_create = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.messagebox.askyesno',
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.messagebox.askyesno',
                            return_value=True) as confirm:
             manager._abandon_gallery_create()
             thread.call_args.kwargs['target']()
@@ -8032,8 +8051,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertIn('gallery or files may already exist',
                       manager._gallery_status.set.call_args.args[0])
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_receipt_selection_obeys_live_session_and_host_guard(self) -> None:
         """Select a receipt only through the current permitted upload session.
 
@@ -8088,8 +8107,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._commit_linked_target.assert_called_once_with(target)
         manager._notify_target_changed.assert_called_once_with()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_target_is_revalidated_before_local_selection(self) -> None:
         """Require fresh server-backed status before selecting a saved receipt.
 
@@ -8119,8 +8138,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._schedule_poll = mock.Mock()
         manager._target_refusal = mock.Mock()
         manager._commit_linked_target = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.verify_linked_upload_target') as verify:
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.verify_linked_upload_target') as verify:
             manager._use_created_gallery()
             late_worker = thread.call_args.kwargs['target']
             late_worker()
@@ -8130,8 +8149,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._commit_linked_target.assert_not_called()
         manager._create_journal.reconcile.assert_called_once_with(session, issuer, 7)
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_target_rolls_back_when_host_notification_fails(self) -> None:
         """Keep confirmed mode active if a target-change notification fails.
 
@@ -8174,8 +8193,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertIn('display did not refresh',
                       manager._gallery_status.set.call_args.args[0])
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_target_rejects_same_gallery_from_a_different_intent(self) -> None:
         """Refuse a fresh receipt for another operation with identical gallery fields.
 
@@ -8206,8 +8225,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._schedule_poll = mock.Mock()
         manager._target_refusal = mock.Mock()
         manager._commit_linked_target = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.verify_linked_upload_target') as verify:
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.verify_linked_upload_target') as verify:
             manager._use_created_gallery()
             thread.call_args.kwargs['target']()
         self.assertEqual('create_selection_error', manager._events.get_nowait()[1])
@@ -8252,14 +8271,14 @@ class LinkingDeliveryTests(unittest.TestCase):
         ))
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True), \
-                mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True):
+        with mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True), \
+                mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True):
             manager._poll()
         manager._create_journal.apply_receipt.assert_not_called()
         manager._commit_linked_target.assert_not_called()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_selection_rechecks_receipt_after_worker_status(self) -> None:
         """Refuse a target when the journal changes after the worker's read.
 
@@ -8295,8 +8314,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._target_refusal = mock.Mock()
         manager._commit_linked_target = mock.Mock()
         target = LinkedUploadTarget(session, issuer, 7, 42, 'Created')
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.verify_linked_upload_target',
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.verify_linked_upload_target',
                            return_value=target) as verify:
             manager._use_created_gallery()
             thread.call_args.kwargs['target']()
@@ -8307,7 +8326,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._commit_linked_target.assert_not_called()
         manager._create_journal.apply_receipt.assert_called_once()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', False)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', False)
     def test_create_completion_allows_another_gallery_without_acknowledgement(self) -> None:
         """Keep the receipt and describe available actions with the gate closed.
 
@@ -8485,11 +8504,11 @@ class LinkingDeliveryTests(unittest.TestCase):
         order = []
         session.identity.side_effect = lambda: (order.append('identity'), identity)[1]
         attempt.exchange_offline_once.return_value = (session, 'fixture-refresh', 100)
-        with mock.patch('uploader.app_linking_ui.LinkingAttempt', return_value=attempt) as factory, \
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.save_offline_binding',
+        with mock.patch('uploader.linking.ui.connection.LinkingAttempt', return_value=attempt) as factory, \
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.connection.save_offline_binding',
                            side_effect=lambda *_: order.append('hint')), \
-                mock.patch('uploader.app_linking_ui.store_approved_refresh',
+                mock.patch('uploader.linking.ui.connection.store_approved_refresh',
                            side_effect=lambda *_: order.append('vault')):
             manager._start('https://gallery.example/Galerie')
             worker = thread.call_args.kwargs['target']
@@ -8584,9 +8603,9 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._schedule_poll = mock.Mock()
         manager._events = queue.Queue()
         session.change_gallery_visibility.side_effect = linking.LinkingError('unknown')
-        with mock.patch('uploader.app_linking_ui.LINKING_VISIBILITY_READY', True), \
-                mock.patch('uploader.app_linking_ui.messagebox.askyesno', return_value=True), \
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread:
+        with mock.patch('uploader.linking.ui.dialog.LINKING_VISIBILITY_READY', True), \
+                mock.patch('uploader.linking.ui.manager.messagebox.askyesno', return_value=True), \
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread:
             manager._change_visibility()
             self.assertIsNone(manager._detail_snapshot)
             worker = thread.call_args.kwargs['target']
@@ -8600,7 +8619,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._gallery_changed(mock.Mock())
         self.assertIsNone(manager._detail_snapshot)
 
-    @mock.patch('uploader.app_linking_ui.LINKING_VISIBILITY_READY', False)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_VISIBILITY_READY', False)
     def test_unready_visibility_does_not_grant_or_block_upload(self) -> None:
         """Keep a disabled visibility option outside existing upload authority.
 
@@ -8623,7 +8642,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._session = None
         manager._worker = None
         manager._status = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.LinkingAttempt') as factory:
+        with mock.patch('uploader.linking.ui.connection.LinkingAttempt') as factory:
             manager._start('https://gallery.example')
             factory.assert_not_called()
         manager._detail_snapshot = mock.Mock()
@@ -8672,7 +8691,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         session.close.assert_called_once_with()
         manager._root.after.assert_called_once()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', False)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', False)
     def test_disabled_upload_selection_preserves_connection_and_receipt(self) -> None:
         """Refuse both activation paths before changing any selected target.
 
@@ -8756,12 +8775,12 @@ class LinkingDeliveryTests(unittest.TestCase):
             Returns:
                 bool: False when the callback sees the closed gate.
             """
-            with mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', False):
+            with mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', False):
                 return apply()
 
         manager._create_journal.apply_receipt.side_effect = delayed
-        with mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True), \
-                mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True):
+        with mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True), \
+                mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True):
             manager._apply_created_gallery(bound, target, session, issuer, 7, linking.UPLOAD_SCOPE, manager._gallery_cancel)
         self.assertIsNone(manager._active_upload_target)
         self.assertIs(bound, manager._created_gallery[0])
@@ -8816,8 +8835,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         original.can_upload.return_value = True
         guard = mock.Mock(return_value='Stop the watcher first.')
         with TemporaryDirectory() as directory, mock.patch(
-            'uploader.app_linking_ui.tk.StringVar', side_effect=lambda *_a, **_kw: mock.Mock(),
-        ), mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()):
+            'uploader.linking.ui.picker_behavior.tk.StringVar', side_effect=lambda *_a, **_kw: mock.Mock(),
+        ), mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()):
             manager = LinkingManager(mock.Mock(), target_change_refusal=guard)
             history = manager._recent_link_path = Path(directory) / 'recent-gallery-links.json'
             manager._start = mock.Mock()
@@ -8853,8 +8872,8 @@ class LinkingDeliveryTests(unittest.TestCase):
             self.assertEqual({'addresses': [first, second]}, json.loads(history.read_text()))
 
             with (
-                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-                mock.patch('uploader.app_linking_ui.delete_transient'),
+                mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
+                mock.patch('uploader.linking.ui.connection.delete_transient'),
                 mock.patch('uploader.desktop_connection.load_offline_binding', return_value=None),
             ):
                 thread.return_value.is_alive.return_value = False
@@ -8878,7 +8897,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: The exact live grant is revoked once and no key mode activates.
         """
         with mock.patch(
-            'uploader.app_linking_ui.tk.StringVar',
+            'uploader.linking.ui.picker_behavior.tk.StringVar',
             side_effect=lambda *_args, **_kwargs: mock.Mock(),
         ):
             manager = LinkingManager(
@@ -8903,8 +8922,8 @@ class LinkingDeliveryTests(unittest.TestCase):
 
         manager._target_change_refusal.return_value = None
         with (
-            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
-            mock.patch('uploader.app_linking_ui.delete_transient'),
+            mock.patch('uploader.linking.ui.manager.threading.Thread') as thread,
+            mock.patch('uploader.linking.ui.connection.delete_transient'),
             mock.patch('uploader.desktop_connection.load_offline_binding', return_value=None),
         ):
             thread.return_value.is_alive.return_value = False
@@ -8997,8 +9016,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._handoff = None
         manager._window = None
         manager._events = queue.Queue()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch.object(linking, '_request_json') as request_json:
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch.object(linking_session_lifecycle, '_request_json') as request_json:
             manager._load_galleries(None)
             thread.return_value.start.assert_called_once_with()
             late_worker = thread.call_args.kwargs['target']
@@ -9065,8 +9084,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
         verified_target = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.verify_linked_upload_target',
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.verify_linked_upload_target',
                            return_value=verified_target) as verify:
             manager._select_gallery()
             thread.assert_not_called()
@@ -9085,7 +9104,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                           linking.UPLOAD_SCOPE, manager._gallery_cancel), result)
         manager._commit_linked_target.assert_not_called()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_linked_upload_handoff_rechecks_current_selection_and_publication(self) -> None:
         """Refuse a stale selected row and a failed persistent mode transition.
 
@@ -9139,7 +9158,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._notify_target_changed.assert_called_once()
 
 
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_listed_upload_scope_and_publication_uncertainty_fail_closed(self) -> None:
         """Discard a prior target on changed scope or unconfirmed mode publication.
 
@@ -9210,8 +9229,8 @@ class LinkingDeliveryTests(unittest.TestCase):
                 self.assertTrue(manager.linked_upload_mode_selected())
                 self.assertIn('unconfirmed', manager._gallery_status.set.call_args.args[0])
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_worker_verifies_receipt_then_exact_live_gallery(self) -> None:
         """Pass fresh receipt, identity, gallery and scope as one owned event.
 
@@ -9241,8 +9260,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
         manager._commit_linked_target = mock.Mock()
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                mock.patch('uploader.app_linking_ui.verify_linked_upload_target',
+        with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                mock.patch('uploader.linking.ui.manager.verify_linked_upload_target',
                            return_value=target) as verify:
             manager._use_created_gallery()
             thread.call_args.kwargs['target']()
@@ -9262,8 +9281,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         )
         manager._commit_linked_target.assert_not_called()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_worker_rejects_gallery_mismatch_or_cancellation(self) -> None:
         """Never publish a late, cancelled or different-gallery verification.
 
@@ -9298,8 +9317,8 @@ class LinkingDeliveryTests(unittest.TestCase):
                 verified = LinkedUploadTarget(
                     session, issuer, 7, 43 if mismatch else 42, 'Created',
                 )
-                with mock.patch('uploader.app_linking_ui.threading.Thread') as thread, \
-                        mock.patch('uploader.app_linking_ui.verify_linked_upload_target',
+                with mock.patch('uploader.linking.ui.manager.threading.Thread') as thread, \
+                        mock.patch('uploader.linking.ui.manager.verify_linked_upload_target',
                                    return_value=verified) as verify:
                     manager._use_created_gallery()
                     if not mismatch:
@@ -9314,8 +9333,8 @@ class LinkingDeliveryTests(unittest.TestCase):
                 self.assertIs(bound, manager._created_gallery[0])
                 manager._commit_linked_target.assert_not_called()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_verified_event_cancelled_after_worker_is_rejected(self) -> None:
         """Reject a current receipt whose worker was cancelled after verification.
 
@@ -9362,7 +9381,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertIn('no longer current',
                       manager._gallery_status.set.call_args.args[0])
 
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_listed_gallery_cancelled_after_verification_cannot_publish(self) -> None:
         """Discard a just-verified listed gallery once its owner cancels.
 
@@ -9396,8 +9415,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._target_refusal.assert_not_called()
         self.assertIsNone(manager._active_upload_target)
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_mode_publication_uncertainty_clears_local_target(self) -> None:
         """Keep unknown persistent mode from exposing a stale in-memory target.
 
@@ -9443,8 +9462,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertIn('unconfirmed',
                       manager._gallery_status.set.call_args.args[0])
 
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
     def test_created_target_rejects_changed_scope_before_receipt_lease(self) -> None:
         """Reject a changed grant even after the worker verified the gallery.
 
@@ -9478,8 +9497,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._create_journal.apply_receipt.assert_not_called()
         manager._commit_linked_target.assert_not_called()
 
-    @mock.patch('uploader.app_linking_ui.LINKING_UPLOAD_TARGET_READY', True)
-    @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', False)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_UPLOAD_TARGET_READY', True)
+    @mock.patch('uploader.linking.ui.dialog.LINKING_CREATED_TARGET_READY', False)
     def test_created_shortcut_does_not_inherit_regular_target_readiness(self) -> None:
         """Block created-gallery receipt activation even if listing is enabled.
 

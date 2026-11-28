@@ -30,6 +30,10 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.flight_jobs import SessionPlan, WorkspaceLease
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import JsonValue
+from uploader.watcher.queue import observe_watch_source
+from uploader.watcher import runtime as watcher_runtime
+from uploader.watcher import state as watcher_state
+from uploader.watcher.workers import watcher as watcher_worker
 
 # Purpose: Bound fixture events without waiting on a production retry interval.
 # Type: float. Units: seconds. Scope: one Force Finish operation in these tests.
@@ -151,11 +155,11 @@ class WatchForceFinishTests(unittest.TestCase):
         self.addCleanup(self.flight_lease.release)
         self.profile = self.root / 'profile'
         self.profile.mkdir()
-        config_patch = mock.patch.object(self.main, 'CONFIG_DIR', self.profile)
+        config_patch = mock.patch.object(watcher_state, 'CONFIG_DIR', self.profile)
         config_patch.start()
         self.addCleanup(config_patch.stop)
         native_patch = mock.patch.object(
-            self.main, 'SimConnectCameraClient', return_value=mock.Mock(),
+            watcher_worker, 'SimConnectCameraClient', return_value=mock.Mock(),
         )
         native_patch.start()
         self.addCleanup(native_patch.stop)
@@ -248,7 +252,7 @@ class WatchForceFinishTests(unittest.TestCase):
             SessionPlan: Persisted owner used by the actual Force handler.
         """
         assert worker.drain_manifest is not None
-        plan = self.main.SessionPlan(
+        plan = SessionPlan(
             directory=worker.drain_manifest.parent,
             binding=worker._queue.binding,
             languages=(),
@@ -337,7 +341,7 @@ class WatchForceFinishTests(unittest.TestCase):
                 None: The fixture never starts the operation or sends a request.
             """
 
-        return self.main.FinalizationWorker(
+        return FinalizationWorker(
             plans, '', '', wait_for_workers, revoke, False,
         )
 
@@ -423,7 +427,7 @@ class WatchForceFinishTests(unittest.TestCase):
         passive_source = self.folder / 'passive.png'
         passive_source.write_bytes(b'passive original')
         passive._queue.reconcile([
-            self.main.observe_watch_source(passive_source, time.time()),
+            observe_watch_source(passive_source, time.time()),
         ])
         operation = self.operation([])
         app = self.make_app(worker, operation, [])
@@ -485,7 +489,7 @@ class WatchForceFinishTests(unittest.TestCase):
 
         self.assertFalse(event['payload']['error'])
         self.assertEqual(queue_bytes, worker.drain_manifest.read_bytes())
-        saved = self.main.SessionPlan.load(plan.directory)
+        saved = SessionPlan.load(plan.directory)
         self.assertTrue(saved.completed)
         self.assertTrue(saved.abandoned)
         self.assertFalse(worker._queue.force_finished)
@@ -500,7 +504,7 @@ class WatchForceFinishTests(unittest.TestCase):
         source.write_bytes(b'original linked source')
         worker = self.make_worker('active-session', delete_uploaded_files=True)
         worker._queue.reconcile([
-            self.main.observe_watch_source(source, time.time()),
+            observe_watch_source(source, time.time()),
         ])
         plan = self.make_plan(worker)
         operation = self.operation([plan])
@@ -621,7 +625,7 @@ class WatchForceFinishTests(unittest.TestCase):
         app._ordinary_restart_closing = False
         app._prepare_ordinary_restart_close = mock.Mock()
         with mock.patch.object(worker, 'join') as join_worker, \
-                mock.patch.object(self.main, 'messagebox') as close_dialogs:
+                mock.patch.object(watcher_runtime, 'messagebox') as close_dialogs:
             self.main.WatcherApp.close(app)
         join_worker.assert_not_called()
         app.utc_sync.join.assert_called_once()
@@ -636,7 +640,7 @@ class WatchForceFinishTests(unittest.TestCase):
         app.flights.operation = replacement
         app.flights.independent_operation = lambda: True
         app.api_key_revoke_running = True
-        with mock.patch.object(self.main, 'messagebox') as dialogs:
+        with mock.patch.object(watcher_runtime, 'messagebox') as dialogs:
             self.main.WatcherApp.close(app)
         app.flights.show_progress.assert_called_once_with()
         dialogs.showwarning.assert_called_once()
@@ -694,7 +698,7 @@ class WatchForceFinishTests(unittest.TestCase):
         self.handle_force_event(app, event)
         self.assertEqual(['failed'], callback_results)
         self.assertFalse(operation.cancel.is_set())
-        self.assertFalse(self.main.SessionPlan.load(plan.directory).abandoned)
+        self.assertFalse(SessionPlan.load(plan.directory).abandoned)
         self.assertFalse(worker._queue.force_finished)
         self.assertTrue(worker._force_stop_requested.is_set())
         self.assertTrue(worker._force_finish_publication_done.is_set())
@@ -709,7 +713,7 @@ class WatchForceFinishTests(unittest.TestCase):
         source.write_bytes(b'original pending source')
         worker = self.make_worker('snapshot-failure-session')
         worker._queue.reconcile([
-            self.main.observe_watch_source(source, time.time()),
+            observe_watch_source(source, time.time()),
         ])
         operation = self.operation([])
         app = self.make_app(worker, operation, [])

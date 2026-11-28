@@ -23,7 +23,13 @@ from unittest import mock
 
 from test_flight_watch_drain import load_main_module
 from uploader.models import JsonValue
-from uploader.watch_queue import WatchSource
+from uploader.linking import LinkingError, LinkingResponseError
+from uploader.linked_upload import UploadPipelineLease
+from uploader.watcher import state as watcher_state
+from uploader.watcher.queue import (
+    WATCH_QUEUE_STABILITY_MIN_SECONDS, WatchSource, observe_watch_source,
+)
+from uploader.watcher.workers import watcher as watcher_worker
 
 # Purpose: Bound event-driven synthetic uploads without real network retries.
 # Type: float. Units: seconds. Scope: controlled producer/consumer races.
@@ -67,16 +73,16 @@ class UploaderFifoTests(unittest.TestCase):
         self.now = time.time()
         self.births: dict[str, float] = {}
         self.trace: list[tuple[str, str]] = []
-        profile = mock.patch.object(self.main, 'CONFIG_DIR', self.root / 'profile')
+        profile = mock.patch.object(watcher_state, 'CONFIG_DIR', self.root / 'profile')
         profile.start()
         self.addCleanup(profile.stop)
-        clock = mock.patch.object(self.main, 'time', SimpleNamespace(
+        clock = mock.patch.object(watcher_worker, 'time', SimpleNamespace(
             time=lambda: self.now, monotonic=time.monotonic,
             strftime=time.strftime, localtime=time.localtime,
         ))
         clock.start()
         self.addCleanup(clock.stop)
-        native = mock.patch.object(self.main, 'SimConnectCameraClient', return_value=mock.Mock())
+        native = mock.patch.object(watcher_worker, 'SimConnectCameraClient', return_value=mock.Mock())
         native.start()
         self.addCleanup(native.stop)
         self.worker = self.main.WatcherThread(self.main.WatcherConfig(
@@ -93,7 +99,7 @@ class UploaderFifoTests(unittest.TestCase):
         self.worker.remote_inventory.has_hash.return_value = False
         self.worker.remote_inventory.last_error = None
         self.worker.upload_watched_file = mock.Mock(side_effect=self.transfer)
-        discovery = self.main.discover_watch_sources
+        discovery = watcher_worker.discover_watch_sources
 
         def observe(folder: Path, suffixes: set[str], recursive: bool) -> list[WatchSource]:
             """Retain real file discovery with deterministic birth/order clocks.
@@ -110,7 +116,7 @@ class UploaderFifoTests(unittest.TestCase):
                             captured_at=self.births[Path(item.path).name])
                     for item in discovery(folder, suffixes, recursive)]
 
-        observation = mock.patch.object(self.main, 'discover_watch_sources', side_effect=observe)
+        observation = mock.patch.object(watcher_worker, 'discover_watch_sources', side_effect=observe)
         observation.start()
         self.addCleanup(observation.stop)
 
@@ -207,7 +213,7 @@ class UploaderFifoTests(unittest.TestCase):
             result = self.transfer(url, path, metadata, file_hash, size)
             attempts += 1
             if attempts == 1:
-                raise self.main.LinkingResponseError(
+                raise LinkingResponseError(
                     'linking', 'app_linking_upload', 429, 'json', 'http_status',
                     definitely_rejected=True, retry_after_seconds=60,
                 )
@@ -233,7 +239,7 @@ class UploaderFifoTests(unittest.TestCase):
             None: All outage arrivals are durable while B has no network workflow.
         """
         self.create('a.png')
-        failure = self.main.LinkingResponseError(
+        failure = LinkingResponseError(
             'linking', 'app_linking_inventory', 429, 'json', 'http_status',
             retry_after_seconds=300,
         )
@@ -351,7 +357,7 @@ class UploaderFifoTests(unittest.TestCase):
                 LinkingError: The stored upload's response cannot be confirmed.
             """
             self.transfer(url, path, metadata, file_hash, size)
-            raise self.main.LinkingError('Gallery upload was not confirmed.')
+            raise LinkingError('Gallery upload was not confirmed.')
 
         self.worker.upload_watched_file.side_effect = invalid_reply
         self.scan()
@@ -430,7 +436,7 @@ class UploaderFifoTests(unittest.TestCase):
             self.assertTrue(accepted.wait(FIFO_FIXTURE_WAIT_SECONDS))
             self.assertEqual([('inventory', 'a.png'), ('upload', 'a.png')], self.trace)
             self.worker.request_drain()
-            self.now += self.main.WATCH_QUEUE_STABILITY_MIN_SECONDS
+            self.now += WATCH_QUEUE_STABILITY_MIN_SECONDS
             release.set()
             self.worker.join(FIFO_FIXTURE_WAIT_SECONDS)
             self.assertFalse(self.worker.is_alive())
@@ -474,7 +480,7 @@ class UploaderFifoTests(unittest.TestCase):
         worker.configure_drain(session_dir, [])
         current = self.create('current-b.png', b'never-sent-b')
         worker._queue.reconcile([
-            self.main.observe_watch_source(current, self.now),
+            observe_watch_source(current, self.now),
         ])
         worker.stability = mock.Mock()
         worker.stability.stable.return_value = True
@@ -507,7 +513,7 @@ class UploaderFifoTests(unittest.TestCase):
             }
 
         worker.upload_watched_file = upload
-        pipeline = self.main.UploadPipelineLease(self.root / 'profile')
+        pipeline = UploadPipelineLease(self.root / 'profile')
         pipeline.acquire()
         self.addCleanup(pipeline.release)
         worker._pipeline_lease = pipeline
@@ -546,7 +552,7 @@ class UploaderFifoTests(unittest.TestCase):
         self.worker.remote_inventory.refresh.return_value = True
         self.worker.remote_inventory.has_hash.return_value = False
         item = self.worker._queue.reconcile([
-            self.main.observe_watch_source(source, self.now),
+            observe_watch_source(source, self.now),
         ])
         self.assertEqual(1, item)
 
@@ -655,9 +661,9 @@ class UploaderFifoTests(unittest.TestCase):
             [item.source.path for item in self.worker._queue.items()],
         )
 
-        contender = self.main.UploadPipelineLease(self.root / 'profile')
+        contender = UploadPipelineLease(self.root / 'profile')
         self.addCleanup(contender.release)
-        with self.assertRaises(self.main.LinkingError):
+        with self.assertRaises(LinkingError):
             contender.acquire()
 
         persist_started, persist_release = threading.Event(), threading.Event()
@@ -685,7 +691,7 @@ class UploaderFifoTests(unittest.TestCase):
         self.assertTrue(persist_started.wait(FIFO_FIXTURE_WAIT_SECONDS))
         self.assertEqual(first_cutoff, self.worker._retained_stop_cutoff)
         self.assertFalse(self.worker.stop_event.is_set())
-        with self.assertRaises(self.main.LinkingError):
+        with self.assertRaises(LinkingError):
             contender.acquire()
         persist_release.set()
 
@@ -722,7 +728,7 @@ class UploaderFifoTests(unittest.TestCase):
         """
         source = self.create('resume-after-stop-failure.png', b'pending source')
         self.worker._queue.reconcile([
-            self.main.observe_watch_source(source, self.now),
+            observe_watch_source(source, self.now),
         ])
         original_cutoff = self.now
         self.worker._queue.finish(original_cutoff)

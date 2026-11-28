@@ -21,7 +21,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 from uploader import flight_jobs
-from uploader.app_linking import UPLOAD_SCOPE
+from uploader.linking import UPLOAD_SCOPE
 
 from uploader.flight_jobs import (
     FlightPreferences,

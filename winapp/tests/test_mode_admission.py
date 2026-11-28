@@ -12,7 +12,7 @@
 import threading
 import unittest
 
-from uploader.app_linking import UPLOAD_SCOPE
+from uploader.linking import UPLOAD_SCOPE
 from uploader.mode_admission import ModeAdmission, ModeAdmissionError, ModeView
 from uploader.upload_mode import ModeRecord, profile_path_digest
 

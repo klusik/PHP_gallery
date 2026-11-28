@@ -10,6 +10,19 @@ The application keeps the existing `gallery_watch_upload.pyw` launcher,
 the application runtime. Source launches use Python and the
 [corresponding requirements](#dependency-installation).
 
+Linked-gallery transport and session code live under `uploader/linking/`; its
+`ui/` package owns the Tk linking dialog and picker. `app_linking.py` and
+`app_linking_ui.py` remain compatibility import facades. Flight report
+translations are grouped by locale and interface domain in
+`uploader/translation_catalog/`; `flight_report_translations.py` retains the
+lookup interface.
+
+The stable `gallery_watch_upload.pyw` entry handles early launch flags before
+desktop imports; `uploader/launcher.py` assembles CLI and backend startup.
+Watcher state, queue, recovery, capture, workers and Tk event presentation are
+grouped under `uploader/watcher/`. Manual Import and AI code live under
+`uploader/imports/` and `uploader/ai/`.
+
 ## Durable capture and FIFO uploads
 
 Connect once, start capture and press Finish once at the end. An independent
@@ -3105,9 +3118,12 @@ remain available. This does not constitute a statistical PASS. See [the issue
 
 ## Source organization
 
-`gallery_watch_upload.pyw` remains the compatibility launcher and currently
-retains legacy integration code while redesign services are extracted
-incrementally.
+`gallery_watch_upload.pyw` remains the stable compatibility bootstrap and
+handles early launch flags before desktop imports. `uploader/launcher.py` owns
+CLI dispatch and desktop startup composition. Feature code is grouped under
+`uploader/watcher/`, `uploader/imports/`, `uploader/ai/`, `uploader/linking/`
+and `uploader/photos/`; the historical flat modules remain only where a real
+compatibility consumer still needs them.
 
 Testable redesign services live under:
 
@@ -3128,7 +3144,17 @@ This keeps versioned persistence, ZIP safety, media capability detection, job
 models, and diagnostic redaction independent from Tkinter. `self_update.py` owns
 release discovery, verified downloads and download-session storage;
 `update_helper.py` owns external installer handoff; `update_ui.py` coordinates
-the nonmodal notice and immediate process-exit handoff.
+the nonmodal notice and immediate process-exit handoff. The installed update
+audit is `qualify_installer_updates.py`; hosted qualification and retained
+evidence are described in the repository's `../TESTING.md`.
+
+Watcher configuration policy lives in `uploader/watcher/configuration.py`.
+The preferences, update and shutdown settings modules are owned under
+`uploader/watcher/ui/settings/`. Flight report implementations are in
+`uploader/flight/reports/`, while `uploader/flight_report.py` remains a legacy
+navigation/import facade. `uploader/flight_ui.py` retains the `FlightUI`
+composition/import entry; its dispatch, report actions, lifecycle, progress and
+port behavior lives under `uploader/flight/ui/`.
 
 ## Verification
 

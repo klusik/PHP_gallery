@@ -24,7 +24,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import LinkedGallery
+from uploader.linking import LinkedGallery
 from uploader import gallery_catalogue_cache as catalogue
 
 

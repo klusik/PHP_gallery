@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.8.2}
-\newcommand{\manualdate}{27.~November~2026}
+\newcommand{\version}{1.8.3}
+\newcommand{\manualdate}{28.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -11111,6 +11111,18 @@ public/assets/ & Frameworkfreies JavaScript, CSS und öffentliche Ressourcen.\\
 scripts/ & Migrations-, Integritäts-, Bereitstellungs- und Wartungswerkzeuge.\\
 tests/ & Eigenständige PHP- und gezielte JavaScript-Tests.\\
 winapp/ & Windows-spezifische Werkzeuge und Integrationen.\\
+winapp/gallery\_watch\_upload.pyw & Stabiler Bootstrap für frühe Startparameter.\\
+winapp/uploader/launcher.py & CLI-Verteilung und Zusammensetzung des Desktop-Backends.\\
+winapp/uploader/watcher/ & Watcher-Laufzeit, Status, Warteschlange, Wiederherstellung, Worker und Tk-Oberfläche.\\
+winapp/uploader/watcher/configuration.py & Konfigurationsrichtlinien des Watchers.\\
+winapp/uploader/watcher/ui/settings/ & Watcher-Module für Voreinstellungen, Updates und Beenden.\\
+winapp/uploader/imports/ & Richtlinien, Vorprüfung und Upload-Worker für manuelle Importe.\\
+winapp/uploader/ai/ & Optionale KI-Analyse, Worker, Heartbeat und Laufzeitabhängigkeiten.\\
+winapp/uploader/linking/ & Zuständigkeit für verknüpften Transport, Sitzungen und Tk-Oberfläche.\\
+winapp/uploader/flight/reports/ & Kanonische Implementierung der Flugberichte; \texttt{flight\_report.py} bleibt eine ältere Navigations-/Import-Fassade.\\
+winapp/uploader/flight/ui/ & Verhalten der Flugfunktionen hinter dem \texttt{FlightUI}-Kompositionseinstieg in~\texttt{flight\_ui.py}.\\
+WinApp-Updater und Installationsprüfung & \texttt{self\_update.py}, \texttt{update\_ui.py}, \texttt{update\_helper.py}, \texttt{installer.iss}, Watcher-Einstellungen unter \texttt{watcher/ui/settings/} und~\texttt{qualify\_installer\_updates.py}. Gehostete Updateprüfungen verwenden die veröffentlichten WinApp-Setups 1.7.1 und~2.0.0 sowie einen exakten Kandidaten-Build; siehe \texttt{TESTING.md} im Repository-Stamm.\\
+winapp/uploader/translation\_catalog/ & Flugberichtkataloge nach Sprache und Oberflächenbereich gegliedert.\\
 \bottomrule
 \end{longtable}
 

@@ -15,7 +15,7 @@ import json
 from hashlib import sha256
 from pathlib import Path
 
-from .app_linking import LINKING_GALLERY_ID_MAX
+from .linking import LINKING_GALLERY_ID_MAX
 from .flight_jobs import read_document
 from .gallery_image_policy import MEDIA_THUMBNAIL_SIZE
 from .state_store import atomic_write_json

@@ -14,7 +14,7 @@ covers missed events and platforms without notifications. The producer continues
 during thumbnail preparation, HTTP, renewal and retry waits. It never hashes
 unfinished sources or starts network operations.
 
-`winapp/uploader/watch_queue.py` extends `state_store.py` atomic publication.
+`winapp/uploader/watcher/queue.py` extends `state_store.py` atomic publication.
 Session `watch-drain.json` version 2 contains the exact target binding and scope,
 original folder/recursion and startup exclusions, ordered source generations,
 next sequence, explicit cutoff, retry state, last failure and completion barrier.

@@ -24,6 +24,16 @@ on:
         required: false
         type: boolean
         default: false
+      visual_baseline:
+        description: Optional full ancestor SHA for exact before/after Qt visual capture
+        required: false
+        type: string
+        default: ''
+      installed_updates:
+        description: Build the candidate setup and verify installed upgrades from published releases
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +45,7 @@ concurrency:
 jobs:
   winapp:
     name: WinApp gallery verification
+    if: ${{ !inputs.visual_baseline && inputs.installed_updates != true }}
     runs-on: windows-2025
     # Purpose: Bound complete central partitions and native screenshot capture.
     # Type: int. Units: minutes. Scope: this isolated Windows job.
@@ -91,4 +102,308 @@ jobs:
           # Type: int. Units: days. Scope: this exact-SHA evidence artifact.
           # Consumers: Actions retention. Rationale: 14 permits visual review
           # before a separately authorized release without retaining runner data.
+          retention-days: 14
+
+  visual-comparison:
+    name: Qt visual parity (${{ matrix.side }})
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.visual_baseline != '' }}
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - side: before
+            source_sha: ${{ inputs.visual_baseline }}
+          - side: candidate
+            source_sha: ${{ github.sha }}
+    # Purpose: Bound one exact-source Qt audit and its screenshot retention.
+    # Type: int. Units: minutes. Scope: one before/candidate visual capture.
+    # Consumers: Actions scheduler. Rationale: existing partition audits cap at 480 seconds.
+    timeout-minutes: 20
+    env:
+      PHP_GALLERY_SOURCE_BASE: ${{ inputs.visual_baseline }}
+      PHP_GALLERY_REQUIRE_QT: '1'
+      PHP_GALLERY_WINAPP_SOURCE_PROFILE: pyside6
+      PHP_GALLERY_VISUAL_PARITY: '1'
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      PHP_GALLERY_QT_ARTIFACT_DIR: ${{ github.workspace }}/cache/winapp-visual/${{ matrix.side }}
+      PHP_GALLERY_VISUAL_PARITY_OUTPUT: ${{ github.workspace }}/cache/winapp-visual/${{ matrix.side }}/screenshots
+    steps:
+      - name: Check out the selected source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ matrix.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify candidate ancestry and source identity
+        shell: pwsh
+        env:
+          SIDE: ${{ matrix.side }}
+          CHECKOUT_SHA: ${{ matrix.source_sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          VISUAL_BASELINE: ${{ inputs.visual_baseline }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:CHECKOUT_SHA) {
+            throw 'Visual source checkout SHA mismatch.'
+          }
+          if ($env:VISUAL_BASELINE -notmatch '^[0-9a-f]{40}$' -or
+              $env:CANDIDATE_SHA -notmatch '^[0-9a-f]{40}$') {
+            throw 'Visual baseline and candidate must be full commit SHAs.'
+          }
+          git fetch --no-tags origin $env:CANDIDATE_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate source commit is unavailable.' }
+          if ($env:VISUAL_BASELINE -eq $env:CANDIDATE_SHA) {
+            throw 'Visual baseline and candidate must be distinct commits.'
+          }
+          git merge-base --is-ancestor $env:VISUAL_BASELINE $env:CANDIDATE_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Visual baseline is not an ancestor of the candidate.' }
+          $expected = if ($env:SIDE -eq 'before') { $env:VISUAL_BASELINE } else { $env:CANDIDATE_SHA }
+          if ($actual -ne $expected) { throw 'Visual matrix side is bound to the wrong source SHA.' }
+          New-Item -ItemType Directory -Force cache/winapp-visual | Out-Null
+          @{
+            side = $env:SIDE
+            source_sha = $actual
+            visual_baseline = $env:VISUAL_BASELINE
+            candidate_sha = $env:CANDIDATE_SHA
+            ancestor_verified = $true
+          } | ConvertTo-Json | Set-Content -Encoding utf8 cache/winapp-visual/source-identity.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: Install WinApp dependencies into a fresh virtual environment
+        id: environment
+        shell: pwsh
+        env:
+          SIDE: ${{ matrix.side }}
+        run: |
+          $environment = Join-Path $env:RUNNER_TEMP "winapp-visual-$env:SIDE"
+          python -m venv $environment
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $interpreter = Join-Path $environment 'Scripts/python.exe'
+          if (-not (Test-Path -LiteralPath $interpreter)) {
+            throw 'Fresh WinApp visual interpreter is missing.'
+          }
+          & $interpreter -m pip install --disable-pip-version-check -r winapp/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $interpreter -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $python = (& $interpreter -c 'import sys; print(sys.executable)').Trim()
+          if ($LASTEXITCODE -ne 0 -or $python -ne $interpreter) {
+            throw 'Fresh WinApp visual interpreter identity mismatch.'
+          }
+          "python=$python" >> $env:GITHUB_OUTPUT
+      - name: Run canonical ordinary partitions
+        id: ordinary
+        continue-on-error: true
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          EXPECTED_SHA: ${{ matrix.source_sha }}
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_SHA) {
+            throw 'WinApp visual audit checkout changed.'
+          }
+          php scripts/audit.php --suite=winapp-partitioned-no-visual --json=cache/test-audit/winapp-ordinary-audit.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run exact delegated visual parity
+        id: visual
+        continue-on-error: true
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.environment.outputs.python }}
+          EXPECTED_SHA: ${{ matrix.source_sha }}
+          PHP_GALLERY_WINAPP_ORDINARY_AUDIT: cache/test-audit/winapp-ordinary-audit.json
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_SHA) {
+            throw 'WinApp visual parity checkout changed.'
+          }
+          php scripts/audit.php --suite=winapp-visual-parity --json=cache/test-audit/winapp-visual-audit.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Require ordinary and visual suites to pass
+        if: always()
+        shell: pwsh
+        env:
+          ORDINARY_OUTCOME: ${{ steps.ordinary.outcome }}
+          VISUAL_OUTCOME: ${{ steps.visual.outcome }}
+        run: |
+          if ($env:ORDINARY_OUTCOME -ne 'success' -or $env:VISUAL_OUTCOME -ne 'success') {
+            Write-Error 'Both ordinary and delegated visual WinApp suites must pass.'
+            exit 1
+          }
+      - name: Retain exact-source Qt screenshots and audit reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: winapp-visual-${{ matrix.side }}-${{ matrix.source_sha }}
+          path: |
+            cache/winapp-visual/**
+            cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: opt-in before/candidate visual evidence.
+          # Consumers: exact-source visual review. Rationale: retain evidence through review.
+          retention-days: 14
+
+  frozen-build:
+    name: Candidate frozen installer build
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.visual_baseline != '' || inputs.installed_updates == true) }}
+    runs-on: windows-2025
+    # Purpose: Bound the registered PyInstaller build and native startup smoke.
+    # Type: int. Units: minutes. Scope: one exact-candidate frozen build.
+    # Consumers: Actions scheduler. Rationale: the central builder has a 30-minute cap.
+    timeout-minutes: 45
+    env:
+      PHP_GALLERY_FROZEN_BUILD_ONLY: '1'
+      PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ github.sha }}
+    steps:
+      - name: Check out the exact candidate
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify candidate SHA and immutable source base
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          VISUAL_BASELINE: ${{ inputs.visual_baseline }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) {
+            throw 'Frozen build checkout SHA mismatch.'
+          }
+          if ($env:EXPECTED_SHA -notmatch '^[0-9a-f]{40}$') {
+            throw 'Frozen build candidate must be a full commit SHA.'
+          }
+          $mainBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $mainBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Immutable main merge-base is unavailable.'
+          }
+          git merge-base --is-ancestor $mainBase $env:EXPECTED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate is not based on its immutable main merge-base.' }
+          if ($env:VISUAL_BASELINE) {
+            if ($env:VISUAL_BASELINE -notmatch '^[0-9a-f]{40}$' -or
+                $env:VISUAL_BASELINE -eq $env:EXPECTED_SHA) {
+              throw 'Visual baseline and candidate must be distinct full commit SHAs.'
+            }
+            git merge-base --is-ancestor $env:VISUAL_BASELINE $env:EXPECTED_SHA
+            if ($LASTEXITCODE -ne 0) { throw 'Candidate does not descend from the selected visual baseline.' }
+          }
+          "PHP_GALLERY_SOURCE_BASE=$mainBase" >> $env:GITHUB_ENV
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install the declared frozen-build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-build.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run the registered exact-candidate frozen build
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:PHP_GALLERY_ISSUE_445_CANDIDATE) {
+            throw 'Frozen build source changed after checkout.'
+          }
+          php scripts/audit.php --suite=winapp-frozen-installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain central frozen-build audit and installer evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ inputs.installed_updates == true && format('issue-445-candidate-frozen-{0}', github.sha) || format('winapp-frozen-build-{0}', github.sha) }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: unpublished candidate build evidence.
+          # Consumers: exact-SHA review. Rationale: retain the audit and installer through review.
+          retention-days: 14
+
+  installed-updates:
+    name: Windows installed updates from Tk and Qt
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.installed_updates == true }}
+    needs: [frozen-build]
+    runs-on: windows-2025
+    # Purpose: Bound the central authentic-upgrade audit and retained diagnostics.
+    # Type: int. Units: minutes. Scope: one disposable hosted Windows runner.
+    # Consumers: Actions scheduler. Rationale: 30 covers setup transfer and the
+    # central audit's existing 20-minute limit without changing its scenarios.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact candidate and immutable main merge-base
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) {
+            throw 'Installed-update checkout SHA mismatch.'
+          }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Immutable main merge-base is unavailable.'
+          }
+          git merge-base --is-ancestor $sourceBase HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate is not based on its immutable main merge-base.' }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" >> $env:GITHUB_ENV
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14.10'
+      - name: Install shared source dependencies for the update evidence reader
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements-core.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: issue-445-candidate-frozen-${{ github.sha }}
+          path: cache/issue-445-setups/target
+      - name: Exercise authentic prior and candidate installers through the central audit
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ github.sha }}
+          PHP_GALLERY_RELEASE_API_TOKEN: ${{ github.token }}
+          PHP_GALLERY_FROZEN_UPDATE_INPUTS: ${{ github.workspace }}/cache/issue-445-setups/target
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:PHP_GALLERY_ISSUE_445_CANDIDATE) {
+            throw 'Installed-update source changed after checkout.'
+          }
+          php scripts/audit.php --suite=winapp-frozen-installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain installed-update scenarios and central audit report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: winapp-installed-updates-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: error
+          # Purpose: Keep per-scenario read-only installed lifecycle evidence.
+          # Type: int. Units: days. Scope: this exact-candidate upgrade run.
+          # Consumers: source review. Rationale: preserve details through review.
           retention-days: 14

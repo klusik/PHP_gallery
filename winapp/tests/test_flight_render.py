@@ -83,7 +83,7 @@ class FlightRenderTests(unittest.TestCase):
             destinations = {code: Path(temporary) / (code + ".pdf")
                             for code in ("en", "cs", "de", "sv")}
             callback_threads = []
-            with patch("uploader.flight_report.prepare_report_maps",
+            with patch("uploader.flight.reports.renderer.prepare_report_maps",
                        return_value=(str(len(destinations)).encode("ascii"), b"")) as maps:
                 outputs = flight_render.render_report_variants(
                     self._analysis(), destinations,
@@ -170,7 +170,7 @@ class FlightRenderTests(unittest.TestCase):
                 finally:
                     finished.set()
 
-            with patch("uploader.flight_report.prepare_report_maps", return_value=(b"", b"")) as maps, \
+            with patch("uploader.flight.reports.renderer.prepare_report_maps", return_value=(b"", b"")) as maps, \
                     patch.object(flight_render, "ProcessPoolExecutor",
                         side_effect=lambda max_workers, mp_context:
                             ThreadPoolExecutor(max_workers=max_workers)):
@@ -212,7 +212,7 @@ class FlightRenderTests(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as temporary:
             pdf = Path(temporary) / "same.pdf"
-            with patch("uploader.flight_report.prepare_report_maps") as maps, \
+            with patch("uploader.flight.reports.renderer.prepare_report_maps") as maps, \
                     patch.object(flight_render, "ProcessPoolExecutor") as pool:
                 for destinations in ({}, {"xx": pdf}, {"en": pdf, "cs": pdf}):
                     with self.subTest(destinations=destinations), self.assertRaises(ValueError):

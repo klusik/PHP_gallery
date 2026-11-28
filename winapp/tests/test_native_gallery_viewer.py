@@ -36,7 +36,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import (
+from uploader.linking import (
     LinkedGallery,
     LinkingError,
     LinkedGalleryPage,
@@ -80,14 +80,21 @@ if tk is not None:
     from uploader.diagnostics import format_safe_photos_shortcut
     from uploader.ui_theme import configure_theme
     from uploader import native_gallery_viewer
+    from uploader.photos.tk.viewer import image as native_gallery_image_mixin
+    from uploader.photos.tk.viewer import session as native_gallery_session_mixin
+    from uploader.photos.tk.viewer import support as native_gallery_viewer_support
 else:
     native_gallery_viewer = None
 
 if sys.platform == 'win32' and tk is not None and Image is not None:
     from pypdf import PdfWriter
     from uploader import gallery_lightbox, photos_workspace, ui_theme
+    from uploader.photos.tk.workspace import actions as photos_workspace_actions_mixin
+    from uploader.photos.tk.workspace import catalogue as photos_workspace_catalogue_mixin
+    from uploader.photos.tk.workspace import details as photos_workspace_details_mixin
+    from uploader.photos.tk.workspace import layout as photos_workspace_layout_mixin
     from test_redesign import MAIN
-    from uploader import app_linking as linking
+    from uploader import linking as linking
     from uploader.app_header import HEADER_WORKSPACE_GAP
     from uploader.flight_jobs import SessionPlan, allocate_report_revision
     from uploader.flight_ui import FlightUI
@@ -873,7 +880,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             native_gallery_viewer._NativeGalleryViewer,
         )
         viewer._observation_callback = summaries.append
-        with mock.patch.object(native_gallery_viewer.Image, 'open', return_value=source):
+        with mock.patch.object(native_gallery_viewer_support.Image, 'open', return_value=source):
             image = viewer._prepare_detail(b'bounded synthetic JPEG body')
         image.close()
 
@@ -1033,11 +1040,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._observation_callback = summaries.append
         with (
             mock.patch.object(
-                native_gallery_viewer, 'MEDIA_IMAGE_MAX_PIXELS',
+                native_gallery_image_mixin, 'MEDIA_IMAGE_MAX_PIXELS',
                 TEST_DECODE_PIXEL_BOUNDARY,
             ),
             mock.patch.object(
-                native_gallery_viewer, 'MEDIA_IMAGE_MAX_SIZE',
+                native_gallery_image_mixin, 'MEDIA_IMAGE_MAX_SIZE',
                 TEST_DECODE_DRAFT_TARGET,
             ),
         ):
@@ -1070,7 +1077,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
             native_gallery_viewer._NativeGalleryViewer,
         )
-        with mock.patch.object(native_gallery_viewer.Image, 'open', return_value=source):
+        with mock.patch.object(native_gallery_viewer_support.Image, 'open', return_value=source):
             with self.assertRaises(native_gallery_viewer.PhotosDecodeError) as raised:
                 viewer._prepare_detail(b'oversized PNG fixture')
 
@@ -1490,7 +1497,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Initial refresh fixture did not finish its gallery tree.',
         )
         with mock.patch.object(
-            photos_workspace, 'mount_native_gallery_view',
+            photos_workspace_catalogue_mixin, 'mount_native_gallery_view',
             return_value=mock.Mock(),
         ):
             workspace._select_gallery(original[1])
@@ -1672,7 +1679,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             ), '9' * 64),
         )
         with mock.patch.object(
-            photos_workspace, 'mount_native_gallery_view',
+            photos_workspace_catalogue_mixin, 'mount_native_gallery_view',
             return_value=mock.Mock(),
         ):
             workspace._select_gallery(selected)
@@ -2522,7 +2529,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             native_gallery_viewer.MEDIA_THUMBNAIL_BATCH_SIZE,
         )
         with mock.patch.object(
-            native_gallery_viewer, '_log_safe_media_failure',
+            native_gallery_image_mixin, '_log_safe_media_failure',
         ) as apply_failure:
             viewer._poll_queue()
             apply_failure.assert_not_called()
@@ -3598,7 +3605,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
         reads = session.media_photo.call_count
         attach_threads: list[int] = []
-        original_photo_image = native_gallery_viewer.ImageTk.PhotoImage
+        original_photo_image = native_gallery_viewer_support.ImageTk.PhotoImage
 
         def attach(
             image: 'Image.Image', *, master: 'tk.Misc',
@@ -3615,7 +3622,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             return original_photo_image(image, master=master)
 
         with mock.patch.object(
-            native_gallery_viewer.ImageTk, 'PhotoImage', side_effect=attach,
+            native_gallery_viewer_support.ImageTk, 'PhotoImage', side_effect=attach,
         ) as photo_image:
             viewer._on_grid_viewport(None)
             self._wait_until(
@@ -3713,7 +3720,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             * native_gallery_viewer.MEDIA_THUMBNAIL_SIZE[1] * 4
         )
         with mock.patch.object(
-            native_gallery_viewer, 'MEDIA_THUMBNAIL_CACHE_MAX_BYTES',
+            native_gallery_image_mixin, 'MEDIA_THUMBNAIL_CACHE_MAX_BYTES',
             one_entry_bytes * 2,
         ), mock.patch.object(
             native_gallery_viewer.time, 'monotonic', return_value=0.0,
@@ -3843,7 +3850,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.media_page.return_value = changed
         # One retained slot forces eviction as the refreshed raster arrives.
         with mock.patch.object(
-            native_gallery_viewer, 'MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT', 1,
+            native_gallery_image_mixin, 'MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT', 1,
         ):
             third = self._open_viewer(session, gallery, memory)
             self._wait_until(
@@ -5337,7 +5344,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     linking.GALLERIES_SCOPE,
                 )
                 with mock.patch.object(session, '_media_read', side_effect=transport), \
-                        mock.patch.object(linking.GalleryMediaCache, 'for_current_user',
+                        mock.patch.object(GalleryMediaCache, 'for_current_user',
                                           return_value=cache):
                     shelf = GalleryFolderShelf(self.root, mock.Mock())
                     shelf.pack(fill='both', expand=True)
@@ -5412,7 +5419,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 ))
             # Reopening the owner proves persistence rather than an in-memory hit.
             reader = GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True)
-            with mock.patch.object(linking.GalleryMediaCache, 'for_current_user', return_value=reader), \
+            with mock.patch.object(GalleryMediaCache, 'for_current_user', return_value=reader), \
                     mock.patch.object(session, 'recent_media_page', side_effect=pages.get), \
                     mock.patch.object(session, 'media_page', side_effect=refresh) as metadata, \
                     mock.patch.object(session, 'media_photo') as binary:
@@ -6875,7 +6882,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._tree_marker_images.clear()
         workspace._recording_images.clear()
         with mock.patch.object(
-            photos_workspace, 'create_smooth_icon', return_value=None,
+            photos_workspace_catalogue_mixin, 'create_smooth_icon', return_value=None,
         ):
             workspace.set_watcher_recording(target, True)
             self.root.update()
@@ -6932,7 +6939,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 self.root.update()
             workspace._gallery_context(TEST_GALLERY_ID, event)
             with mock.patch.object(
-                photos_workspace, 'GalleryPreloadWorker', return_value=worker,
+                photos_workspace_details_mixin, 'GalleryPreloadWorker', return_value=worker,
             ) as factory:
                 if pinned is True:
                     workspace._cache_pin_button.invoke()
@@ -7070,7 +7077,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         gallery = workspace._galleries[TEST_GALLERY_ID]
         worker = mock.Mock(spec=photos_workspace.GalleryPreloadWorker)
         worker.is_alive.return_value = False
-        with mock.patch.object(photos_workspace, 'GalleryPreloadWorker', return_value=worker):
+        with mock.patch.object(photos_workspace_details_mixin, 'GalleryPreloadWorker', return_value=worker):
             for phase in ('cancelled', 'complete', 'partial', 'error'):
                 with self.subTest(phase=phase):
                     workspace._select_gallery(gallery)
@@ -7524,7 +7531,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             return value == 8
 
         with mock.patch.object(
-            photos_workspace, 'set_thumbnail_cache_limit_gib', side_effect=persist,
+            photos_workspace_actions_mixin, 'set_thumbnail_cache_limit_gib', side_effect=persist,
         ) as save:
             workspace._storage_button.invoke()
             self.root.update()
@@ -7720,7 +7727,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: A later widget failure is propagated before animation starts.
         """
         with mock.patch.object(
-            photos_workspace, 'GalleryFolderShelf',
+            photos_workspace_layout_mixin, 'GalleryFolderShelf',
             side_effect=RuntimeError('Synthetic widget construction failure'),
         ), mock.patch.object(
             photos_workspace.PhotosWorkspace, '_animate_storage_activity',
@@ -10483,7 +10490,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         first, second = mock.Mock(), mock.Mock()
         first.poll.return_value = second.poll.return_value = None
         with (
-            mock.patch.object(native_gallery_viewer, 'sys', mock.Mock(platform='darwin')),
+            mock.patch.object(native_gallery_session_mixin, 'sys', mock.Mock(platform='darwin')),
             mock.patch.object(
                 native_gallery_viewer.subprocess, 'Popen', side_effect=[first, second],
             ) as launch,
@@ -10547,7 +10554,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         process = mock.Mock()
         process.poll.return_value = None
         with (
-            mock.patch.object(native_gallery_viewer, 'sys', mock.Mock(platform='darwin')),
+            mock.patch.object(native_gallery_session_mixin, 'sys', mock.Mock(platform='darwin')),
             mock.patch.object(
                 native_gallery_viewer.subprocess, 'Popen', return_value=process,
             ) as launch,

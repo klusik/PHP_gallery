@@ -26,7 +26,9 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.gallery_media_cache import GalleryMediaCache
+from uploader.gallery_media_cache import PhotoCacheReceipt
 from uploader.gallery_preload import (
     GalleryPreloadWorker, PRELOAD_MAX_PHOTOS,
 )
@@ -104,7 +106,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
             timings: linking.MediaReadTimings | None = None,
-            cache_receipts: list[linking.PhotoCacheReceipt] | None = None,
+            cache_receipts: list[PhotoCacheReceipt] | None = None,
         ) -> tuple[bytes, str]:
             """Return a fixture media body and optional current cache receipt.
 
@@ -129,7 +131,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
                 timings.source = 'disk'
                 timings.cache_state = 'hit'
             if cache_receipts is not None:
-                cache_receipts.append(linking.PhotoCacheReceipt(
+                cache_receipts.append(PhotoCacheReceipt(
                     Path('fixture-thumbnail.bin'), os.stat_result((0,) * 10),
                     '"' + '0' * 64 + '"', 'image/jpeg',
                 ))
@@ -515,12 +517,12 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
                 return body, 'image/jpeg', etag, True
 
             with TemporaryDirectory() as temporary:
-                cache = linking.GalleryMediaCache(
+                cache = GalleryMediaCache(
                     Path(temporary), TEST_REAL_SESSION_BODY_LIMIT_BYTES,
                     thumbnails=True,
                 )
                 with mock.patch.object(
-                    linking.GalleryMediaCache, 'for_current_user',
+                    GalleryMediaCache, 'for_current_user',
                     return_value=cache,
                 ), mock.patch.object(
                     session, 'media_page', side_effect=pages,
@@ -677,7 +679,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
             timings: linking.MediaReadTimings | None = None,
-            cache_receipts: list[linking.PhotoCacheReceipt] | None = None,
+            cache_receipts: list[PhotoCacheReceipt] | None = None,
         ) -> tuple[bytes, str]:
             """Return one warm hit and one successfully stored network body.
 
@@ -714,7 +716,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
                 timings.cache_stored = True
                 timings.stored_bytes = 12
             if cache_receipts is not None:
-                cache_receipts.append(linking.PhotoCacheReceipt(
+                cache_receipts.append(PhotoCacheReceipt(
                     Path('written-thumbnail.bin'), os.stat_result((0,) * 10),
                     '"' + '0' * 64 + '"', 'image/jpeg',
                 ))
@@ -752,7 +754,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
             timings: linking.MediaReadTimings | None = None,
-            cache_receipts: list[linking.PhotoCacheReceipt] | None = None,
+            cache_receipts: list[PhotoCacheReceipt] | None = None,
         ) -> tuple[bytes, str]:
             """Model a received body whose ordinary cache write failed.
 
@@ -1487,9 +1489,9 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
             for body in bodies
         )
         with TemporaryDirectory() as directory:
-            cache = linking.GalleryMediaCache(Path(directory), 1024 * 1024)
+            cache = GalleryMediaCache(Path(directory), 1024 * 1024)
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user',
+                GalleryMediaCache, 'for_current_user',
                 return_value=cache,
             ), mock.patch.object(
                 session, 'media_page', return_value=page,
@@ -1511,7 +1513,7 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
                 for call in transport.call_args_list
             ))
 
-            restarted = linking.GalleryMediaCache(
+            restarted = GalleryMediaCache(
                 Path(directory), 1024 * 1024,
             )
             self.assertTrue(restarted.has_private_preload_intent(

@@ -25,7 +25,7 @@ from types import TracebackType
 if os.name != 'nt':
     import fcntl
 
-from .app_linking import _issuer_valid
+from .linking import _issuer_valid
 from .session_resume import (
     KeychainAccessUnavailable, default_keychain_write_available,
     delete_keychain_record, read_keychain_record, write_keychain_record,

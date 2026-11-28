@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from .capture_session import CaptureCommands
+from .watcher.capture_session import CaptureCommands
 from .config import load_ui_language
 from .desktop_connection import ConnectionActions, DependencyActions, RuntimeSettings
 from .import_commands import ImportActions

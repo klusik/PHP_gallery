@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
-# File: winapp/uploader/watcher_profile.py
+# File: winapp/uploader/watcher/profile.py
 # Module Type: Watcher Profile Persistence
 # Purpose: Isolate factory-reset Watcher state from other uploader modes.
 # Responsibilities:
@@ -16,10 +16,10 @@ import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from uploader.flight_jobs import (
+from ..flight_jobs import (
     FlightPreferences, SessionPlan, WorkspaceLease, connection_binding,
 )
-from uploader.state_store import atomic_write_json
+from ..state_store import atomic_write_json
 
 
 WATCHER_PREFERENCE_TYPES = {

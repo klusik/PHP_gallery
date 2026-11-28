@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .capture_session import (
+from .watcher.capture_session import (
     CaptureCommands, CaptureDecision, CaptureReview, CaptureStatus,
     RetainedQueueSummary, WatchFolderInspection,
 )
@@ -50,7 +50,7 @@ from .ui_layout import (
     OVERLAY_ACTION_COLUMNS, OVERLAY_HEIGHT_PX, OVERLAY_MARGIN_PX, OVERLAY_WIDTH_PX,
     WORKSPACE_ACTION_HEIGHT, WORKSPACE_CARD_INSETS, WORKSPACE_COMPACT_ACTION_HEIGHT,
 )
-from .watch_recovery import RECOVERY_DIGEST_PREFIX_CHARS, sanitize_recovery_label
+from .watcher.recovery import RECOVERY_DIGEST_PREFIX_CHARS, sanitize_recovery_label
 
 
 @dataclass(frozen=True)

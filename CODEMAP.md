@@ -598,9 +598,10 @@ tag controller through the pagination and description-layout services.
 | Durable session/preferences and workspace lease | `winapp/uploader/flight_jobs.py` |
 | Stop/finalize/revoke coordinator and shared progress | `winapp/uploader/flight_workflow.py`, `winapp/uploader/flight_ui.py` |
 | Telemetry normalization and landing analysis | `winapp/uploader/flight_data.py`, `winapp/uploader/flight_recorder.py`, `winapp/uploader/simconnect_flight.py` |
-| Multilingual chart PDF rendering | `winapp/uploader/flight_report.py`, `winapp/uploader/flight_report_translations.py`, bundled ReportLab/DejaVu assets |
+| Multilingual chart PDF rendering | Canonical report implementation in `winapp/uploader/flight/reports/`; `flight_report.py` is the legacy navigation/import facade. Locale and report-domain catalogs are in `winapp/uploader/translation_catalog/`, with lookup facade `flight_report_translations.py` and bundled ReportLab/DejaVu assets. |
 | Parallel language rendering and completion barrier | `winapp/uploader/flight_render.py`; shared parent-prepared map PNGs, isolated spawned ReportLab processes, parent completion hooks and joined cancellation/failure; `winapp/tests/test_flight_render.py` |
-| Saved flight/version/file display tree | `winapp/uploader/flight_ui.py`, numeric catalog versions in `winapp/uploader/flight_jobs.py`; direct files for one version, descending expandable versions for several; `winapp/tests/test_flight_ui.py` |
+| Flight UI composition and feature behavior | `winapp/uploader/flight_ui.py` remains the composition/import entry for `FlightUI`; canonical feature code is in `winapp/uploader/flight/ui/{dispatch,reports,lifecycle,progress,ports}.py`. |
+| Saved flight/version/file display tree | `winapp/uploader/flight_ui.py` composition, feature behavior in `winapp/uploader/flight/ui/`, numeric catalog versions in `winapp/uploader/flight_jobs.py`; direct files for one version, descending expandable versions for several; `winapp/tests/test_flight_ui.py` |
 | Raw-sample dispatch statistics and completed flightplan | `winapp/uploader/flight_comparison.py`, `winapp/tests/test_flight_comparison.py` | Simulator-time weighting, metric coverage, bounded histograms/deviation plots, ordered fix passages, estimated block events and additive legacy support. |
 | Optional dispatch snapshots, AIRAC waypoint cache and OSM report maps | `winapp/uploader/flight_simbrief.py`, `winapp/uploader/flight_navdata.py`, `winapp/uploader/flight_maps.py`, `winapp/tests/test_flight_simbrief.py` |
 | Gallery-scoped PDF API and storage policy | `app/controllers/upload_automation.php`, `app/services/upload_flight_reports.php`, shared `app/services/gallery_pdf_documents.php` |
@@ -609,34 +610,54 @@ tag controller through the pagination and description-layout services.
 
 ## Upload Automation
 
+### WinApp source ownership
+
+Use this map to find the smallest owner set before changing WinApp behavior.
+Composition flows from the stable `.pyw` bootstrap into `uploader/launcher.py`
+and then toward feature owners; feature/domain modules do not import the launcher
+or historical facades. Tests patch a dependency at the module that consumes it,
+so mock seams stay beside the behavior under test.
+
+| What to change | Canonical source owner | Focused tests |
+| --- | --- | --- |
+| Early command flags, CLI dispatch, backend choice and frozen startup | `winapp/gallery_watch_upload.pyw` (early flags), `winapp/uploader/launcher.py` (CLI and backend assembly), `winapp/uploader/watcher/runtime.py` (runtime paths/dependencies) | `winapp/tests/test_launcher_module_contracts.py`, `winapp/tests/test_gui_backend.py` |
+| Watcher configuration, queue, recovery and capture lifecycle | `winapp/uploader/watcher/{state,profile,queue,recovery,capture_session}.py`; durable queue and recovery policy are separate from presentation | `winapp/tests/test_watch_queue.py`, `winapp/tests/test_watch_recovery.py`, `winapp/tests/test_watch_recovery_integration.py`, `winapp/tests/test_watcher_continuation.py` |
+| Watcher workers and Tk event presentation | `winapp/uploader/watcher/workers/` owns worker execution; `winapp/uploader/watcher/ui/` owns shell, callbacks and event delivery | `winapp/tests/test_flight_watch_drain.py`, `winapp/tests/test_ui_shell.py`, `winapp/tests/test_gui_backend.py` |
+| Manual Import and Activity | `winapp/uploader/imports/{policy,preflight,manual_upload}.py`, plus history and snapshot owners | `winapp/tests/test_import_destination_admission.py`, `winapp/tests/test_import_history_reader.py`, `winapp/tests/test_import_ui_snapshot.py` |
+| AI analysis and runtime dependencies | `winapp/uploader/ai/{image_analysis,worker,dependencies,heartbeat}.py` | `winapp/tests/test_qt_backend.py` |
+| Linked-gallery transport, sessions and Tk controls | `winapp/uploader/linking/` and `winapp/uploader/linking/ui/`; `app_linking.py` and `app_linking_ui.py` are compatibility facades | `winapp/tests/test_app_linking.py`, `winapp/tests/test_linking_performance.py` |
+| Qt/Tk Photos, gallery cache and presentation | `winapp/uploader/photos/qt/`, `winapp/uploader/photos/tk/`, and shared gallery cache/policy owners | `winapp/tests/test_qt_backend.py`, `winapp/tests/test_gui_visual_parity.py`, `winapp/tests/test_photos_performance.py` |
+| Flight UI composition and behavior | `winapp/uploader/flight_ui.py` owns the `FlightUI` composition/import entry; `winapp/uploader/flight/ui/{dispatch,reports,lifecycle,progress,ports}.py` owns feature behavior | `winapp/tests/test_flight_ui.py` |
+| Flight report rendering and labels | `winapp/uploader/flight/reports/` owns report implementation; `flight_report.py` is the legacy navigation/import facade; catalogs in `winapp/uploader/translation_catalog/` and lookup facade `flight_report_translations.py` | `winapp/tests/test_flight_report.py`, `winapp/tests/test_localization.py` |
+| Watcher configuration and settings | `winapp/uploader/watcher/configuration.py`; settings UI owners under `winapp/uploader/watcher/ui/settings/{preferences,updates,shutdown}.py` | `winapp/tests/test_ui_shell.py`, `winapp/tests/test_update_ui.py` |
+| Watcher Tk event pump and event delivery | `winapp/uploader/watcher/ui/event_pump.py` composes one Tk timer slot and cancels/rejects stale callbacks; `event_delivery.py` dispatches bounded worker events to the UI | `winapp/tests/test_watcher_continuation.py`, `winapp/tests/test_launcher_module_contracts.py` |
+| WinApp updater and installed verification | `winapp/uploader/self_update.py`, `winapp/uploader/update_ui.py`, `winapp/uploader/update_helper.py`, `winapp/installer.iss`; settings integration in `winapp/uploader/watcher/ui/settings/`; installed audit in `winapp/qualify_installer_updates.py`, with workflow and evidence contract in root `TESTING.md` | `winapp/tests/test_self_update.py`, `winapp/tests/test_update_ui.py`, `winapp/tests/test_update_helper.py`, `winapp/tests/test_self_update_source_contracts.py`, installed-update audit |
+
 | Task | Files |
 | --- | --- |
 | Admin token management | `app/controllers/upload_automation.php`, `public/assets/gallery-modules/admin-side-panel.js`, handler `cms_admin_upload_automation_token` |
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
-| Windows watcher | `winapp/gallery_watch_upload.pyw` |
-| Compact responsive application header | `winapp/uploader/app_header.py`; live action/link wiring in `winapp/gallery_watch_upload.pyw` |
-| Durable FIFO capture and head-only consumer contract | `winapp/uploader/watch_queue.py`, `winapp/uploader/discovery.py`, `winapp/uploader/state_store.py`; `docs/UPLOADER_QUEUE.md` |
-| Explicit uncertain-head decisions, retained stop and shared Resume preview | `winapp/uploader/watch_recovery.py`, `winapp/uploader/watch_recovery_ui.py`, Watcher integration in `winapp/gallery_watch_upload.pyw`, Finish actions in `winapp/uploader/flight_ui.py` |
-| Terminal Force finish, scoped drain and bounded Exit | Queue terminal persistence in `winapp/uploader/watch_queue.py`, capture plan in `winapp/uploader/flight_jobs.py`, app-owned cancellation/diagnostics in `winapp/gallery_watch_upload.pyw`, progress controls in `winapp/uploader/flight_ui.py` |
+| Windows companion bootstrap and desktop startup | Stable early-flag entry in `winapp/gallery_watch_upload.pyw`; CLI/backend assembly in `winapp/uploader/launcher.py` |
+| Compact responsive application header | `winapp/uploader/app_header.py`; Tk composition and callbacks in `winapp/uploader/watcher/ui/shell.py` |
+| Durable FIFO capture and head-only consumer contract | `winapp/uploader/watcher/queue.py`, `winapp/uploader/discovery.py`, `winapp/uploader/state_store.py`; `docs/UPLOADER_QUEUE.md` |
+| Explicit uncertain-head decisions, retained stop and shared Resume preview | `winapp/uploader/watcher/recovery.py`, `winapp/uploader/watcher/recovery_ui.py`, coordination in `winapp/uploader/watcher/ui/watcher.py`, Finish actions in `winapp/uploader/flight_ui.py` |
+| Terminal Force finish, scoped drain and bounded Exit | Queue terminal persistence in `winapp/uploader/watcher/queue.py`, capture plan in `winapp/uploader/flight_jobs.py`, desktop orchestration in `winapp/uploader/watcher/desktop.py` and `winapp/uploader/watcher/ui/watcher.py`, progress controls in `winapp/uploader/flight_ui.py` |
 | Cost-specific delegated inventory/upload admission | `app/services/app_linking_rate_limits.php`, `app/controllers/app_linking/upload.php`; existing bounded rate persistence |
-| WinApp Photos tree, contextual management and folder cards | `winapp/uploader/photos_workspace.py`, `winapp/uploader/gallery_folders.py` |
-| WinApp optional complete catalogue snapshot and last-gallery restoration | `winapp/uploader/gallery_catalogue_cache.py`, `winapp/uploader/photos_workspace.py`, preference owner in `winapp/gallery_watch_upload.pyw` |
-| WinApp browser link and startup resume | `winapp/uploader/app_linking_ui.py`, `winapp/uploader/session_resume.py`, `winapp/uploader/offline_linking.py` |
+| WinApp Photos tree, contextual management and folder cards | `winapp/uploader/photos/tk/workspace/`, `winapp/uploader/gallery_folders.py`, and connection composition in `winapp/uploader/watcher/ui/photos_connection.py` |
+| WinApp optional complete catalogue snapshot and last-gallery restoration | `winapp/uploader/gallery_catalogue_cache.py`, `winapp/uploader/photos/tk/workspace/cache.py`, `winapp/uploader/photos/tk/workspace/catalogue.py`, preference owner in `winapp/uploader/watcher/ui/photos_connection.py` |
+| WinApp browser link and startup resume | Transport/session owners in `winapp/uploader/linking/`; Tk dialog, picker and callbacks in `winapp/uploader/linking/ui/`; compatibility facades `app_linking.py` and `app_linking_ui.py`; startup resume in `session_resume.py` and `offline_linking.py` |
 | App Linking rolling expiry and refresh replay | `app/services/app_linking.php`, `app/services/app_linking_refresh.php`, `app/models/app_linking_refresh.php`, `tests/app_linking_database_test.php` |
 | Linked binary media rate limits | `app/controllers/app_linking/media.php`, `app/services/app_linking_rate_limits.php` |
-| WinApp local gallery order and synchronized metadata editing | `winapp/uploader/gallery_view_order.py`, `winapp/uploader/gallery_view_preferences.py`, `winapp/uploader/photos_workspace.py`; server mutation owner `app/services/app_linking_gallery_edit.php` |
-| WinApp Photos, local playback and media cache | `winapp/uploader/native_gallery_viewer.py`, `winapp/uploader/gallery_lightbox.py`, `winapp/uploader/gallery_media_cache.py` |
-| WinApp thumbnail accounting and process RAM | `winapp/uploader/thumbnail_cache_index.py`, `winapp/uploader/process_memory.py`; shared quota via `winapp/uploader/config.py`, snapshot/UI in `winapp/uploader/photos_workspace.py` |
-| WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, `winapp/uploader/app_linking.py`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |
-| WinApp window/divider view state and background activity persistence | `winapp/gallery_watch_upload.pyw`, `winapp/uploader/photos_workspace.py`, `winapp/uploader/state_store.py` |
+| WinApp local gallery order and synchronized metadata editing | `winapp/uploader/gallery_view_order.py`, `winapp/uploader/gallery_view_preferences.py`, `winapp/uploader/photos/tk/workspace/catalogue.py`, `winapp/uploader/photos/qt/actions.py`; server mutation owner `app/services/app_linking_gallery_edit.php` |
+| WinApp Photos, local playback and media cache | Tk viewer in `winapp/uploader/photos/tk/viewer/`, Qt media in `winapp/uploader/photos/qt/media.py`, shared `native_gallery_viewer.py`, `gallery_lightbox.py` and `gallery_media_cache.py` |
+| WinApp thumbnail accounting and process RAM | `winapp/uploader/thumbnail_cache_index.py`, `winapp/uploader/process_memory.py`; shared quota via `winapp/uploader/config.py`, Tk cache UI in `winapp/uploader/photos/tk/workspace/cache.py` |
+| WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, linked transport/session owners in `winapp/uploader/linking/`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |
+| WinApp window/divider view state and background activity persistence | Window composition in `winapp/uploader/watcher/ui/app.py`, persistence in `winapp/uploader/watcher/ui/photos_connection.py`, `winapp/uploader/gallery_view_preferences.py`, and `winapp/uploader/state_store.py`; Photos divider behavior in `winapp/uploader/photos/tk/workspace/layout.py` |
 | WinApp installed fonts, generated icons and Windows DPI bootstrap | `winapp/uploader/ui_theme.py`, `winapp/uploader/windows_display.py` |
 | WinApp inherited component library and all ttk styles | `winapp/uploader/ui_theme.py`: `Button`/`SmoothIconButton`, shared `_RoundedSurface`, `GlassCard`/`DialogSurface`/`MetricCard`, `Dialog`, parent-aware `Slider` and icon variants; `winapp/uploader/overlay.py` derives in-window dialogs; `winapp/tests/test_ui_library.py` rejects consumer bypasses. |
 | WinApp macOS extended-range photo surface | `winapp/uploader/gallery_hdr_macos.py` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
-| Uploader release discovery and verified download | `winapp/uploader/self_update.py`, `winapp/tests/test_self_update.py` |
-| Update scheduling, progress and worker drain | `winapp/uploader/update_ui.py`, `winapp/gallery_watch_upload.pyw`, `winapp/tests/test_update_ui.py` |
-| External helper and installer progress | `winapp/uploader/update_helper.py`, `winapp/installer.iss`, `winapp/tests/test_update_helper.py` |
 | Updater documentation/type contracts | `winapp/tests/test_self_update_source_contracts.py` |
 
 ## Telemetry and Observability

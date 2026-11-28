@@ -25,7 +25,10 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.gallery_media_cache import PHOTO_CACHE_FRESH_SECONDS
+from uploader.linking import transport as linking_transport
+from uploader.gallery_media_cache import GalleryMediaCache
 from uploader.thumbnail_batch_protocol import ValidatedItem
 
 
@@ -60,11 +63,11 @@ class ThumbnailPublicationTests(unittest.TestCase):
             linking.GALLERIES_SCOPE,
         )
         self.addCleanup(self.session.close)
-        self.cache = linking.GalleryMediaCache(
+        self.cache = GalleryMediaCache(
             Path(temporary.name), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
         )
         patcher = mock.patch.object(
-            linking.GalleryMediaCache, 'for_current_user', return_value=self.cache,
+            GalleryMediaCache, 'for_current_user', return_value=self.cache,
         )
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -287,7 +290,7 @@ class ThumbnailPublicationTests(unittest.TestCase):
         Returns:
             None: Neither failure reaches disk or establishes RAM authority.
         """
-        stale = self.at - linking.PHOTO_CACHE_FRESH_SECONDS
+        stale = self.at - PHOTO_CACHE_FRESH_SECONDS
         photo = replace(self.photo, thumbnail_verified_at=stale)
         self.session._public_media_descriptors[4] = {7: (self.etag, stale)}
         with self.assertRaises(linking.LinkingError):
@@ -458,11 +461,11 @@ class ThumbnailPublicationTests(unittest.TestCase):
         Returns:
             None: A proof change is not relabeled as a network timeout.
         """
-        def fail(control: linking._LinkingTransportControl) -> dict[str, linking.JsonValue]:
+        def fail(control: linking_transport._LinkingTransportControl) -> dict[str, linking.JsonValue]:
             """Raise one safe proof refusal from the admitted worker.
 
             Args:
-                control (linking._LinkingTransportControl): Active request owner.
+                control (linking_transport._LinkingTransportControl): Active request owner.
 
             Returns:
                 dict[str, linking.JsonValue]: No result because proof was refused.
@@ -471,7 +474,7 @@ class ThumbnailPublicationTests(unittest.TestCase):
             raise linking.LinkingThumbnailProofChanged('Proof changed.')
 
         with self.assertRaises(linking.LinkingThumbnailProofChanged):
-            linking._run_linking_transport(
+            linking_transport._run_linking_transport(
                 fail, None, TEST_SESSION_LIFETIME_SECONDS,
                 linking.LINKING_SOCKET_TIMEOUT_SECONDS,
                 phase='media', route='app_linking_thumbnail_batch',

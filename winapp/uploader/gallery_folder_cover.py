@@ -13,7 +13,7 @@
 import io
 from threading import Event
 
-from .app_linking import LinkedMediaPage, LinkingError, LinkingSession
+from .linking import LinkedMediaPage, LinkingError, LinkingSession
 from .gallery_view_preferences import normalize_card_format
 
 try:

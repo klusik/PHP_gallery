@@ -27,10 +27,13 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from test_flight_watch_drain import load_main_module
-from uploader.app_linking import LinkingResponseError
-from uploader.capture_session import CaptureReview, inspect_watch_folder
+from uploader.linking import LinkingResponseError
+from uploader.watcher.capture_session import CaptureReview, inspect_watch_folder
 from uploader.models import JsonValue
-from uploader.watch_queue import WatchQueueItem, observe_watch_source
+from uploader.linked_upload import UploadPipelineLease
+from uploader.watcher.queue import WatchQueueItem, observe_watch_source
+from uploader.watcher import state as watcher_state
+from uploader.watcher.workers import watcher as watcher_worker
 
 
 class WatchRecoveryIntegrationTests(unittest.TestCase):
@@ -58,7 +61,7 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
         self.folder.mkdir()
         self.profile = self.root / 'profile'
         self.profile.mkdir()
-        config_patch = mock.patch.object(self.main, 'CONFIG_DIR', self.profile)
+        config_patch = mock.patch.object(watcher_state, 'CONFIG_DIR', self.profile)
         config_patch.start()
         self.addCleanup(config_patch.stop)
 
@@ -109,7 +112,7 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
                 matches_issuer=matches_issuer,
             ),
         )
-        self.state = self.main.LinkedUploadState(self.target)
+        self.state = watcher_state.LinkedUploadState(self.target)
         self.state.save()
 
     def make_worker(self, session_name: str) -> threading.Thread:
@@ -122,7 +125,7 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
             WatcherThread: Real production worker, not started as a thread.
         """
         native = mock.patch.object(
-            self.main, 'SimConnectCameraClient', return_value=mock.Mock(),
+            watcher_worker, 'SimConnectCameraClient', return_value=mock.Mock(),
         )
         native.start()
         self.addCleanup(native.stop)
@@ -141,7 +144,7 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
         worker.remote_inventory = mock.Mock()
         worker.remote_inventory.refresh.return_value = True
         worker.remote_inventory.has_hash.return_value = False
-        pipeline = self.main.UploadPipelineLease(self.profile)
+        pipeline = UploadPipelineLease(self.profile)
         pipeline.acquire()
         self.addCleanup(pipeline.release)
         worker._pipeline_lease = pipeline
@@ -640,14 +643,14 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
         self.assertIn('recovery_intent', worker._queue.data)
         self.assertIsNone(worker._queue.data['approved_upload'])
 
-        fresh_state = self.main.LinkedUploadState(self.target)
+        fresh_state = watcher_state.LinkedUploadState(self.target)
         worker.state = fresh_state
         worker.recovery_coordinator.repair_interrupted_decision()
 
         self.assertNotIn('recovery_intent', worker._queue.data)
         self.assertEqual(1, len(fresh_state.data['reviewed_upload_attempts']))
         self.assertEqual('preparing', worker._queue.head().state)
-        confirmed_state = self.main.LinkedUploadState(self.target)
+        confirmed_state = watcher_state.LinkedUploadState(self.target)
         self.assertEqual(1, len(confirmed_state.data['reviewed_upload_attempts']))
 
     def test_ambiguous_approved_retry_requires_a_new_human_decision(self) -> None:
@@ -773,7 +776,7 @@ class WatchRecoveryIntegrationTests(unittest.TestCase):
         restarted.configure_drain(
             self.root / 'repair-session', [], resume=True,
         )
-        restart_pipeline = self.main.UploadPipelineLease(self.profile)
+        restart_pipeline = UploadPipelineLease(self.profile)
         restart_pipeline.acquire()
         self.addCleanup(restart_pipeline.release)
         restarted._pipeline_lease = restart_pipeline

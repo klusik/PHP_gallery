@@ -26,7 +26,8 @@ from uploader.passive_server_timing import (
     PassiveServerTiming, ServerTimingWindow, parse_server_timing,
     SERVER_TIMING_MAX_SAMPLES,
 )
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import session_lifecycle as linking_session_lifecycle
 
 
 HEADER = (
@@ -166,7 +167,7 @@ class PassiveServerTimingTests(unittest.TestCase):
             'version': 1, 'revision': 'a' * 64,
             'unchanged': False, 'galleries': [],
         }
-        with mock.patch.object(linking, '_request_json') as sender:
+        with mock.patch.object(linking_session_lifecycle, '_request_json') as sender:
             sender.side_effect = lambda *_args, **kwargs: (
                 kwargs['server_timing_out'].append((parsed, 20.0)),
                 valid_tree,

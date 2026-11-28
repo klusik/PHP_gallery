@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.8.2}
-\newcommand{\manualdate}{27 November 2026}
+\newcommand{\version}{1.8.3}
+\newcommand{\manualdate}{28 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -10171,6 +10171,18 @@ public/assets/ & Framework-free JavaScript, CSS, and~public assets.\\
 scripts/ & Migration, integrity, deployment, and~maintenance utilities.\\
 tests/ & Standalone PHP and~focused JavaScript tests.\\
 winapp/ & Windows-specific tools and~integrations.\\
+winapp/gallery\_watch\_upload.pyw & Stable early-flag bootstrap for compatible launches.\\
+winapp/uploader/launcher.py & CLI dispatch and~desktop backend assembly.\\
+winapp/uploader/watcher/ & Watcher runtime, state, queue, recovery, workers, and~Tk UI.\\
+winapp/uploader/watcher/configuration.py & Watcher configuration policy.\\
+winapp/uploader/watcher/ui/settings/ & Watcher preferences, update, and~shutdown modules.\\
+winapp/uploader/imports/ & Manual import policy, preflight, and~upload workers.\\
+winapp/uploader/ai/ & Optional AI analysis, workers, heartbeat, and~runtime dependencies.\\
+winapp/uploader/linking/ & Linked transport, session, and~Tk UI ownership.\\
+winapp/uploader/flight/reports/ & Canonical flight report implementation; \texttt{flight\_report.py} remains a~legacy navigation/import facade.\\
+winapp/uploader/flight/ui/ & Flight feature behavior behind the~\texttt{FlightUI} composition entry in~\texttt{flight\_ui.py}.\\
+WinApp updater and installed verification & \texttt{self\_update.py}, \texttt{update\_ui.py}, \texttt{update\_helper.py}, \texttt{installer.iss}, Watcher settings under \texttt{watcher/ui/settings/}, and~\texttt{qualify\_installer\_updates.py}. Hosted upgrade checks use published WinApp 1.7.1 and~2.0.0 setups plus one exact candidate build; see \texttt{TESTING.md} at~the repository root.\\
+winapp/uploader/translation\_catalog/ & Flight report catalogs grouped by~locale and~interface domain.\\
 \bottomrule
 \end{longtable}
 

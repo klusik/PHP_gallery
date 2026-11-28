@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from .capture_session import CaptureCommands
+from .watcher.capture_session import CaptureCommands
 from .flight_jobs import SessionPlan, WorkspaceLease, read_document, report_revisions
 from .flight_report_translations import tr
 from .flight_workflow import FlightProgress, FinalizationWorker, create_local_report_worker

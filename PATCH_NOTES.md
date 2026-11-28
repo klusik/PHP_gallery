@@ -1,5 +1,43 @@
 # Patch notes
 
+## Version 1.8.3
+
+PHP Gallery 1.8.3 includes WinApp 2.0.3. This patch organized the Windows
+companion into smaller modules with clearer ownership.
+
+### Highlights
+
+#### Windows companion
+
+- Split the launcher and large runtime modules into feature packages for
+  Watcher, Photos, linked galleries, flight reports, and translations.
+  [#443](https://github.com/klusik/PHP_gallery/issues/443)
+- Documented WinApp source owners and focused tests in `CODEMAP.md` and
+  updated all four manual editions.
+
+### Technical Details
+
+#### Startup and compatibility
+
+- Moved backend startup and command dispatch into `winapp/uploader/launcher.py`
+  and kept the established application launch and import entry points.
+- Grouped capture, queue, and recovery code under `winapp/uploader/watcher/`.
+  The existing profile and upload queue formats continued to apply.
+- Added regression coverage for launcher imports and the entry-point layout.
+
+#### Installed upgrade verification
+
+- Verified upgrades to WinApp 2.0.3 from the published 1.7.1 onefile and 2.0.0
+  onedir installers. The Windows tests exercised profile preservation,
+  recovery after setup failure, and active Watcher continuation in Tk and Qt.
+
+### User Impact
+
+- WinApp users kept their saved settings and Watcher state in the verified
+  upgrade scenarios. Both Qt and Legacy Tk remained supported.
+- Gallery visitors and administrators continued to use their established
+  web workflows.
+
 ## Version 1.8.2
 
 PHP Gallery 1.8.2 includes WinApp 2.0.2 with a fix for restarting after

@@ -28,8 +28,8 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.linked_upload import UploadPipelineLease
-from uploader.watch_queue import WatchQueueItem, WatchQueueStore, observe_watch_source
-from uploader.watch_recovery import WatchRecoveryCoordinator
+from uploader.watcher.queue import WatchQueueItem, WatchQueueStore, observe_watch_source
+from uploader.watcher.recovery import WatchRecoveryCoordinator
 
 # Purpose: Bound concurrency-fixture synchronization without a local test loop.
 # Type: tuple[float,float]. Units: seconds. Scope: one gate regression.

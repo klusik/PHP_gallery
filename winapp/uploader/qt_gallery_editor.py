@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget,
 )
 
-from .app_linking import LinkingGalleryEditFailure, LinkingSession, gallery_edit_text_valid
+from .linking import LinkingGalleryEditFailure, LinkingSession, gallery_edit_text_valid
 from .flight_report_translations import tr
 from .localization import gettext
 from .qt_read_lane import QtReadLane

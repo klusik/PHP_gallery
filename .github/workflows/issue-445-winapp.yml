@@ -28,9 +28,6 @@ permissions:
 env:
   PHP_GALLERY_SOURCE_BASE: b63d6d5e5bee014ab3750080833f49dcc27e9a34
   ISSUE_445_SHA: ${{ inputs.candidate || github.sha }}
-  # Built from the candidate in a disposable tree. This is newer than the
-  # public stable release and older than the tracked WinApp release candidate.
-  ISSUE_445_EARLIER_VERSION: '1.7.2'
 
 jobs:
   tk-baseline:
@@ -427,7 +424,7 @@ jobs:
           retention-days: 60
 
   stable-frozen:
-    name: WinApp common frozen build (Windows, ${{ matrix.package }})
+    name: WinApp common frozen build (Windows)
     if: >-
       inputs.candidate || contains(github.event.head_commit.message, '[gui-frozen]') ||
       startsWith(github.event.head_commit.message, '[445-upgrade]')
@@ -436,12 +433,6 @@ jobs:
     # Consumers: Actions scheduler. Rationale: 20 covers the central build
     # deadline and upload without invoking the release workflow.
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { package: candidate }
-          - { package: earlier }
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -469,13 +460,12 @@ jobs:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
           PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
           PHP_GALLERY_FROZEN_BUILD_ONLY: '1'
-          PHP_GALLERY_FROZEN_EARLIER_VERSION: ${{ matrix.package == 'earlier' && env.ISSUE_445_EARLIER_VERSION || '' }}
         run: php scripts/audit.php --suite=winapp-frozen-installer
       - name: Retain installer and runtime smoke evidence
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: issue-445-${{ matrix.package }}-frozen-${{ env.ISSUE_445_SHA }}
+          name: issue-445-candidate-frozen-${{ env.ISSUE_445_SHA }}
           path: cache/test-audit/**
           if-no-files-found: warn
           # Type: int. Units: days. Scope: unpublished verification artifacts.
@@ -485,7 +475,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: issue-445-${{ matrix.package }}-package-evidence-${{ env.ISSUE_445_SHA }}
+          name: issue-445-candidate-package-evidence-${{ env.ISSUE_445_SHA }}
           path: |
             cache/test-audit/**/winapp-frozen-installer/winapp-update.json
             cache/test-audit/**/winapp-frozen-installer.log
@@ -570,10 +560,6 @@ jobs:
           python -m pip check
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: issue-445-earlier-frozen-${{ env.ISSUE_445_SHA }}
-          path: cache/issue-445-setups/earlier
-      - uses: actions/download-artifact@v8.0.1
-        with:
           name: issue-445-candidate-frozen-${{ env.ISSUE_445_SHA }}
           path: cache/issue-445-setups/target
       - name: Exercise authentic prior and qualification installers through the central audit
@@ -581,8 +567,7 @@ jobs:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
           PHP_GALLERY_ISSUE_445_CANDIDATE: ${{ inputs.candidate }}
           PHP_GALLERY_RELEASE_API_TOKEN: ${{ github.token }}
-          PHP_GALLERY_FROZEN_EARLIER_VERSION: ${{ env.ISSUE_445_EARLIER_VERSION }}
-          PHP_GALLERY_FROZEN_UPDATE_INPUTS: ${{ github.workspace }}/cache/issue-445-setups
+          PHP_GALLERY_FROZEN_UPDATE_INPUTS: ${{ github.workspace }}/cache/issue-445-setups/target
         run: php scripts/audit.php --suite=winapp-frozen-installer
       - name: Retain sanitized installation and helper evidence
         if: always()

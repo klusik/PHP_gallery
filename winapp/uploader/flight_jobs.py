@@ -33,7 +33,7 @@ try:
 except ImportError:
     pypdf = None
 
-from uploader.app_linking import UPLOAD_SCOPE, scope_base
+from uploader.linking import UPLOAD_SCOPE, scope_base
 from uploader.localization import gettext_noop
 from uploader.models import ImportJob, JsonValue
 from uploader.flight_simbrief import load_dispatch

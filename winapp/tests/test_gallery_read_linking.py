@@ -25,7 +25,9 @@ from pathlib import Path
 from multiprocessing.queues import Queue as MultiprocessingQueue
 from unittest.mock import patch
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.linking import transport as linking_transport
+from uploader.linking import session_lifecycle as linking_session_lifecycle
 from uploader import gallery_media_cache as media_cache
 from uploader import offline_linking as offline
 
@@ -188,7 +190,7 @@ class GalleryReadLinkingTests(unittest.TestCase):
             with self.subTest(scope=scope):
                 session = self._session(scope)
                 self.assertFalse(session.can_read_gallery_detail())
-                with patch.object(linking, '_request_json') as request:
+                with patch.object(linking_session_lifecycle, '_request_json') as request:
                     with self.assertRaises(linking.LinkingError):
                         session.gallery_detail(42)
                     request.assert_not_called()
@@ -208,7 +210,7 @@ class GalleryReadLinkingTests(unittest.TestCase):
                 self.assertEqual(scope in (linking.READ_UPLOAD_SCOPE,
                                            linking.READ_UPLOAD_OFFLINE_SCOPE),
                                  session.can_upload())
-                with patch.object(linking, '_request_json', return_value=self.response) as send:
+                with patch.object(linking_session_lifecycle, '_request_json', return_value=self.response) as send:
                     detail = session.gallery_detail(42)
                 self.assertEqual(42, detail.gallery_id)
                 self.assertEqual('7', detail.revision)
@@ -224,20 +226,20 @@ class GalleryReadLinkingTests(unittest.TestCase):
             None: No invalid ID or unrelated route reaches the HTTPS worker.
         """
         session = self._session(linking.READ_SCOPE)
-        with patch.object(linking, '_request_json_once', return_value=self.response) as send:
+        with patch.object(linking_transport, '_request_json_once', return_value=self.response) as send:
             detail = session.gallery_detail(42)
         self.assertEqual(42, detail.gallery_id)
         self.assertEqual('app_linking_gallery_detail', send.call_args.args[1])
         self.assertEqual(42, send.call_args.kwargs['gallery_id'])
         for invalid in (0, -1, True, linking.LINKING_GALLERY_ID_MAX + 1):
             with self.subTest(invalid=invalid):
-                with patch.object(linking, '_request_json_once') as send:
+                with patch.object(linking_transport, '_request_json_once') as send:
                     with self.assertRaises(linking.LinkingError):
                         session.gallery_detail(invalid)
                     send.assert_not_called()
-        with patch.object(linking, '_request_json_once') as send:
+        with patch.object(linking_transport, '_request_json_once') as send:
             with self.assertRaises(linking.LinkingError):
-                linking._request_json(
+                linking_transport._request_json(
                     self.issuer, 'app_linking_identity', 'GET', None, _token(),
                     gallery_id=42,
                 )
@@ -262,7 +264,7 @@ class GalleryReadLinkingTests(unittest.TestCase):
         )
         for response in cases:
             with self.subTest(response=response):
-                with patch.object(linking, '_request_json', return_value=response):
+                with patch.object(linking_session_lifecycle, '_request_json', return_value=response):
                     with self.assertRaises(linking.LinkingError):
                         session.gallery_detail(42)
 

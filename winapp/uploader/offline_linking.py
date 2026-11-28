@@ -33,7 +33,9 @@ import secrets
 import stat
 
 from .server_discovery import _unique_object
-from .app_linking import (
+from .linking.core import _valid_token
+from .linking.transport import _request_json
+from .linking import (
     ADMIN_PRELOAD_CAPABILITY, GALLERY_TREE_CAPABILITY,
     SLIDING_ACCESS_CAPABILITY, THUMBNAIL_BATCH_CAPABILITY,
     CLIENT_ID,
@@ -58,8 +60,6 @@ from .app_linking import (
     TOKEN_PREFIX,
     UPLOAD_SCOPE,
     _issuer_valid,
-    _request_json,
-    _valid_token,
     LinkedIdentity, LinkingError, LinkingReconnectRequired, LinkingRefreshRejected,
     LinkingResponseError, LinkingSession,
     discover_linking_capabilities,

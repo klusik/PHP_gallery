@@ -21,7 +21,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import MediaReadTimings
+from uploader.linking import MediaReadTimings
 from uploader.photos_performance import (
     THUMBNAIL_PERFORMANCE_SAMPLE_LIMIT,
     ThumbnailBatchPhysicalWindow,

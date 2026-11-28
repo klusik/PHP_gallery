@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.8.2}
-\newcommand{\manualdate}{27.~listopadu~2026}
+\newcommand{\version}{1.8.3}
+\newcommand{\manualdate}{28.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -10123,6 +10123,18 @@ public/assets/ & JavaScript bez frameworku, CSS a~veřejné podklady.\\
 scripts/ & Nástroje migrací, integrity, nasazení a~údržby.\\
 tests/ & Samostatné testy PHP a~cílené testy JavaScriptu.\\
 winapp/ & Nástroje a~integrace specifické pro Windows.\\
+winapp/gallery\_watch\_upload.pyw & Stabilní zaváděcí bod zpracovávající rané příznaky.\\
+winapp/uploader/launcher.py & Zpracování CLI a~sestavení desktopového backendu.\\
+winapp/uploader/watcher/ & Runtime Watcheru, stav, fronta, obnova, workery a~rozhraní Tk.\\
+winapp/uploader/watcher/configuration.py & Zásady konfigurace Watcheru.\\
+winapp/uploader/watcher/ui/settings/ & Moduly předvoleb, aktualizací a~ukončení Watcheru.\\
+winapp/uploader/imports/ & Pravidla ručního importu, předběžná kontrola a~upload workery.\\
+winapp/uploader/ai/ & Volitelná analýza AI, workery, heartbeat a~závislosti runtime.\\
+winapp/uploader/linking/ & Vlastnictví propojeného přenosu, relací a~rozhraní Tk.\\
+winapp/uploader/flight/reports/ & Kanonická implementace letových reportů; \texttt{flight\_report.py} zůstává starším navigačním/importním fasádním modulem.\\
+winapp/uploader/flight/ui/ & Chování letových funkcí za kompozičním vstupem \texttt{FlightUI} v~\texttt{flight\_ui.py}.\\
+WinApp: aktualizace a~ověření instalace & \texttt{self\_update.py}, \texttt{update\_ui.py}, \texttt{update\_helper.py}, \texttt{installer.iss}, nastavení Watcheru v~\texttt{watcher/ui/settings/} a~\texttt{qualify\_installer\_updates.py}. Hostované ověření aktualizací používá zveřejněné setupy WinApp 1.7.1 a~2.0.0 a~jedno přesné sestavení kandidáta; viz \texttt{TESTING.md} v~kořeni repozitáře.\\
+winapp/uploader/translation\_catalog/ & Katalogy letových reportů členěné podle jazyka a~části rozhraní.\\
 \bottomrule
 \end{longtable}
 

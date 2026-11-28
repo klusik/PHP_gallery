@@ -26,8 +26,10 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking as linking
+from uploader import linking as linking
+from uploader.gallery_media_cache import GalleryMediaCache
 from uploader import native_gallery_viewer as viewer_module
+from uploader.photos.tk.viewer import support as viewer_support
 
 
 # Purpose: Keep one synthetic account-scoped Admin thumbnail identity stable.
@@ -135,7 +137,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
             preload_verified_at=time.monotonic(),
         )
 
-    @unittest.skipIf(viewer_module.Image is None, 'Pillow is not installed')
+    @unittest.skipIf(viewer_support.Image is None, 'Pillow is not installed')
     def test_same_validator_reuses_ram_after_proof_time_and_epoch_change(self) -> None:
         """Keep equivalent bytes warm when a fresh proof supersedes the old.
 
@@ -150,7 +152,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
         instance._photos = (photo,)
         with mock.patch.object(viewer_module.time, 'monotonic', return_value=old_time):
             instance._remember_thumbnail(
-                photo, viewer_module.Image.new('RGB', (12, 12)),
+                photo, viewer_support.Image.new('RGB', (12, 12)),
             )
         renewed_identity = (
             TEST_USER_ID, TEST_THUMBNAIL_ETAG,
@@ -176,7 +178,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
         self.assertEqual(0, memory.validator_changes)
         memory.clear()
 
-    @unittest.skipIf(viewer_module.Image is None, 'Pillow is not installed')
+    @unittest.skipIf(viewer_support.Image is None, 'Pillow is not installed')
     def test_changed_authority_or_policy_refuses_private_ram_entry(self) -> None:
         """Reject stale, changed-validator and changed-account authority.
 
@@ -190,7 +192,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
         photo = replace(self._photo(), preload_verified_at=now)
         instance._photos = (photo,)
         instance._remember_thumbnail(
-            photo, viewer_module.Image.new('RGB', (12, 12)),
+            photo, viewer_support.Image.new('RGB', (12, 12)),
         )
         self.assertEqual(1, len(memory.entries))
         cases = (
@@ -215,7 +217,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
         self.assertEqual(1, len(memory.entries))
         memory.clear()
 
-    @unittest.skipIf(viewer_module.Image is None, 'Pillow is not installed')
+    @unittest.skipIf(viewer_support.Image is None, 'Pillow is not installed')
     def test_private_thumbnail_without_current_proof_is_not_retained(self) -> None:
         """Do not retain private bytes when no-store response lacks proof.
 
@@ -226,7 +228,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
         instance, _session, memory = self._viewer(None)
         photo = self._photo()
         instance._photos = (photo,)
-        image = viewer_module.Image.new('RGB', (12, 12))
+        image = viewer_support.Image.new('RGB', (12, 12))
         instance._remember_thumbnail(photo, image)
         self.assertFalse(memory.entries)
         self.assertEqual(1, memory.admission_refusals)
@@ -414,11 +416,11 @@ class ThumbnailDiskPersistenceTests(unittest.TestCase):
         session = self._session()
         with tempfile.TemporaryDirectory(prefix='phpgallery-thumb-return-') as directory:
             root = Path(directory)
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 root, linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
                 session, '_media_read', return_value=(body, 'image/jpeg', etag, True),
             ) as network:
@@ -436,11 +438,11 @@ class ThumbnailDiskPersistenceTests(unittest.TestCase):
             )
             self.assertTrue(cache_path.is_file())
 
-            reopened = linking.GalleryMediaCache(
+            reopened = GalleryMediaCache(
                 root, linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=reopened,
+                GalleryMediaCache, 'for_current_user', return_value=reopened,
             ), mock.patch.object(
                 session, '_media_read', side_effect=AssertionError('Disk hit expected.'),
             ):
@@ -451,7 +453,7 @@ class ThumbnailDiskPersistenceTests(unittest.TestCase):
 
             cache_path.write_bytes(b'corrupt')
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=reopened,
+                GalleryMediaCache, 'for_current_user', return_value=reopened,
             ):
                 self.assertIsNone(
                     session.cached_media_photo(gallery_id, photo, thumbnail=True),
@@ -472,7 +474,7 @@ class ThumbnailDiskPersistenceTests(unittest.TestCase):
 
             cache_path.unlink()
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=reopened,
+                GalleryMediaCache, 'for_current_user', return_value=reopened,
             ):
                 self.assertIsNone(
                     session.cached_media_photo(gallery_id, photo, thumbnail=True),
@@ -492,11 +494,11 @@ class ThumbnailDiskPersistenceTests(unittest.TestCase):
         session = self._session()
         photo = linking.LinkedPhoto(image_id, 'synthetic photo', cache_eligible=True)
         with tempfile.TemporaryDirectory(prefix='phpgallery-thumb-nostore-') as directory:
-            cache = linking.GalleryMediaCache(
+            cache = GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
             )
             with mock.patch.object(
-                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                GalleryMediaCache, 'for_current_user', return_value=cache,
             ), mock.patch.object(
                 session, '_media_read', return_value=(body, 'image/jpeg', etag, False),
             ):

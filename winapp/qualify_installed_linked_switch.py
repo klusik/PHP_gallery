@@ -19,6 +19,7 @@ import os
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -1033,7 +1034,7 @@ def qualify_installed_linked_switch(
         )
         live_session = None
         try:
-            native_getaddrinfo = app_linking.socket.getaddrinfo
+            native_getaddrinfo = socket.getaddrinfo
 
             def resolve_fixture_host(
                 host: str | bytes, port: int | str | None,
@@ -1060,7 +1061,7 @@ def qualify_installed_linked_switch(
                 return native_getaddrinfo(host, port, family, kind, protocol, flags)
 
             with mock.patch.object(
-                app_linking.socket, "getaddrinfo",
+                socket, "getaddrinfo",
                 side_effect=resolve_fixture_host,
             ):
                 attempt.push_request(prefer_rolling=True)

@@ -11,6 +11,7 @@
 """Hosted loopback fixture for native linked backend-switch journeys."""
 
 from pathlib import Path
+import socket
 import sys
 import threading
 from tempfile import TemporaryDirectory
@@ -24,7 +25,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader import app_linking
+from uploader import linking as app_linking
 from qualify_loopback_authority import (
     FIXTURE_ADMIN_ID, FIXTURE_CALLBACK_WAIT_SECONDS, FIXTURE_GALLERY_ID,
     FIXTURE_OPERATION_TIMEOUT_SECONDS, LoopbackLinkingAuthority,
@@ -387,7 +388,7 @@ class LoopbackLinkedSwitchFixtureTests(unittest.TestCase):
             authority.issuer, scope=app_linking.UPLOAD_SCOPE,
         )
         self.addCleanup(attempt.close)
-        native_getaddrinfo = app_linking.socket.getaddrinfo
+        native_getaddrinfo = socket.getaddrinfo
 
         def resolve_fixture_host(
             host: str | bytes, port: int | str | None,
@@ -420,7 +421,7 @@ class LoopbackLinkedSwitchFixtureTests(unittest.TestCase):
             restored = None
             try:
                 with mock.patch.object(
-                    app_linking.socket, 'getaddrinfo', side_effect=resolve_fixture_host,
+                    socket, 'getaddrinfo', side_effect=resolve_fixture_host,
                 ):
                     handoff = attempt.push_request(prefer_rolling=True)
                     consent_thread = threading.Thread(

@@ -40,7 +40,7 @@ import test_native_gallery_viewer as native_fixture
 
 if tk is not None:
     from uploader import gallery_load_progress as progress_module
-    from uploader import app_linking as linking
+    from uploader import linking as linking
     from uploader import ui_theme
     from uploader.flight_report_translations import tr
 else:

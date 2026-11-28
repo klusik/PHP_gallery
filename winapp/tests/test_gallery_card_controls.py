@@ -20,7 +20,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import LinkingSession
+from uploader.linking import LinkingSession
 from uploader.photos_workspace import PHOTO_CARD_FORMATS, PhotosWorkspace
 
 

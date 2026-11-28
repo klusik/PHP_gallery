@@ -18,6 +18,7 @@ from math import ceil, floor
 import os
 from pathlib import Path
 from queue import Queue
+import socket
 import subprocess
 import sys
 import tempfile
@@ -36,9 +37,11 @@ from qualify_loopback_authority import (
     FIXTURE_OPERATION_TIMEOUT_SECONDS, LoopbackLinkingAuthority,
 )
 from test_loopback_linked_switch_fixture import _MemoryCredentialStore
-from uploader import app_linking, flight_workflow
-from uploader.app_linking import LinkedMediaDetails
-from uploader.capture_session import CaptureReview, CaptureStatus
+from uploader import linking as app_linking, flight_workflow
+from uploader.watcher import desktop as watcher_desktop
+from uploader.watcher import state as watcher_state
+from uploader.linking import LinkedMediaDetails
+from uploader.watcher.capture_session import CaptureReview, CaptureStatus
 from uploader.config import BYTES_PER_GIB, save_ui_language
 from uploader.credential_store import CredentialStoreUnavailable
 from uploader.desktop_connection import (
@@ -47,7 +50,7 @@ from uploader.desktop_connection import (
     RuntimeSettings, RuntimeValues,
 )
 from uploader.flight_data import FlightAnalysis
-from uploader.flight_jobs import FlightPreferences, REPORT_LANGUAGES, SessionPlan, WatcherContinuation, WorkspaceLease
+from uploader.flight_jobs import FlightPreferences, ImportBindings, REPORT_LANGUAGES, SessionPlan, WatcherContinuation, WorkspaceLease
 from uploader.flight_render import ReportMaps, ReportRenderer
 from uploader.flight_report_translations import recovery_text, tr
 from uploader.flight_simbrief import DispatchPlan, load_dispatch
@@ -93,7 +96,8 @@ from uploader.ui_layout import (
     UI_LAYOUT_VIEWER_MINIMUM_WIDTH,
 )
 from uploader.upload_mode import ModeRecord
-from uploader.watch_recovery import WatchRecoverySnapshot
+from uploader.watcher.recovery import WatchRecoverySnapshot
+from uploader.watcher.state import MAX_UPLOAD_WORKERS
 from test_redesign import MAIN
 
 QT_LOAD_ERROR: ImportError | OSError | None = None
@@ -117,7 +121,7 @@ try:
     from uploader.qt_ai import (
         AI_ACTION_MIN_HEIGHT_PX, LinkedAiModeRefusal, QtAiWorker,
     )
-    from uploader.app_linking import (
+    from uploader.linking import (
         CALLBACK_LIFETIME_SECONDS, GALLERIES_SCOPE,
         ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE,
         LinkedGallery, LinkedGalleryEditSnapshot, LinkedIdentity, LinkedMediaPage,
@@ -344,7 +348,7 @@ class QtBackendTests(_NativeQtAppFixture):
         self.assertTrue(widget.review_table.isVisible())
         self.assertEqual(1, widget.review_model.rowCount())
         self.assertEqual(
-            [MAIN.gettext(label) for label in ('File', 'Size', 'Media', 'Review', 'Detail')],
+            [gettext(label) for label in ('File', 'Size', 'Media', 'Review', 'Detail')],
             [
                 widget.review_model.headerData(
                     column, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole,
@@ -367,7 +371,7 @@ class QtBackendTests(_NativeQtAppFixture):
         widget._update_review_snapshot(changed)
         self.assertEqual(1, widget.review_model.rowCount())
         self.assertEqual(
-            MAIN.gettext('uploading'),
+            gettext('uploading'),
             widget.review_model.data(
                 widget.review_model.index(0, 3), Qt.ItemDataRole.DisplayRole,
             ),
@@ -377,7 +381,7 @@ class QtBackendTests(_NativeQtAppFixture):
         ))
         widget._update_review_snapshot(snapshot)
         self.assertEqual(
-            MAIN.gettext('uploading'),
+            gettext('uploading'),
             widget.review_model.data(
                 widget.review_model.index(0, 3), Qt.ItemDataRole.DisplayRole,
             ),
@@ -425,30 +429,30 @@ class QtBackendTests(_NativeQtAppFixture):
         widget._show_plan(plan)
 
         expected = '\n'.join((
-            MAIN.gettext('Target: {gallery}').format(gallery='Fixture gallery'),
-            MAIN.gettext(
+            gettext('Target: {gallery}').format(gallery='Fixture gallery'),
+            gettext(
                 'Supported files found: {found}  |  Ready to upload: {ready}  |  '
                 'Duplicate candidates: {duplicates}'
             ).format(found=1, ready=1, duplicates=3),
-            MAIN.gettext(
+            gettext(
                 'Estimated accepted bytes: {size}  |  Unsupported skipped: {unsupported}  |  '
                 'Unsafe ZIP entries rejected: {rejected}'
             ).format(size='1.5 KiB', unsupported=3, rejected=4),
-            MAIN.gettext('Thumbnail mode: {mode}').format(mode=MAIN.gettext(
+            gettext('Thumbnail mode: {mode}').format(mode=gettext(
                 'This PC creates derivatives with server fallback.',
             )),
-            MAIN.gettext(
+            gettext(
                 'Source deletion: Original files and ZIP archives are kept for manual verification.',
             ),
-            MAIN.gettext('Local HEIC/DNG capability: ')
-            + '.heic: ' + MAIN.gettext('local decoder available')
-            + '; .heif: ' + MAIN.gettext('server upload only on this PC')
-            + '; .dng: ' + MAIN.gettext('local decoder available'),
-            MAIN.gettext('Unsupported: {types}').format(types='exe: 1, txt: 2'),
-            MAIN.gettext('Rejected archive entries: ')
+            gettext('Local HEIC/DNG capability: ')
+            + '.heic: ' + gettext('local decoder available')
+            + '; .heif: ' + gettext('server upload only on this PC')
+            + '; .dng: ' + gettext('local decoder available'),
+            gettext('Unsupported: {types}').format(types='exe: 1, txt: 2'),
+            gettext('Rejected archive entries: ')
             + 'unsafe-a; unsafe-b; unsafe-c ...',
-            MAIN.gettext('Warnings: {details}').format(
-                details=' | '.join(MAIN.gettext(item) for item in (
+            gettext('Warnings: {details}').format(
+                details=' | '.join(gettext(item) for item in (
                     'Warning A', 'Warning B', 'Warning C',
                 )),
             ),
@@ -469,8 +473,8 @@ class QtBackendTests(_NativeQtAppFixture):
         self.assertFalse(unavailable.local_thumbnails.isEnabled())
         self.assertTrue(unavailable.server_thumbnails.isChecked())
         self.assertIn(
-            MAIN.gettext('Thumbnail mode: {mode}').format(
-                mode=MAIN.gettext('Server creates thumbnails.'),
+            gettext('Thumbnail mode: {mode}').format(
+                mode=gettext('Server creates thumbnails.'),
             ),
             unavailable.summary.text(),
         )
@@ -483,15 +487,15 @@ class QtBackendTests(_NativeQtAppFixture):
         """
         jobs = OperatorPage(
             (
-                MAIN.gettext("Created"), MAIN.gettext("Source"),
-                MAIN.gettext("Target"), MAIN.gettext("Result"),
+                gettext("Created"), gettext("Source"),
+                gettext("Target"), gettext("Result"),
             ),
-            MAIN.gettext("Select a gallery connection to start an import."),
+            gettext("Select a gallery connection to start an import."),
             lambda: None,
         )
         items = OperatorTable((
-            MAIN.gettext("File"), MAIN.gettext("State"),
-            MAIN.gettext("Tries"), MAIN.gettext("Result / error"),
+            gettext("File"), gettext("State"),
+            gettext("Tries"), gettext("Result / error"),
         ))
         activity = ActivityPage(
             jobs, items, lambda: None, lambda: None, lambda: None,
@@ -511,9 +515,9 @@ class QtBackendTests(_NativeQtAppFixture):
         self.assertEqual(
             labels,
             [
-                MAIN.gettext("Time"), MAIN.gettext("Status"),
-                MAIN.gettext("File"), MAIN.gettext("Type"),
-                MAIN.gettext("Event"),
+                gettext("Time"), gettext("Status"),
+                gettext("File"), gettext("Type"),
+                gettext("Event"),
             ],
         )
         header = activity.table.horizontalHeader()
@@ -890,7 +894,7 @@ class QtBackendTests(_NativeQtAppFixture):
             uploads = fields['manual_upload_workers']
             assert isinstance(thumbnails, QComboBox) and isinstance(uploads, QComboBox)
             self.assertEqual(config.manual_thumbnail_workers, thumbnails.currentData())
-            self.assertEqual(-1, uploads.findData(MAIN.MAX_UPLOAD_WORKERS + 1))
+            self.assertEqual(-1, uploads.findData(MAX_UPLOAD_WORKERS + 1))
             gallery_url = fields['gallery_url']
             api_key = fields['api_key']
             assert isinstance(gallery_url, QLineEdit) and isinstance(api_key, QLineEdit)
@@ -1169,11 +1173,11 @@ class QtBackendTests(_NativeQtAppFixture):
                 connections=connections,
             )
             try:
-                self.assertEqual(MAIN.gettext('API key not configured'), window.settings.key_status.text())
+                self.assertEqual(gettext('API key not configured'), window.settings.key_status.text())
                 key_field = window.settings.fields['api_key']
                 key_field.setText('unsaved native fixture key')
                 self.assertEqual(
-                    MAIN.gettext('API key or gallery URL changed, not saved'),
+                    gettext('API key or gallery URL changed, not saved'),
                     window.settings.key_status.text(),
                 )
                 self.assertFalse(window.settings.revoke_button.isEnabled())
@@ -1299,8 +1303,8 @@ class QtBackendTests(_NativeQtAppFixture):
             mode.view.return_value.state = 'legacy'
             planned = DispatchPlan('LKPR', 'ESSA', '', '', '', '', '', '', '')
             with (
-                mock.patch.object(MAIN, 'CONFIG_DIR', profile),
-                mock.patch.object(MAIN, 'fetch_dispatch', return_value=planned),
+                mock.patch.object(watcher_state, 'CONFIG_DIR', profile),
+                mock.patch.object(watcher_desktop, 'fetch_dispatch', return_value=planned),
             ):
                 owner = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
                 window = QtWindow(profile, MAIN.APP_VERSION, '', config.activity_history_limit, False, capture=owner)
@@ -1435,7 +1439,7 @@ class QtBackendTests(_NativeQtAppFixture):
             store.save(config)
             mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
             mode.view.return_value.state = 'legacy'
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
                 owner = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
                 window = QtWindow(
                     profile, MAIN.APP_VERSION, '', config.activity_history_limit,
@@ -1978,7 +1982,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 entered.set()
                 released.wait(QT_CHILD_SECONDS)
 
-            with mock.patch.multiple(MAIN, CONFIG_DIR=profile, STATE_PATH=state), \
+            with mock.patch.multiple(watcher_state, CONFIG_DIR=profile, STATE_PATH=state), \
                     mock.patch.object(MAIN.ManualUploadThread, '_run_fifo_import', hold):
                 actions = MAIN.desktop_import_actions(store, config, lambda: mode)
                 window = QtWindow(profile, '1.7.1', '', 500, False, import_actions=actions)
@@ -2002,7 +2006,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.assertFalse(entered.is_set())
                     saved = ledger.get_job(view._plan.job.id)
                     self.assertEqual('queued', saved.items[0].state)
-                    self.assertFalse(MAIN.ImportBindings(profile / 'flights').entries())
+                    self.assertFalse(ImportBindings(profile / 'flights').entries())
 
                     finish, abandon = mock.Mock(), mock.Mock()
                     view.set_capture_actions('Finish flight…', finish, 'Abandon flight…', abandon)
@@ -2035,7 +2039,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     self.wait_for(lambda: not view.busy())
                     self.assertEqual('cancelled', ledger.get_job(saved.id).items[0].state)
                     self.assertTrue(original.is_file())
-                    self.assertIn(saved.id, MAIN.ImportBindings(profile / 'flights').entries())
+                    self.assertIn(saved.id, ImportBindings(profile / 'flights').entries())
 
                     self.wait_for(lambda: bool(window.operator.imports.model.rows))
                     window.operator.review_startup_import(saved.id)
@@ -2108,7 +2112,7 @@ class QtBackendTests(_NativeQtAppFixture):
             mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
             mode.view.return_value.state = 'legacy'
             planned = DispatchPlan('LKPR', 'ESSA', '', '', '', '', '', '', '')
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
                 capture = MAIN.DesktopCapture(store, lambda: config, mode, lambda: None)
                 window = QtWindow(profile, '1.7.1', '', 500, False, capture=capture)
             view = window.capture
@@ -2128,7 +2132,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 mock.patch.object(
                     QInputDialog, 'getText', return_value=('fixture-pilot', True),
                 ) as identity,
-                mock.patch.object(MAIN, 'fetch_dispatch', return_value=planned) as fetch,
+                mock.patch.object(watcher_desktop, 'fetch_dispatch', return_value=planned) as fetch,
             ):
                 try:
                     window.show_page('flight')
@@ -2199,10 +2203,10 @@ class QtBackendTests(_NativeQtAppFixture):
             window = QtWindow(profile, '1.7.1', '', 500, False)
             photos = window.photos
             renamed = (galleries[0], LinkedGallery(2, 1, 'Renamed child'))
-            with (mock.patch('uploader.qt_photos.read_gallery_photos',
+            with (mock.patch('uploader.photos.qt.media.read_gallery_photos',
                              side_effect=lambda _session, gallery, _cancel: rows[gallery]) as photo_reads,
-                  mock.patch('uploader.qt_photos.read_gallery_tree', return_value=renamed),
-                  mock.patch('uploader.qt_photos.stream_thumbnails')):
+                  mock.patch('uploader.photos.qt.media.read_gallery_tree', return_value=renamed),
+                  mock.patch('uploader.photos.qt.media.stream_thumbnails')):
                 try:
                     window.show()
                     self.wait_for(lambda: photos._connect_card.isVisible())
@@ -2423,9 +2427,9 @@ class QtBackendTests(_NativeQtAppFixture):
             root_rows = (PhotoRow(4, 'Parent photo', LinkedPhoto(4, 'Parent photo')),)
             window = QtWindow(profile, '1.7.1', '', 500, False)
             photos = window.photos
-            with (mock.patch('uploader.qt_photos.read_gallery_photos',
+            with (mock.patch('uploader.photos.qt.media.read_gallery_photos',
                              side_effect=lambda _session, gallery, _cancel: root_rows if gallery == 1 else ()),
-                  mock.patch('uploader.qt_photos.stream_thumbnails')):
+                  mock.patch('uploader.photos.qt.media.stream_thumbnails')):
                 try:
                     window.show()
                     photos._receive_catalogue(LinkedPhotos(
@@ -2509,8 +2513,8 @@ class QtBackendTests(_NativeQtAppFixture):
             window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False, capture=commands)
             photos = window.photos
             with (
-                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=()),
-                mock.patch('uploader.qt_photos.read_gallery_tree',
+                mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=()),
+                mock.patch('uploader.photos.qt.media.read_gallery_tree',
                            return_value=(parent, replace(child, title='New title'))),
             ):
                 try:
@@ -2581,10 +2585,10 @@ class QtBackendTests(_NativeQtAppFixture):
             window = QtWindow(profile, MAIN.APP_VERSION, '', 500, False)
             photos = window.photos
             with (
-                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=()),
-                mock.patch('uploader.qt_photos.QInputDialog.getText', return_value=(child.title, True)) as editor,
-                mock.patch('uploader.qt_photos.GalleryCreateJournal.acknowledge') as acknowledge,
-                mock.patch('uploader.qt_photos.GalleryCreateJournal.create_or_resume',
+                mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=()),
+                mock.patch('uploader.photos.qt.actions.QInputDialog.getText', return_value=(child.title, True)) as editor,
+                mock.patch('uploader.photos.qt.actions.GalleryCreateJournal.acknowledge') as acknowledge,
+                mock.patch('uploader.photos.qt.actions.GalleryCreateJournal.create_or_resume',
                            side_effect=(LinkingError('synthetic lost response'), receipt)) as create,
             ):
                 try:
@@ -2650,8 +2654,8 @@ class QtBackendTests(_NativeQtAppFixture):
             photos.simbrief_available = available
             photos.load_simbrief_action = load_plan
             with (
-                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=(row,)),
-                mock.patch('uploader.qt_photos.stream_thumbnails'),
+                mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=(row,)),
+                mock.patch('uploader.photos.qt.media.stream_thumbnails'),
             ):
                 try:
                     window.show()
@@ -2775,7 +2779,7 @@ class QtBackendTests(_NativeQtAppFixture):
             config = store.load()
             mode = mock.MagicMock(spec=MAIN.GuiModeOwner)
             mode.view.return_value.state = 'legacy'
-            with mock.patch.object(MAIN, 'CONFIG_DIR', profile):
+            with mock.patch.object(watcher_state, 'CONFIG_DIR', profile):
                 capture_owner = MAIN.DesktopCapture(
                     store, lambda: config, mode, lambda: None,
                 )
@@ -2797,12 +2801,12 @@ class QtBackendTests(_NativeQtAppFixture):
                         'uploader.qt_application.GamePresence',
                         return_value=process_presence,
                     ),
-                    mock.patch.object(MAIN, 'fetch_dispatch', return_value=planned) as fetch,
+                    mock.patch.object(watcher_desktop, 'fetch_dispatch', return_value=planned) as fetch,
                     mock.patch(
-                        'uploader.qt_photos.read_gallery_photos', return_value=rows,
+                        'uploader.photos.qt.media.read_gallery_photos', return_value=rows,
                     ),
                     mock.patch(
-                        'uploader.qt_photos.stream_thumbnails',
+                        'uploader.photos.qt.media.stream_thumbnails',
                         side_effect=stream_synthetic_thumbnails,
                     ),
                     mock.patch.object(
@@ -2997,8 +3001,8 @@ class QtBackendTests(_NativeQtAppFixture):
             window = QtWindow(profile, '1.7.1', '', 500, False)
             photos = window.photos
             with (
-                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=rows) as catalogue,
-                mock.patch('uploader.qt_photos.stream_thumbnails'),
+                mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=rows) as catalogue,
+                mock.patch('uploader.photos.qt.media.stream_thumbnails'),
             ):
                 try:
                     window.show()
@@ -3272,8 +3276,8 @@ class QtBackendTests(_NativeQtAppFixture):
             photos = window.photos
             photos.start_contextual = start
             with (
-                mock.patch('uploader.qt_photos.read_gallery_photos', return_value=()),
-                mock.patch('uploader.qt_photos.verify_linked_upload_target', return_value=target) as verify,
+                mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=()),
+                mock.patch('uploader.photos.qt.actions.verify_linked_upload_target', return_value=target) as verify,
                 mock.patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes),
             ):
                 try:
@@ -3580,7 +3584,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 ))
                 pending_attempt = mock.Mock()
                 with (
-                    mock.patch('uploader.qt_photos.LinkingAttempt', return_value=pending_attempt),
+                    mock.patch('uploader.photos.qt.link_management.LinkingAttempt', return_value=pending_attempt),
                     mock.patch.object(photos._load, 'submit') as submit,
                 ):
                     photos._authorize(
@@ -3613,7 +3617,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     if first_issuer in action.text()
                 )
                 with mock.patch(
-                    'uploader.qt_photos.read_gallery_tree', return_value=(),
+                    'uploader.photos.qt.link_management.read_gallery_tree', return_value=(),
                 ) as read_tree:
                     first_action.trigger()
                     self.wait_for(lambda: photos._session is first_session)
@@ -3658,16 +3662,16 @@ class QtBackendTests(_NativeQtAppFixture):
             try:
                 window.show()
                 with (
-                    mock.patch('uploader.qt_photos.sys', mock.Mock(platform='win32')),
+                    mock.patch('uploader.photos.qt.link_management.sys', mock.Mock(platform='win32')),
                     mock.patch(
-                        'uploader.qt_photos.restore_desktop_gallery_link',
+                        'uploader.photos.qt.link_management.restore_desktop_gallery_link',
                         return_value=DesktopLinkedSite(issuer, session, owner.user_id),
                     ) as restore,
-                    mock.patch('uploader.qt_photos.read_gallery_tree', return_value=()),
-                    mock.patch('uploader.qt_photos.open_saved_upload_session') as rotate,
-                    mock.patch('uploader.qt_photos.webbrowser.open') as browser,
+                    mock.patch('uploader.photos.qt.link_management.read_gallery_tree', return_value=()),
+                    mock.patch('uploader.photos.qt.link_management.open_saved_upload_session') as rotate,
+                    mock.patch('uploader.photos.qt.link_management.webbrowser.open') as browser,
                     mock.patch(
-                        'uploader.qt_photos.verify_linked_upload_target', return_value=target,
+                        'uploader.photos.qt.link_management.verify_linked_upload_target', return_value=target,
                     ) as verify,
                 ):
                     photos.resume_saved_browse()
@@ -3713,12 +3717,12 @@ class QtBackendTests(_NativeQtAppFixture):
             try:
                 window.show()
                 with (
-                    mock.patch('uploader.qt_photos.sys', mock.Mock(platform='win32')),
+                    mock.patch('uploader.photos.qt.link_management.sys', mock.Mock(platform='win32')),
                     mock.patch(
-                        'uploader.qt_photos.restore_desktop_gallery_link',
+                        'uploader.photos.qt.link_management.restore_desktop_gallery_link',
                         side_effect=OfflineRefreshPending('Fixture pending refresh.'),
                     ),
-                    mock.patch('uploader.qt_photos.saved_desktop_gallery_binding', return_value=binding),
+                    mock.patch('uploader.photos.qt.link_management.saved_desktop_gallery_binding', return_value=binding),
                     mock.patch.object(photos, '_authorize') as authorize,
                 ):
                     photos.resume_saved_browse()
@@ -3768,13 +3772,13 @@ class QtBackendTests(_NativeQtAppFixture):
             try:
                 window.show()
                 with (
-                    mock.patch('uploader.qt_photos.LinkingAttempt', return_value=attempt),
-                    mock.patch('uploader.qt_photos.restore_desktop_gallery_link', return_value=None),
-                    mock.patch('uploader.qt_photos.desktop_upload_vault', return_value=mock.sentinel.vault),
-                    mock.patch('uploader.qt_photos.read_gallery_tree', return_value=()),
-                    mock.patch('uploader.qt_photos.webbrowser.open', return_value=True),
-                    mock.patch('uploader.qt_photos.persist_browser_gallery_grant') as store,
-                    mock.patch('uploader.qt_photos.persist_browser_upload_grant') as store_upload,
+                    mock.patch('uploader.photos.qt.link_management.LinkingAttempt', return_value=attempt),
+                    mock.patch('uploader.photos.qt.link_management.restore_desktop_gallery_link', return_value=None),
+                    mock.patch('uploader.photos.qt.link_management.desktop_upload_vault', return_value=mock.sentinel.vault),
+                    mock.patch('uploader.photos.qt.link_management.read_gallery_tree', return_value=()),
+                    mock.patch('uploader.photos.qt.link_management.webbrowser.open', return_value=True),
+                    mock.patch('uploader.photos.qt.link_management.persist_browser_gallery_grant') as store,
+                    mock.patch('uploader.photos.qt.link_management.persist_browser_upload_grant') as store_upload,
                 ):
                     photos._authorize(False, address_override=issuer)
                     self.wait_for(lambda: photos._session is session and not photos._load.busy())
@@ -3849,30 +3853,30 @@ class QtBackendTests(_NativeQtAppFixture):
 
                 with (
                     mock.patch(
-                        'uploader.qt_photos.LinkingAttempt',
+                        'uploader.photos.qt.link_management.LinkingAttempt',
                         return_value=fallback_attempt,
                     ) as attempt_factory,
                     mock.patch(
-                        'uploader.qt_photos.restore_desktop_gallery_link',
+                        'uploader.photos.qt.link_management.restore_desktop_gallery_link',
                         side_effect=CredentialStoreUnavailable(
                             'Saved native credential is unavailable.',
                         ),
                     ) as restore,
-                    mock.patch('uploader.qt_photos.desktop_upload_vault') as vault,
+                    mock.patch('uploader.photos.qt.link_management.desktop_upload_vault') as vault,
                     mock.patch(
-                        'uploader.qt_photos.read_gallery_tree', return_value=(),
+                        'uploader.photos.qt.link_management.read_gallery_tree', return_value=(),
                     ),
                     mock.patch(
-                        'uploader.qt_photos.webbrowser.open', side_effect=hold_browser,
+                        'uploader.photos.qt.link_management.webbrowser.open', side_effect=hold_browser,
                     ) as browser,
                     mock.patch(
-                        'uploader.qt_photos.persist_browser_gallery_grant',
+                        'uploader.photos.qt.link_management.persist_browser_gallery_grant',
                     ) as persist_browse,
                     mock.patch(
-                        'uploader.qt_photos.persist_browser_upload_grant',
+                        'uploader.photos.qt.link_management.persist_browser_upload_grant',
                     ) as persist_upload,
                     mock.patch(
-                        'uploader.qt_photos.remember_desktop_transient_link',
+                        'uploader.photos.qt.link_management.remember_desktop_transient_link',
                     ) as remember_transient,
                 ):
                     photos._open_authorization_dialog(False, None, None, False)
@@ -3927,14 +3931,14 @@ class QtBackendTests(_NativeQtAppFixture):
                 failed_attempt = mock.Mock()
                 with (
                     mock.patch(
-                        'uploader.qt_photos.LinkingAttempt',
+                        'uploader.photos.qt.link_management.LinkingAttempt',
                         return_value=failed_attempt,
                     ) as failed_factory,
                     mock.patch(
-                        'uploader.qt_photos.restore_desktop_gallery_link',
+                        'uploader.photos.qt.link_management.restore_desktop_gallery_link',
                         side_effect=RuntimeError('uncertain saved rotation'),
                     ) as failed_restore,
-                    mock.patch('uploader.qt_photos.webbrowser.open') as no_browser,
+                    mock.patch('uploader.photos.qt.link_management.webbrowser.open') as no_browser,
                     self.assertLogs('uploader.qt_photos', level='WARNING') as failure_log,
                 ):
                     photos._open_authorization_dialog(False, None, None, False)
@@ -3993,7 +3997,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     authority.server.server_port,
                     cancelled_authority.server.server_port,
                 }
-                native_getaddrinfo = app_linking.socket.getaddrinfo
+                native_getaddrinfo = socket.getaddrinfo
                 consent_threads: list[threading.Thread] = []
                 consent_errors: list[str] = []
                 approval_urls: list[str] = []
@@ -4059,19 +4063,19 @@ class QtBackendTests(_NativeQtAppFixture):
                 try:
                     with (
                         mock.patch.object(
-                            app_linking.socket, 'getaddrinfo',
+                            socket, 'getaddrinfo',
                             side_effect=resolve_fixture_host,
                         ),
                         mock.patch(
-                            'uploader.qt_photos.restore_desktop_gallery_link',
+                            'uploader.photos.qt.link_management.restore_desktop_gallery_link',
                             return_value=None,
                         ),
                         mock.patch(
-                            'uploader.qt_photos.desktop_upload_vault',
+                            'uploader.photos.qt.link_management.desktop_upload_vault',
                             return_value=credential_store,
                         ),
                         mock.patch(
-                            'uploader.qt_photos.webbrowser.open',
+                            'uploader.photos.qt.link_management.webbrowser.open',
                             side_effect=launch_fixture_approval,
                         ),
                     ):
@@ -4156,7 +4160,7 @@ class QtBackendTests(_NativeQtAppFixture):
                             )
 
                         with mock.patch(
-                            'uploader.qt_photos.webbrowser.open',
+                            'uploader.photos.qt.link_management.webbrowser.open',
                             side_effect=hold_cancelled_browser,
                         ):
                             photos._open_authorization_dialog(
@@ -4232,8 +4236,8 @@ class QtBackendTests(_NativeQtAppFixture):
                 self.assertEqual(1, len(photos._parked_links))
                 self.assertTrue(window._link_disconnect.isVisible())
                 with (
-                    mock.patch('uploader.qt_photos.load_transient', return_value=None),
-                    mock.patch('uploader.qt_photos.saved_desktop_gallery_binding', return_value=None),
+                    mock.patch('uploader.photos.qt.link_management.load_transient', return_value=None),
+                    mock.patch('uploader.photos.qt.link_management.saved_desktop_gallery_binding', return_value=None),
                 ):
                     window._link_disconnect.click()
                     self.wait_for(lambda: photos._session is None and not photos.busy())
@@ -4339,7 +4343,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 self.assertTrue(check.isVisible())
                 photos.transfer_busy = lambda: transfer[0]
                 with mock.patch(
-                    'uploader.qt_photos.QInputDialog.getInt',
+                    'uploader.photos.qt.actions.QInputDialog.getInt',
                     return_value=(0, False),
                 ) as prompt:
                     check.click()
@@ -4368,7 +4372,7 @@ class QtBackendTests(_NativeQtAppFixture):
                     return RECOVERY_FIXTURE_FILE_SIZE_BYTES, True
 
                 with mock.patch(
-                    'uploader.qt_photos.QInputDialog.getInt',
+                    'uploader.photos.qt.actions.QInputDialog.getInt',
                     side_effect=accept_after_transfer_starts,
                 ):
                     check.click()
@@ -4376,7 +4380,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 probe.assert_not_called()
                 transfer[0] = False
                 with mock.patch(
-                    'uploader.qt_photos.QInputDialog.getInt',
+                    'uploader.photos.qt.actions.QInputDialog.getInt',
                     return_value=(RECOVERY_FIXTURE_FILE_SIZE_BYTES, True),
                 ):
                     check.click()
@@ -4502,7 +4506,7 @@ class QtBackendTests(_NativeQtAppFixture):
                 review_button = dialog.findChild(QPushButton, 'linkedRecoveryReview')
                 active_target[0] = replacement
                 with (
-                    mock.patch('uploader.qt_photos.QInputDialog.getInt') as prompt,
+                    mock.patch('uploader.photos.qt.actions.QInputDialog.getInt') as prompt,
                     mock.patch.object(QMessageBox, 'question') as confirm,
                 ):
                     check.click()
@@ -4899,8 +4903,8 @@ class QtWidePhotosViewportTests(_NativeQtAppFixture):
                 publish(ThumbnailActivity(()))
                 publish(ThumbnailGroup(True))
 
-            with (mock.patch('uploader.qt_photos.read_gallery_photos', return_value=rows),
-                  mock.patch('uploader.qt_photos.stream_thumbnails', side_effect=stream)):
+            with (mock.patch('uploader.photos.qt.media.read_gallery_photos', return_value=rows),
+                  mock.patch('uploader.photos.qt.media.stream_thumbnails', side_effect=stream)):
                 try:
                     window.show()
                     photos._receive_catalogue(LinkedPhotos(

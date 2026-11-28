@@ -990,7 +990,7 @@ class FlightReportTests(unittest.TestCase):
             Paragraph("Evidence after the drawing", style),
         ]
         with tempfile.TemporaryDirectory() as temporary, patch(
-            "uploader.flight_report._build_story", return_value=story,
+            "uploader.flight.reports.renderer._build_story", return_value=story,
         ):
             target = render_report(
                 self._analysis("MSFS 2020"), "cs", Path(temporary) / "layout.pdf",

@@ -29,7 +29,7 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.watch_queue import WatchQueueStore, WatchSource, observe_watch_source
+from uploader.watcher.queue import WatchQueueStore, WatchSource, observe_watch_source
 from uploader import state_store
 
 # Purpose: Bound fixture threads without awaiting any production retry interval.
@@ -155,7 +155,7 @@ class WatchQueueTests(unittest.TestCase):
             st_mtime_ns=actual.st_mtime_ns, st_ctime=actual.st_ctime,
         )
         with (mock.patch.object(Path, 'lstat', return_value=portable),
-              mock.patch('uploader.watch_queue.os', SimpleNamespace(name='posix'))):
+              mock.patch('uploader.watcher.queue.os', SimpleNamespace(name='posix'))):
             first = observe_watch_source(source, self.now)
             second = observe_watch_source(source, self.now + 1)
         self.assertEqual(first.signature, second.signature)
@@ -207,7 +207,7 @@ class WatchQueueTests(unittest.TestCase):
 import sys
 from pathlib import Path
 
-from uploader.watch_queue import WatchQueueStore
+from uploader.watcher.queue import WatchQueueStore
 
 journal_path = Path(sys.argv[1])
 journal = WatchQueueStore(
@@ -458,7 +458,7 @@ sys.stdin.buffer.read(1)
         """
         observed = self.source('a.png', self.now)
         before = self.journal.path.read_bytes()
-        with mock.patch('uploader.watch_queue.atomic_write_json', side_effect=OSError('disk full')):
+        with mock.patch('uploader.watcher.queue.atomic_write_json', side_effect=OSError('disk full')):
             with self.assertRaises(OSError):
                 self.journal.reconcile([observed])
         self.assertIsNone(self.journal.head())

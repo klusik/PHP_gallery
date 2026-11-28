@@ -25,8 +25,9 @@ WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.watch_queue import observe_watch_source
-from uploader.watch_queue import WatchQueueStore
+from uploader.watcher.queue import observe_watch_source
+from uploader.watcher.queue import WatchQueueStore
+from uploader.watcher.workers import watcher as watcher_worker
 
 
 def load_main_module() -> ModuleType:
@@ -105,7 +106,7 @@ class WatcherInspectionIntegrationTests(unittest.TestCase):
             app.watch_last_scan_var = ForbiddenStatusVariable()
             app.events = queue.Queue()
             thread_spy = SimpleNamespace(start=lambda: None)
-            with mock.patch.object(MAIN.threading, 'Thread', return_value=thread_spy) as start:
+            with mock.patch.object(watcher_worker.threading, 'Thread', return_value=thread_spy) as start:
                 MAIN.WatcherApp.dry_run_watch_folder(app)
                 start.assert_called_once()
                 start.call_args.kwargs['target']()

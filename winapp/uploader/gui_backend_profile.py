@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 from typing import Literal
 
-from .capture_session import verify_unfrozen_capture
+from .watcher.capture_session import verify_unfrozen_capture
 from .flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease, read_document
 from .models import (
     ImportJob, JsonValue, LEGACY_UPLOAD_UNCERTAIN_REASON,
@@ -28,8 +28,8 @@ from .state_store import (
     load_upload_state_for_mutation,
     read_import_binding_entries,
 )
-from .watch_queue import WatchQueueStore
-from .watcher_profile import WATCHER_CONTINUATION_FILES, WatcherProfile, _local_entry
+from .watcher.queue import WatchQueueStore
+from .watcher.profile import WATCHER_CONTINUATION_FILES, WatcherProfile, _local_entry
 
 GuiProfileRefusal = Literal[
     'profile', 'import', 'watcher_profile', 'watcher_restart', 'flight_journal',

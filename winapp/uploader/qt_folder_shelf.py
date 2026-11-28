@@ -19,7 +19,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, QPoint, QSize, Qt, Q
 from PySide6.QtGui import QHideEvent, QImage, QPainter, QPixmap, QShowEvent
 from PySide6.QtWidgets import QAbstractItemView, QListView, QStyleOptionViewItem, QStyledItemDelegate
 
-from .app_linking import LinkedGallery, LinkingSession
+from .linking import LinkedGallery, LinkingSession
 from .gallery_folder_cover import cached_folder_cover, folder_cover_size, read_folder_cover
 from .gallery_image_policy import MEDIA_VIEWPORT_COALESCE_MS
 from .qt_read_lane import QtReadLane

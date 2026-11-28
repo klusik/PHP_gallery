@@ -785,12 +785,21 @@ class UpdateControllerTests(unittest.TestCase):
         Returns:
             None: Each entry point checks the update guard before work.
         """
-        source = (Path(__file__).resolve().parents[1] / 'gallery_watch_upload.pyw').read_text(encoding='utf-8')
-        tree = ast.parse(source)
-        app = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'WatcherApp')
+        source_root = Path(__file__).resolve().parents[1] / 'uploader' / 'watcher' / 'ui'
+        methods = {}
+        for source_path in source_root.rglob('*.py'):
+            tree = ast.parse(
+                source_path.read_text(encoding='utf-8'), filename=str(source_path),
+            )
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    methods.update({
+                        method.name: method for method in node.body
+                        if isinstance(method, ast.FunctionDef)
+                    })
         names = ('start', 'start_manual_upload', 'start_ai_worker', 'launch_manual_job', 'resume_manual_upload', 'retry_failed_import', 'rebuild_manual_preflight', 'test_connection', 'revoke_api_key', 'repair_dependencies', 'repair_semantic_ai_dependencies', 'save_config')
         for name in names:
-            method = next(node for node in app.body if isinstance(node, ast.FunctionDef) and node.name == name)
+            method = methods[name]
             self.assertIsNotNone(ast.get_docstring(method), name)
             leading_admission_tests = []
             for statement in method.body[1:]:
@@ -804,7 +813,7 @@ class UpdateControllerTests(unittest.TestCase):
                 ),
                 name,
             )
-        connection = next(node for node in app.body if isinstance(node, ast.FunctionDef) and node.name == 'open_connection_dialog')
+        connection = methods['open_connection_dialog']
         callback = next(node for node in connection.body if isinstance(node, ast.FunctionDef) and node.name == 'apply_values')
         callback_admission_tests = []
         for statement in callback.body[1:]:

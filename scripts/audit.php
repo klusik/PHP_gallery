@@ -2415,53 +2415,44 @@ function audit_run_watcher_tk_performance(?array $python): array
 }
 
 /**
- * Verify real installed updates with the two checked frozen setup artifacts.
+ * Verify real installed updates against the exact staged candidate setup.
  *
  * @param non-empty-list<string> $python Resolved hosted Python command.
  * @param string $candidate Exact current source SHA admitted by the parent audit.
- * @param string $inputRoot Directory containing separate earlier and target artifacts.
- * @param string $earlierVersion Earlier version applied only to the isolated build.
+ * @param string $targetArtifactDirectory Directory containing the candidate setup artifact.
  * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,artifact_directory?:string}} Installed journey result and sanitized evidence directory.
  */
 function audit_run_winapp_update_qualification(
     array $python,
     string $candidate,
-    string $inputRoot,
-    string $earlierVersion,
+    string $targetArtifactDirectory,
 ): array {
     global $root, $runDirectory;
     $id = 'winapp-frozen-installer';
     $label = 'Real Windows WinApp upgrade qualification';
     $targetVersion = trim((string) file_get_contents($root . '/winapp/VERSION'));
-    $setups = [];
-    foreach (['earlier' => $earlierVersion, 'target' => $targetVersion] as $variant => $version) {
-        if (preg_match('/^\d+\.\d+\.\d+$/D', $version) !== 1) {
-            break;
-        }
-        $filename = 'PHPGalleryUploader-' . $version . '-Setup.exe';
-        $matches = glob($inputRoot . '/' . $variant . '/*/winapp-frozen-installer/' . $filename);
-        if (!is_array($matches) || count($matches) !== 1) {
-            break;
-        }
-        // An isolated builder emits exactly one setup and one descriptor entry.
-        $setup = $matches[0];
-        $metadata = dirname($setup) . '/winapp-update.json';
-        $descriptor = is_file($metadata)
-            ? json_decode((string) file_get_contents($metadata), true)
-            : null;
-        $asset = is_array($descriptor) ? ($descriptor['assets'][0] ?? null) : null;
-        if (
-            !is_array($asset) || ($asset['name'] ?? null) !== $filename
-            || ($asset['version'] ?? null) !== $version
-            || ($asset['size'] ?? null) !== filesize($setup)
-            || ($asset['sha256'] ?? null) !== hash_file('sha256', $setup)
-        ) {
-            break;
-        }
-        $setups[$variant] = $setup;
+    if (preg_match('/^\d+\.\d+\.\d+$/D', $targetVersion) !== 1) {
+        $message = 'The tracked WinApp target version is invalid.';
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
     }
-    if (!isset($setups['earlier'], $setups['target']) || !version_compare($earlierVersion, $targetVersion, '<')) {
-        $message = 'Both exact, monotonic qualification setup artifacts must match their descriptors.';
+    $filename = 'PHPGalleryUploader-' . $targetVersion . '-Setup.exe';
+    $matches = glob($targetArtifactDirectory . '/*/winapp-frozen-installer/' . $filename);
+    $targetSetup = is_array($matches) && count($matches) === 1 ? $matches[0] : null;
+    $descriptorPath = $targetSetup === null ? null : dirname($targetSetup) . '/winapp-update.json';
+    $descriptor = $descriptorPath !== null && is_file($descriptorPath)
+        ? json_decode((string) file_get_contents($descriptorPath), true)
+        : null;
+    $asset = is_array($descriptor) ? ($descriptor['assets'][0] ?? null) : null;
+    if (
+        preg_match('/^\d+\.\d+\.\d+$/D', $targetVersion) !== 1
+        || $targetSetup === null
+        || !is_array($asset)
+        || ($asset['name'] ?? null) !== $filename
+        || ($asset['version'] ?? null) !== $targetVersion
+        || ($asset['size'] ?? null) !== filesize($targetSetup)
+        || ($asset['sha256'] ?? null) !== hash_file('sha256', $targetSetup)
+    ) {
+        $message = 'The exact candidate setup and descriptor must agree before upgrade qualification.';
         return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $message, null, ['problems' => [$message]]);
     }
 
@@ -2474,29 +2465,32 @@ function audit_run_winapp_update_qualification(
     $report = $artifactDirectory . '/report.json';
     $process = run_process(array_merge($python, [
         $root . '/winapp/qualify_installer_updates.py',
-        '--stable-installer', $work . '/PHPGalleryUploader-1.7.1-Setup.exe',
-        '--earlier-installer', $setups['earlier'],
-        '--earlier-version', $earlierVersion,
-        '--target-installer', $setups['target'],
+        '--target-installer', $targetSetup,
         '--target-version', $targetVersion,
         '--source-sha', $candidate,
         '--work', $work,
         '--report', $report,
     ]), $root, AUDIT_WINAPP_UPDATE_QUALIFICATION_TIMEOUT_SECONDS);
     $output = audit_process_output($process);
-    $log = audit_write_log($id, ['Candidate SHA: ' . $candidate, $output]);
+    $log = audit_write_log($id, [
+        'Candidate SHA: ' . $candidate,
+        'Target setup SHA-256: ' . $asset['sha256'],
+        $output,
+    ]);
     $evidence = is_file($report) ? json_decode((string) file_get_contents($report), true) : null;
     $status = process_status($process);
+    $currentTargetSha256 = hash_file('sha256', $targetSetup);
     if (
         $status === STATUS_PASS
         && (!is_array($evidence) || ($evidence['status'] ?? null) !== 'PASS'
             || ($evidence['source_sha'] ?? null) !== $candidate
-            || ($evidence['target_setup_sha256'] ?? null) !== hash_file('sha256', $setups['target']))
+            || $currentTargetSha256 !== $asset['sha256']
+            || ($evidence['target_setup_sha256'] ?? null) !== $currentTargetSha256)
     ) {
         $status = STATUS_FAIL;
     }
     $summary = $status === STATUS_PASS
-        ? 'Released 1.7.1 and the active Tk and Qt common builds updated through real helpers.'
+        ? 'Published 1.7.1 and 2.0.0 releases were authenticated before the candidate upgrade journeys.'
         : 'Installed update qualification did not establish all required journeys.';
     return task_result($id, $label, $status, (float) $process['duration'], [], $summary, $log, [
         'problems' => $status === STATUS_PASS ? [] : [$summary],
@@ -2648,7 +2642,6 @@ function audit_run_winapp_frozen_installer(?array $python): array
     $label = 'Real WinApp frozen executable and installer build';
     $started = microtime(true);
     $candidate = trim((string) (getenv('PHP_GALLERY_ISSUE_445_CANDIDATE') ?: getenv('GITHUB_SHA')));
-    $earlierVersion = trim((string) getenv('PHP_GALLERY_FROZEN_EARLIER_VERSION'));
     // PHP_INT_SIZE is the host's native pointer-width proxy for the x64 builder.
     if (PHP_OS_FAMILY !== 'Windows' || PHP_INT_SIZE !== 8) {
         return task_result(
@@ -2721,7 +2714,7 @@ function audit_run_winapp_frozen_installer(?array $python): array
 
     $updateInputs = trim((string) getenv('PHP_GALLERY_FROZEN_UPDATE_INPUTS'));
     if ($updateInputs !== '') {
-        return audit_run_winapp_update_qualification($python, $candidate, $updateInputs, $earlierVersion);
+        return audit_run_winapp_update_qualification($python, $candidate, $updateInputs);
     }
     $layoutInputs = trim((string) getenv('PHP_GALLERY_FROZEN_LAYOUT_INPUTS'));
     if ($layoutInputs !== '') {
@@ -2904,22 +2897,13 @@ function audit_run_winapp_frozen_installer(?array $python): array
             );
         }
 
-        if ($earlierVersion !== '') {
-            $targetVersion = trim((string) file_get_contents($copyDirectory . '/VERSION'));
-            if (
-                preg_match('/^\d+\.\d+\.\d+$/D', $earlierVersion) !== 1
-                || !version_compare($earlierVersion, $targetVersion, '<')
-                || file_put_contents($copyDirectory . '/VERSION', $earlierVersion . "\n") === false
-            ) {
-                throw new RuntimeException('Unable to stage the earlier Qt qualification version.');
-            }
-        }
+        $targetVersion = trim((string) file_get_contents($copyDirectory . '/VERSION'));
         $buildCommand = array_merge($python, [
             $copyDirectory . '/build_installer.py',
             '--iscc',
             $compiler,
         ]);
-        $verifyDesktop = $earlierVersion === '' && getenv('PHP_GALLERY_FROZEN_BUILD_ONLY') !== '1';
+        $verifyDesktop = getenv('PHP_GALLERY_FROZEN_BUILD_ONLY') !== '1';
         if ($verifyDesktop) {
             $buildCommand[] = '--verify-installed';
         }
@@ -2932,13 +2916,13 @@ function audit_run_winapp_frozen_installer(?array $python): array
         $output = audit_process_output($process);
         $log = audit_write_log($id, [
             'Candidate SHA: ' . $candidate,
+            'Target version: ' . $targetVersion,
             'Compiler: ' . $compiler,
-            'Earlier version overlay: ' . ($earlierVersion ?: '(none)'),
             'Builder output:',
             $output,
             $verifyDesktop
                 ? 'The standard setup requires both backends and known Qt fault recovery from one executable.'
-                : 'The private setup is retained for the separate exact-artifact installation jobs.',
+                : 'The exact candidate setup is retained for separate installed-verification jobs.',
         ]);
         audit_record_slow_check($label, $duration);
 
@@ -3011,9 +2995,9 @@ function audit_run_winapp_frozen_installer(?array $python): array
                 }
                 $status = STATUS_PASS;
                 $artifactRelativePath = relative_path($artifactDirectory, $root);
-                $summary = $earlierVersion === ''
+                $summary = $verifyDesktop
                     ? 'Common setup installed; the same application passed Tk, Qt and repair checks.'
-                    : 'Earlier version of the common setup built for the installed update journey.';
+                    : 'Exact candidate setup and metadata built for separate installed verification.';
             }
         }
     } catch (Throwable $exception) {

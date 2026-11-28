@@ -26,8 +26,8 @@ if str(WINAPP_DIR) not in sys.path:
 
 import uploader.flight_ui as flight_ui
 
-from uploader.app_linking import LinkedGallery, LinkedGalleryPage, LinkingSession
-from uploader.app_linking_ui import LinkingManager
+from uploader.linking import LinkedGallery, LinkedGalleryPage, LinkingSession
+from uploader.linking.ui import LinkingManager
 from uploader.ui_shell import (
     EmbeddedWindow, active_panel, initialize_shell, messagebox, simpledialog,
 )
@@ -146,7 +146,7 @@ class EmbeddedShellTests(unittest.TestCase):
         """
         issuer = 'https://gallery.example.test'
         with (
-            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.linking.ui.manager.load_recent_gallery_addresses', return_value=()),
             mock.patch.object(LinkingManager, '_native_offline_store', return_value=None),
         ):
             manager = LinkingManager(self.root)

@@ -1,6 +1,6 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
-# File: winapp/uploader/watch_recovery_ui.py
+# File: winapp/uploader/watcher/recovery_ui.py
 # Module Type: Watcher Recovery UI
 # Purpose: Present explicit, head-bound recovery choices for pending uploads.
 # Responsibilities:
@@ -21,7 +21,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING, Callable
 
-from uploader.watch_recovery import (
+from uploader.watcher.recovery import (
     PREVIEW_MAX_BYTES, RECOVERY_DIGEST_PREFIX_CHARS, WatchRecoveryCoordinator,
     WatchRecoverySnapshot, read_recovery_preview,
     sanitize_recovery_label,

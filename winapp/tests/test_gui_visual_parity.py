@@ -39,12 +39,12 @@ for _source_path in (str(WINAPP_DIR), str(TESTS_DIR)):
         sys.path.insert(0, _source_path)
 
 from test_redesign import MAIN
-from uploader.app_linking import (
+from uploader.linking import (
     LegacyThumbnailPublication, LinkedGallery, LinkedGalleryTree,
     LinkedIdentity, LinkedMediaPage, LinkedPhoto, LinkedPresentation,
     LinkingAttempt, LinkingError,
     LinkingSession,
-    MediaReadTimings, PhotoCacheReceipt, PushedAuthorization,
+    MediaReadTimings, PushedAuthorization,
     ThumbnailBatchStats,
     ThumbnailPublication,
 )
@@ -55,6 +55,7 @@ from uploader.gallery_view_preferences import (
 from uploader.config import load_ui_language, save_ui_language
 from uploader.desktop_connection import DesktopLinkedSite
 from uploader.diagnostics import redact_text
+from uploader.gallery_media_cache import PhotoCacheReceipt
 from uploader.flight_jobs import FlightPreferences, SessionPlan, connection_binding
 from uploader.flight_report_translations import tr
 from uploader.gui_backend_profile import inspect_gui_profile_work
@@ -63,8 +64,11 @@ from uploader.state_store import (
     JobStateStore, save_recent_gallery_addresses,
 )
 from uploader.ui_layout import OVERLAY_MARGIN_PX, OVERLAY_WIDTH_PX
-from uploader.watch_queue import WatchQueueStore, observe_watch_source
+from uploader.watcher.queue import WatchQueueStore, observe_watch_source
 from uploader.localization import configure_language, gettext
+from uploader.watcher import runtime, state as watcher_state
+from uploader.watcher import configuration as watcher_configuration
+from uploader.watcher.ui import app as watcher_app_module
 
 VisualEvidenceValue: TypeAlias = (
     JsonValue | tuple[str, ...] | set[str] | set[tuple[str, str]]
@@ -3751,7 +3755,7 @@ def capture_tk(profile: Path, output: Path) -> dict[str, JsonValue]:
         ("LOG_PATH", profile / "watcher.log"),
         ("STAGING_ROOT", profile / "staging"),
     ):
-        patches.enter_context(mock.patch.object(MAIN, name, value))
+        patches.enter_context(mock.patch.object(watcher_state, name, value))
     patches.enter_context(mock.patch.object(MAIN.WatcherApp, "start_tray_icon"))
     watcher_recovery_probe = (
         os.environ.get(VISUAL_WATCHER_RECOVERY_PROBE) == "1"
@@ -3761,7 +3765,7 @@ def capture_tk(profile: Path, output: Path) -> dict[str, JsonValue]:
         else "WindowsUploadModeStore"
     )
     patches.enter_context(mock.patch.object(
-        MAIN, mode_store_name, return_value=visual_mode_vault(),
+        watcher_app_module, mode_store_name, return_value=visual_mode_vault(),
     ))
     capture_name_prefix = "watcher-recovery-" if watcher_recovery_probe else ""
     try:
@@ -5240,17 +5244,17 @@ def capture_qt(profile: Path, output: Path) -> dict[str, JsonValue]:
     if mode.view().state not in ("legacy", "legacy_unmigrated"):
         raise RuntimeError("Qt visual fixture lacks an admitted legacy target.")
     with (
-        mock.patch.object(MAIN, "CONFIG_DIR", profile),
-        mock.patch.object(MAIN, "STATE_PATH", profile / "upload_state.json"),
-        mock.patch.object(MAIN, "STAGING_ROOT", profile / "staging"),
+        mock.patch.object(watcher_state, "CONFIG_DIR", profile),
+        mock.patch.object(watcher_state, "STATE_PATH", profile / "upload_state.json"),
+        mock.patch.object(watcher_state, "STAGING_ROOT", profile / "staging"),
     ):
         capture = MAIN.DesktopCapture(config_store, lambda: config, mode, lambda: None)
         actions = MAIN.desktop_import_actions(
             config_store, lambda: config, lambda: mode,
         )
-    desktop = MAIN.DesktopConfiguration(config_store, config, mode)
+    desktop = watcher_configuration.DesktopConfiguration(config_store, config, mode)
     dependencies = MAIN.DependencyActions(
-        lambda: MAIN.thumbnail_runtime_status(for_display=True),
+        lambda: runtime.thumbnail_runtime_status(for_display=True),
         mock.Mock(side_effect=AssertionError("Visual fixtures do not repair dependencies.")),
         mock.Mock(side_effect=AssertionError("Visual fixtures do not install AI packages.")),
         False,
